@@ -62,6 +62,8 @@ struct ContentView: View {
             }
         }
         .background(Color.black)
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
         .task {
             camera.start()
         }
