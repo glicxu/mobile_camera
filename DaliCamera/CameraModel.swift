@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreImage
 import CoreMotion
+import Photos
 import SwiftUI
 import Vision
 
@@ -19,6 +20,7 @@ final class CameraModel: NSObject, ObservableObject {
     @Published var issues: [PhotoIssue] = []
     @Published var permissionDenied = false
     @Published var debugEnabled = false
+    @Published var captureStatus: String?
 
     let session = AVCaptureSession()
 
@@ -26,6 +28,7 @@ final class CameraModel: NSObject, ObservableObject {
     private let videoQueue = DispatchQueue(label: "camera.video.queue")
     private let motionManager = CMMotionManager()
     private let coachingEngine = CoachingEngine()
+    private let photoOutput = AVCapturePhotoOutput()
     nonisolated(unsafe) private var lastAnalysis = Date.distantPast
     private var cameraPosition: AVCaptureDevice.Position = .back
     private var currentRollDegrees = 0.0
@@ -57,6 +60,16 @@ final class CameraModel: NSObject, ObservableObject {
     func switchCamera() {
         cameraPosition = cameraPosition == .back ? .front : .back
         configureAndStart()
+    }
+
+    func capturePhoto() {
+        let settings = AVCapturePhotoSettings()
+        settings.flashMode = .auto
+        captureStatus = "Capturing..."
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            self.photoOutput.capturePhoto(with: settings, delegate: self)
+        }
     }
 
     private func configureAndStart() {
@@ -91,7 +104,16 @@ final class CameraModel: NSObject, ObservableObject {
                 self.session.addOutput(output)
             }
 
+            if self.session.canAddOutput(self.photoOutput) {
+                self.session.addOutput(self.photoOutput)
+                self.photoOutput.maxPhotoQualityPrioritization = .quality
+            }
+
             if let connection = output.connection(with: .video), connection.isVideoRotationAngleSupported(90) {
+                connection.videoRotationAngle = 90
+            }
+
+            if let connection = self.photoOutput.connection(with: .video), connection.isVideoRotationAngleSupported(90) {
                 connection.videoRotationAngle = 90
             }
 
@@ -223,6 +245,50 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
             self.measurements = nextMeasurements
             self.issues = nextIssues
             self.advice = self.coachingEngine.selectAdvice(from: nextIssues, now: now)
+        }
+    }
+}
+
+extension CameraModel: AVCapturePhotoCaptureDelegate {
+    nonisolated func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didFinishProcessingPhoto photo: AVCapturePhoto,
+        error: Error?
+    ) {
+        if let error {
+            Task { @MainActor [weak self] in
+                self?.captureStatus = "Capture failed: \(error.localizedDescription)"
+            }
+            return
+        }
+
+        guard let data = photo.fileDataRepresentation() else {
+            Task { @MainActor [weak self] in
+                self?.captureStatus = "Capture failed"
+            }
+            return
+        }
+
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            guard status == .authorized || status == .limited else {
+                Task { @MainActor [weak self] in
+                    self?.captureStatus = "Photos permission needed"
+                }
+                return
+            }
+
+            PHPhotoLibrary.shared().performChanges {
+                let request = PHAssetCreationRequest.forAsset()
+                request.addResource(with: .photo, data: data, options: nil)
+            } completionHandler: { success, error in
+                Task { @MainActor [weak self] in
+                    if success {
+                        self?.captureStatus = "Saved to Photos"
+                    } else {
+                        self?.captureStatus = "Save failed: \(error?.localizedDescription ?? "Unknown error")"
+                    }
+                }
+            }
         }
     }
 }

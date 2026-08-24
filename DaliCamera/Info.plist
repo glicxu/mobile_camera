@@ -22,6 +22,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Dali Camera uses the camera to analyze framing and coach the photographer before capture.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Dali Camera saves captured photos to your photo library.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

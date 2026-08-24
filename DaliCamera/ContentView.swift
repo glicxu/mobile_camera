@@ -18,6 +18,15 @@ struct ContentView: View {
             VStack {
                 topBar
                 Spacer()
+                if let captureStatus = camera.captureStatus {
+                    Text(captureStatus)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.bottom, 8)
+                }
                 adviceCard
                 controls
             }
@@ -92,6 +101,21 @@ struct ContentView: View {
 
     private var controls: some View {
         HStack(spacing: 12) {
+            Button {
+                camera.capturePhoto()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 72, height: 72)
+                    Circle()
+                        .stroke(.black.opacity(0.35), lineWidth: 3)
+                        .frame(width: 58, height: 58)
+                }
+                .accessibilityLabel("Take photo")
+            }
+            .buttonStyle(.plain)
+
             Button {
                 camera.start()
             } label: {
