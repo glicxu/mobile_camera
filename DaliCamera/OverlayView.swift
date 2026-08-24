@@ -12,11 +12,11 @@ struct OverlayView: View {
                 ruleOfThirds
 
                 if let person = measurements.personBox {
-                    box(person.rect, in: proxy.size, color: .teal, label: "person")
+                    box(person.rect, in: proxy.size, color: .teal, label: "person detected")
                 }
 
                 if let face = measurements.faceBox {
-                    box(face.rect, in: proxy.size, color: .yellow, label: "face")
+                    box(face.rect, in: proxy.size, color: .yellow, label: "face detected")
                 }
 
                 directionHint
