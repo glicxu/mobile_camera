@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Dali Camera Prototype</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="camera-stage" aria-label="Dali Camera prototype">
+        <video id="camera" autoplay playsinline muted></video>
+        <canvas id="analysisCanvas"></canvas>
+        <canvas id="overlayCanvas"></canvas>
+
+        <div class="top-bar">
+          <div>
+            <p class="eyebrow">Dali V1</p>
+            <h1>Camera Coach</h1>
+          </div>
+          <button id="cameraToggle" class="icon-button" type="button" title="Switch camera" aria-label="Switch camera">
+            &#8635;
+          </button>
+        </div>
+
+        <div id="adviceCard" class="advice-card" data-tone="waiting">
+          <span id="recipient" class="recipient">Camera</span>
+          <span id="adviceText" class="advice-text">Start camera</span>
+        </div>
+
+        <div class="bottom-bar">
+          <button id="startButton" class="primary-button" type="button">Start Camera</button>
+          <button id="demoButton" class="secondary-button" type="button">Demo Box</button>
+          <button id="debugButton" class="secondary-button" type="button">Debug</button>
+        </div>
+
+        <div id="manualBox" class="manual-box" hidden>
+          <span class="handle nw"></span>
+          <span class="handle ne"></span>
+          <span class="handle sw"></span>
+          <span class="handle se"></span>
+        </div>
+      </section>
+
+      <aside id="debugPanel" class="debug-panel" hidden>
+        <div>
+          <h2>Measurements</h2>
+          <pre id="measurementOutput">No measurements yet.</pre>
+        </div>
+        <div>
+          <h2>Issues</h2>
+          <pre id="issueOutput">No issues yet.</pre>
+        </div>
+      </aside>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,44 @@
+# Dali Camera
+
+Prototype iOS app for testing the V1 algorithmic camera coach.
+
+## Run On iPhone
+
+1. Open `DaliCamera.xcodeproj` in Xcode.
+2. Select the `DaliCamera` scheme.
+3. Connect your iPhone.
+4. Select your iPhone as the run destination.
+5. In the target Signing & Capabilities settings, choose your Apple development team.
+6. Press Run.
+7. Grant camera permission when the app opens.
+
+The first phone-testable build includes:
+
+- live camera preview,
+- Vision person detection,
+- Vision face detection,
+- CoreMotion camera roll,
+- simple face/background luminance measurement,
+- deterministic coaching rules,
+- one active instruction at a time,
+- debug overlay with detected boxes and issue names.
+
+## Current Prototype Advice
+
+- Frame the person
+- Step back
+- Step closer
+- Raise camera
+- Lower camera
+- Keep feet in frame
+- Move left
+- Move right
+- Tilt left
+- Tilt right
+- Face the light
+- Include more view
+- Great shot
+
+## Notes
+
+This is an iOS prototype. The browser files in the repository are a zero-build desktop fallback and are not the primary phone-testing path.
