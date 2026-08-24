@@ -1,0 +1,980 @@
+{
+  "generatedAt" : "2026-08-24T16:17:14Z",
+  "images" : [
+    {
+      "fileName" : "G3N41sNvSsyfKyTGqJjkEA-2.jpeg",
+      "imagePath" : "\/Users\/gli\/Downloads\/test_photos\/G3N41sNvSsyfKyTGqJjkEA-2.jpeg",
+      "imageSize" : {
+        "height" : 980,
+        "width" : 1307
+      },
+      "issues" : [
+        {
+          "confidence" : 0.84577304124832153,
+          "instruction" : "Keep feet in frame",
+          "priority" : 74.428027629852295,
+          "reasonData" : {
+            "bottom_edge" : 0.0055803656578063965
+          },
+          "recipient" : "Photographer",
+          "severity" : 88,
+          "tone" : "danger",
+          "type" : "feet_cropped"
+        },
+        {
+          "confidence" : 0.84577304124832153,
+          "instruction" : "Raise camera",
+          "priority" : 52.437928557395935,
+          "reasonData" : {
+            "headroom" : 0.4375
+          },
+          "recipient" : "Photographer",
+          "severity" : 62,
+          "tone" : "warning",
+          "type" : "headroom_too_large"
+        },
+        {
+          "confidence" : 0.77935112847222221,
+          "instruction" : "Separate arm from body",
+          "priority" : 37.408854166666664,
+          "reasonData" : {
+            "arms_flat_against_body_score" : 0.80171851136467676,
+            "pose_package" : 0
+          },
+          "recipient" : "Subject",
+          "severity" : 48,
+          "tone" : "waiting",
+          "type" : "arms_flat_against_body"
+        }
+      ],
+      "measurements" : {
+        "backgroundLuminance" : 131.62060567122987,
+        "faceAnalysis" : {
+          "confidence" : 1,
+          "eyeVisibilityScore" : 1,
+          "landmarkPointCount" : 44,
+          "occlusionScore" : 0,
+          "pitchEstimate" : 0.22000287526420273,
+          "yawEstimate" : -0.069264095640688722
+        },
+        "faceBox" : {
+          "confidence" : 1,
+          "height" : 0.061169419437646866,
+          "label" : "face",
+          "width" : 0.045865364372730255,
+          "x" : 0.51096612215042114,
+          "y" : 0.46644278988242149
+        },
+        "faceLuminance" : 90.946112500000027,
+        "groupAnalysis" : null,
+        "horizonAngleDegrees" : null,
+        "horizonConfidence" : 0,
+        "personBox" : {
+          "confidence" : 0.84577304124832153,
+          "height" : 0.5569196343421936,
+          "label" : "person",
+          "width" : 0.13609715313166479,
+          "x" : 0.4780151018465128,
+          "y" : 0.4375
+        },
+        "poseAnalysis" : {
+          "armsFlatAgainstBodyScore" : 0.80171851136467676,
+          "armVisibilityScore" : 1,
+          "bodyProfileScore" : 0,
+          "bodySquarenessScore" : 1,
+          "confidence" : 0.77935112847222221,
+          "headToTorsoRatio" : 0.30358282336706799,
+          "minWristEdgeDistance" : 0.31074869632720947,
+          "shoulderHeightAsymmetry" : 0.0078422990977422852,
+          "shoulderLineAngleDegrees" : 176.76061932503532,
+          "shouldersHighScore" : 0.20630267464406774,
+          "stanceWidth" : null,
+          "torsoAngleDegrees" : 0.66148559298106591,
+          "visibleKeypointCount" : 18,
+          "wristToFaceDistance" : 0.1304018842291654
+        },
+        "poseKeypoints" : [
+          {
+            "confidence" : 0.85791015625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: head_joint)",
+            "x" : 0.53118103742599487,
+            "y" : 0.48576325178146362
+          },
+          {
+            "confidence" : 0.83544921875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_ear_joint)",
+            "x" : 0.56216335296630859,
+            "y" : 0.4868767261505127
+          },
+          {
+            "confidence" : 0.9072265625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_eye_joint)",
+            "x" : 0.54027950763702393,
+            "y" : 0.47323006391525269
+          },
+          {
+            "confidence" : 0.80078125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_forearm_joint)",
+            "x" : 0.59500610828399658,
+            "y" : 0.65304011106491089
+          },
+          {
+            "confidence" : 0.8701171875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_hand_joint)",
+            "x" : 0.52374070882797241,
+            "y" : 0.68925130367279053
+          },
+          {
+            "confidence" : 0.77587890625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_leg_joint)",
+            "x" : 0.54785299301147461,
+            "y" : 0.90654903650283813
+          },
+          {
+            "confidence" : 0.892578125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_shoulder_1_joint)",
+            "x" : 0.58108645677566528,
+            "y" : 0.55430358648300171
+          },
+          {
+            "confidence" : 0.734375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_upLeg_joint)",
+            "x" : 0.56732273101806641,
+            "y" : 0.75784015655517578
+          },
+          {
+            "confidence" : 0.885498046875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: neck_1_joint)",
+            "x" : 0.54250279068946838,
+            "y" : 0.55648735165596008
+          },
+          {
+            "confidence" : 0.6923828125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_ear_joint)",
+            "x" : 0.50542557239532471,
+            "y" : 0.48570787906646729
+          },
+          {
+            "confidence" : 0.9287109375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_eye_joint)",
+            "x" : 0.51959323883056641,
+            "y" : 0.47275125980377197
+          },
+          {
+            "confidence" : 0.24658203125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_foot_joint)",
+            "x" : 0.55296891927719116,
+            "y" : 0.97477149963378906
+          },
+          {
+            "confidence" : 0.80029296875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_forearm_joint)",
+            "x" : 0.48935660719871521,
+            "y" : 0.63456225395202637
+          },
+          {
+            "confidence" : 0.83056640625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_hand_joint)",
+            "x" : 0.48877936601638794,
+            "y" : 0.65611279010772705
+          },
+          {
+            "confidence" : 0.62939453125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_leg_joint)",
+            "x" : 0.52507561445236206,
+            "y" : 0.89611554145812988
+          },
+          {
+            "confidence" : 0.87841796875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_shoulder_1_joint)",
+            "x" : 0.50391912460327148,
+            "y" : 0.55867111682891846
+          },
+          {
+            "confidence" : 0.72998046875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_upLeg_joint)",
+            "x" : 0.51303046941757202,
+            "y" : 0.75809109210968018
+          },
+          {
+            "confidence" : 0.732177734375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: root)",
+            "x" : 0.54017660021781921,
+            "y" : 0.75796562433242798
+          }
+        ],
+        "skyOrOpenAreaRatio" : 0.69072403423548456
+      }
+    },
+    {
+      "fileName" : "G3N41sNvSsyfKyTGqJjkEA.jpeg",
+      "imagePath" : "\/Users\/gli\/Downloads\/test_photos\/G3N41sNvSsyfKyTGqJjkEA.jpeg",
+      "imageSize" : {
+        "height" : 980,
+        "width" : 1307
+      },
+      "issues" : [
+        {
+          "confidence" : 0.84577304124832153,
+          "instruction" : "Keep feet in frame",
+          "priority" : 74.428027629852295,
+          "reasonData" : {
+            "bottom_edge" : 0.0055803656578063965
+          },
+          "recipient" : "Photographer",
+          "severity" : 88,
+          "tone" : "danger",
+          "type" : "feet_cropped"
+        },
+        {
+          "confidence" : 0.84577304124832153,
+          "instruction" : "Raise camera",
+          "priority" : 52.437928557395935,
+          "reasonData" : {
+            "headroom" : 0.4375
+          },
+          "recipient" : "Photographer",
+          "severity" : 62,
+          "tone" : "warning",
+          "type" : "headroom_too_large"
+        },
+        {
+          "confidence" : 0.77935112847222221,
+          "instruction" : "Separate arm from body",
+          "priority" : 37.408854166666664,
+          "reasonData" : {
+            "arms_flat_against_body_score" : 0.80171851136467676,
+            "pose_package" : 0
+          },
+          "recipient" : "Subject",
+          "severity" : 48,
+          "tone" : "waiting",
+          "type" : "arms_flat_against_body"
+        }
+      ],
+      "measurements" : {
+        "backgroundLuminance" : 131.62060567122987,
+        "faceAnalysis" : {
+          "confidence" : 1,
+          "eyeVisibilityScore" : 1,
+          "landmarkPointCount" : 44,
+          "occlusionScore" : 0,
+          "pitchEstimate" : 0.22000287526420273,
+          "yawEstimate" : -0.069264095640688722
+        },
+        "faceBox" : {
+          "confidence" : 1,
+          "height" : 0.061169419437646866,
+          "label" : "face",
+          "width" : 0.045865364372730255,
+          "x" : 0.51096612215042114,
+          "y" : 0.46644278988242149
+        },
+        "faceLuminance" : 90.946112500000027,
+        "groupAnalysis" : null,
+        "horizonAngleDegrees" : null,
+        "horizonConfidence" : 0,
+        "personBox" : {
+          "confidence" : 0.84577304124832153,
+          "height" : 0.5569196343421936,
+          "label" : "person",
+          "width" : 0.13609715313166479,
+          "x" : 0.4780151018465128,
+          "y" : 0.4375
+        },
+        "poseAnalysis" : {
+          "armsFlatAgainstBodyScore" : 0.80171851136467676,
+          "armVisibilityScore" : 1,
+          "bodyProfileScore" : 0,
+          "bodySquarenessScore" : 1,
+          "confidence" : 0.77935112847222221,
+          "headToTorsoRatio" : 0.30358282336706799,
+          "minWristEdgeDistance" : 0.31074869632720947,
+          "shoulderHeightAsymmetry" : 0.0078422990977422852,
+          "shoulderLineAngleDegrees" : 176.76061932503532,
+          "shouldersHighScore" : 0.20630267464406774,
+          "stanceWidth" : null,
+          "torsoAngleDegrees" : 0.66148559298106591,
+          "visibleKeypointCount" : 18,
+          "wristToFaceDistance" : 0.1304018842291654
+        },
+        "poseKeypoints" : [
+          {
+            "confidence" : 0.85791015625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: head_joint)",
+            "x" : 0.53118103742599487,
+            "y" : 0.48576325178146362
+          },
+          {
+            "confidence" : 0.83544921875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_ear_joint)",
+            "x" : 0.56216335296630859,
+            "y" : 0.4868767261505127
+          },
+          {
+            "confidence" : 0.9072265625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_eye_joint)",
+            "x" : 0.54027950763702393,
+            "y" : 0.47323006391525269
+          },
+          {
+            "confidence" : 0.80078125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_forearm_joint)",
+            "x" : 0.59500610828399658,
+            "y" : 0.65304011106491089
+          },
+          {
+            "confidence" : 0.8701171875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_hand_joint)",
+            "x" : 0.52374070882797241,
+            "y" : 0.68925130367279053
+          },
+          {
+            "confidence" : 0.77587890625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_leg_joint)",
+            "x" : 0.54785299301147461,
+            "y" : 0.90654903650283813
+          },
+          {
+            "confidence" : 0.892578125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_shoulder_1_joint)",
+            "x" : 0.58108645677566528,
+            "y" : 0.55430358648300171
+          },
+          {
+            "confidence" : 0.734375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_upLeg_joint)",
+            "x" : 0.56732273101806641,
+            "y" : 0.75784015655517578
+          },
+          {
+            "confidence" : 0.885498046875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: neck_1_joint)",
+            "x" : 0.54250279068946838,
+            "y" : 0.55648735165596008
+          },
+          {
+            "confidence" : 0.6923828125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_ear_joint)",
+            "x" : 0.50542557239532471,
+            "y" : 0.48570787906646729
+          },
+          {
+            "confidence" : 0.9287109375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_eye_joint)",
+            "x" : 0.51959323883056641,
+            "y" : 0.47275125980377197
+          },
+          {
+            "confidence" : 0.24658203125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_foot_joint)",
+            "x" : 0.55296891927719116,
+            "y" : 0.97477149963378906
+          },
+          {
+            "confidence" : 0.80029296875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_forearm_joint)",
+            "x" : 0.48935660719871521,
+            "y" : 0.63456225395202637
+          },
+          {
+            "confidence" : 0.83056640625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_hand_joint)",
+            "x" : 0.48877936601638794,
+            "y" : 0.65611279010772705
+          },
+          {
+            "confidence" : 0.62939453125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_leg_joint)",
+            "x" : 0.52507561445236206,
+            "y" : 0.89611554145812988
+          },
+          {
+            "confidence" : 0.87841796875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_shoulder_1_joint)",
+            "x" : 0.50391912460327148,
+            "y" : 0.55867111682891846
+          },
+          {
+            "confidence" : 0.72998046875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_upLeg_joint)",
+            "x" : 0.51303046941757202,
+            "y" : 0.75809109210968018
+          },
+          {
+            "confidence" : 0.732177734375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: root)",
+            "x" : 0.54017660021781921,
+            "y" : 0.75796562433242798
+          }
+        ],
+        "skyOrOpenAreaRatio" : 0.69072403423548456
+      }
+    },
+    {
+      "fileName" : "rnLoabjZSNS-eQPkxW8Hng.jpeg",
+      "imagePath" : "\/Users\/gli\/Downloads\/test_photos\/rnLoabjZSNS-eQPkxW8Hng.jpeg",
+      "imageSize" : {
+        "height" : 980,
+        "width" : 1307
+      },
+      "issues" : [
+        {
+          "confidence" : 0.73719537258148193,
+          "instruction" : "Step closer",
+          "priority" : 56.026848316192627,
+          "reasonData" : {
+            "person_area" : 0.031532515676580268
+          },
+          "recipient" : "Photographer",
+          "severity" : 76,
+          "tone" : "warning",
+          "type" : "subject_too_far"
+        },
+        {
+          "confidence" : 0.71999999999999997,
+          "instruction" : "Tilt left",
+          "priority" : 48.960000000000001,
+          "reasonData" : {
+            "horizon_angle_degrees" : 3.8749998232404836
+          },
+          "recipient" : "Photographer",
+          "severity" : 68,
+          "tone" : "warning",
+          "type" : "horizon_tilted"
+        },
+        {
+          "confidence" : 0.73193359375,
+          "instruction" : "Separate arm from body",
+          "priority" : 35.1328125,
+          "reasonData" : {
+            "arms_flat_against_body_score" : 0.79685897176915954,
+            "pose_package" : 0
+          },
+          "recipient" : "Subject",
+          "severity" : 48,
+          "tone" : "waiting",
+          "type" : "arms_flat_against_body"
+        }
+      ],
+      "measurements" : {
+        "backgroundLuminance" : 115.00619811619902,
+        "faceAnalysis" : null,
+        "faceBox" : null,
+        "faceLuminance" : null,
+        "groupAnalysis" : null,
+        "horizonAngleDegrees" : 3.8749998232404836,
+        "horizonConfidence" : 0.71999999999999997,
+        "personBox" : {
+          "confidence" : 0.73719537258148193,
+          "height" : 0.35602676868438721,
+          "label" : "person",
+          "width" : 0.088567822563177565,
+          "x" : 0.37384842740424024,
+          "y" : 0.5703125
+        },
+        "poseAnalysis" : {
+          "armsFlatAgainstBodyScore" : 0.79685897176915954,
+          "armVisibilityScore" : 1,
+          "bodyProfileScore" : 0.16217199845925878,
+          "bodySquarenessScore" : 0.83782800154074122,
+          "confidence" : 0.73193359375,
+          "headToTorsoRatio" : null,
+          "minWristEdgeDistance" : 0.30283749103546143,
+          "shoulderHeightAsymmetry" : 0.010895612992701659,
+          "shoulderLineAngleDegrees" : -51.565176413423885,
+          "shouldersHighScore" : 0.43385128972409481,
+          "stanceWidth" : 0.019814183510189574,
+          "torsoAngleDegrees" : 0.85940143810373115,
+          "visibleKeypointCount" : 18,
+          "wristToFaceDistance" : null
+        },
+        "poseKeypoints" : [
+          {
+            "confidence" : 0.81494140625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: head_joint)",
+            "x" : 0.43764340877532959,
+            "y" : 0.59807270765304565
+          },
+          {
+            "confidence" : 0.75927734375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_eye_joint)",
+            "x" : 0.44084241986274719,
+            "y" : 0.59264940023422241
+          },
+          {
+            "confidence" : 0.75,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_foot_joint)",
+            "x" : 0.39158445596694946,
+            "y" : 0.88012713193893433
+          },
+          {
+            "confidence" : 0.30810546875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_forearm_joint)",
+            "x" : 0.39120310544967651,
+            "y" : 0.67963409423828125
+          },
+          {
+            "confidence" : 0.2314453125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_hand_joint)",
+            "x" : 0.42024186253547668,
+            "y" : 0.69614249467849731
+          },
+          {
+            "confidence" : 0.73583984375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_leg_joint)",
+            "x" : 0.4055945873260498,
+            "y" : 0.80822467803955078
+          },
+          {
+            "confidence" : 0.6728515625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_shoulder_1_joint)",
+            "x" : 0.4103931188583374,
+            "y" : 0.63226252794265747
+          },
+          {
+            "confidence" : 0.74755859375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_upLeg_joint)",
+            "x" : 0.40839883685112,
+            "y" : 0.72747129201889038
+          },
+          {
+            "confidence" : 0.7802734375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: neck_1_joint)",
+            "x" : 0.4119323194026947,
+            "y" : 0.63032296299934387
+          },
+          {
+            "confidence" : 0.7568359375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_ear_joint)",
+            "x" : 0.41837999224662781,
+            "y" : 0.59625780582427979
+          },
+          {
+            "confidence" : 0.8544921875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_eye_joint)",
+            "x" : 0.4295610785484314,
+            "y" : 0.59127229452133179
+          },
+          {
+            "confidence" : 0.80078125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_foot_joint)",
+            "x" : 0.40647062659263611,
+            "y" : 0.8932039737701416
+          },
+          {
+            "confidence" : 0.90673828125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_forearm_joint)",
+            "x" : 0.41128227114677429,
+            "y" : 0.67601042985916138
+          },
+          {
+            "confidence" : 0.873046875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_hand_joint)",
+            "x" : 0.43419647216796875,
+            "y" : 0.69716250896453857
+          },
+          {
+            "confidence" : 0.7470703125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_leg_joint)",
+            "x" : 0.40566202998161316,
+            "y" : 0.8093225359916687
+          },
+          {
+            "confidence" : 0.8876953125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_shoulder_1_joint)",
+            "x" : 0.413471519947052,
+            "y" : 0.62838339805603027
+          },
+          {
+            "confidence" : 0.78271484375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_upLeg_joint)",
+            "x" : 0.41257116198539734,
+            "y" : 0.72614407539367676
+          },
+          {
+            "confidence" : 0.76513671875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: root)",
+            "x" : 0.41048499941825867,
+            "y" : 0.72680768370628357
+          }
+        ],
+        "skyOrOpenAreaRatio" : 0.72403423548461721
+      }
+    },
+    {
+      "fileName" : "vMgBbNs9QBCuml-xLHpv-g.jpeg",
+      "imagePath" : "\/Users\/gli\/Downloads\/test_photos\/vMgBbNs9QBCuml-xLHpv-g.jpeg",
+      "imageSize" : {
+        "height" : 980,
+        "width" : 653
+      },
+      "issues" : [
+        {
+          "confidence" : 0.7150038480758667,
+          "instruction" : "Raise camera",
+          "priority" : 44.330238580703735,
+          "reasonData" : {
+            "headroom" : 0.58552627464882323
+          },
+          "recipient" : "Photographer",
+          "severity" : 62,
+          "tone" : "warning",
+          "type" : "headroom_too_large"
+        },
+        {
+          "confidence" : 0.83314344618055558,
+          "instruction" : "Separate arm from body",
+          "priority" : 39.990885416666671,
+          "reasonData" : {
+            "arms_flat_against_body_score" : 0.81675269928845495,
+            "pose_package" : 0
+          },
+          "recipient" : "Subject",
+          "severity" : 48,
+          "tone" : "waiting",
+          "type" : "arms_flat_against_body"
+        },
+        {
+          "confidence" : 0.83314344618055558,
+          "instruction" : "Turn slightly",
+          "priority" : 36.658311631944443,
+          "reasonData" : {
+            "body_squareness_score" : 1,
+            "pose_package" : 0
+          },
+          "recipient" : "Subject",
+          "severity" : 44,
+          "tone" : "waiting",
+          "type" : "body_too_square"
+        }
+      ],
+      "measurements" : {
+        "backgroundLuminance" : 112.5614792023663,
+        "faceAnalysis" : {
+          "confidence" : 1,
+          "eyeVisibilityScore" : 1,
+          "landmarkPointCount" : 44,
+          "occlusionScore" : 0,
+          "pitchEstimate" : 0.19443233311176017,
+          "yawEstimate" : -0.10600546464984133
+        },
+        "faceBox" : {
+          "confidence" : 1,
+          "height" : 0.039265722036361694,
+          "label" : "face",
+          "width" : 0.058928649872541428,
+          "x" : 0.47483840584754944,
+          "y" : 0.60349705815315247
+        },
+        "faceLuminance" : 120.58907187499996,
+        "groupAnalysis" : null,
+        "horizonAngleDegrees" : null,
+        "horizonConfidence" : 0,
+        "personBox" : {
+          "confidence" : 0.7150038480758667,
+          "height" : 0.34868426216660331,
+          "label" : "person",
+          "width" : 0.2027777563032922,
+          "x" : 0.46373458677057344,
+          "y" : 0.58552627464882323
+        },
+        "poseAnalysis" : {
+          "armsFlatAgainstBodyScore" : 0.81675269928845495,
+          "armVisibilityScore" : 1,
+          "bodyProfileScore" : 0,
+          "bodySquarenessScore" : 1,
+          "confidence" : 0.83314344618055558,
+          "headToTorsoRatio" : 0.36333919950047683,
+          "minWristEdgeDistance" : 0.25200235843658447,
+          "shoulderHeightAsymmetry" : 0.015721156832951434,
+          "shoulderLineAngleDegrees" : 176.55784198408833,
+          "shouldersHighScore" : 0.44750500485352185,
+          "stanceWidth" : 0.088098319392197658,
+          "torsoAngleDegrees" : -7.2671284459348726,
+          "visibleKeypointCount" : 18,
+          "wristToFaceDistance" : 0.1018376350402832
+        },
+        "poseKeypoints" : [
+          {
+            "confidence" : 0.89013671875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: head_joint)",
+            "x" : 0.49992632865905762,
+            "y" : 0.61821740865707397
+          },
+          {
+            "confidence" : 0.86474609375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_ear_joint)",
+            "x" : 0.54162788391113281,
+            "y" : 0.61405783891677856
+          },
+          {
+            "confidence" : 0.92822265625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_eye_joint)",
+            "x" : 0.50618261098861694,
+            "y" : 0.61444300413131714
+          },
+          {
+            "confidence" : 0.83837890625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_foot_joint)",
+            "x" : 0.6353725790977478,
+            "y" : 0.89366787672042847
+          },
+          {
+            "confidence" : 0.7578125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_forearm_joint)",
+            "x" : 0.60333096981048584,
+            "y" : 0.69914638996124268
+          },
+          {
+            "confidence" : 0.83056640625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_hand_joint)",
+            "x" : 0.5925711989402771,
+            "y" : 0.74799764156341553
+          },
+          {
+            "confidence" : 0.7978515625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_leg_joint)",
+            "x" : 0.60149341821670532,
+            "y" : 0.82608234882354736
+          },
+          {
+            "confidence" : 0.8291015625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_shoulder_1_joint)",
+            "x" : 0.57970887422561646,
+            "y" : 0.64629995822906494
+          },
+          {
+            "confidence" : 0.76513671875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_upLeg_joint)",
+            "x" : 0.57751458883285522,
+            "y" : 0.75496566295623779
+          },
+          {
+            "confidence" : 0.858154296875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: neck_1_joint)",
+            "x" : 0.53414131700992584,
+            "y" : 0.6490408182144165
+          },
+          {
+            "confidence" : 0.87890625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_eye_joint)",
+            "x" : 0.48891231417655945,
+            "y" : 0.61437982320785522
+          },
+          {
+            "confidence" : 0.7529296875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_foot_joint)",
+            "x" : 0.54742532968521118,
+            "y" : 0.88851082324981689
+          },
+          {
+            "confidence" : 0.83740234375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_forearm_joint)",
+            "x" : 0.48496726155281067,
+            "y" : 0.69956278800964355
+          },
+          {
+            "confidence" : 0.9013671875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_hand_joint)",
+            "x" : 0.4883502721786499,
+            "y" : 0.74460041522979736
+          },
+          {
+            "confidence" : 0.841796875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_leg_joint)",
+            "x" : 0.53513342142105103,
+            "y" : 0.82901108264923096
+          },
+          {
+            "confidence" : 0.88720703125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_shoulder_1_joint)",
+            "x" : 0.48857375979423523,
+            "y" : 0.65178167819976807
+          },
+          {
+            "confidence" : 0.76953125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_upLeg_joint)",
+            "x" : 0.5181085467338562,
+            "y" : 0.75751787424087524
+          },
+          {
+            "confidence" : 0.767333984375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: root)",
+            "x" : 0.54781156778335571,
+            "y" : 0.75624176859855652
+          }
+        ],
+        "skyOrOpenAreaRatio" : 0.63309189678587596
+      }
+    },
+    {
+      "fileName" : "YuF49Z4nSk6rjlFt_JqJkw.jpeg",
+      "imagePath" : "\/Users\/gli\/Downloads\/test_photos\/YuF49Z4nSk6rjlFt_JqJkw.jpeg",
+      "imageSize" : {
+        "height" : 980,
+        "width" : 1307
+      },
+      "issues" : [
+        {
+          "confidence" : 0.76769489049911499,
+          "instruction" : "Step closer",
+          "priority" : 58.344811677932739,
+          "reasonData" : {
+            "person_area" : 0.031723214439691616
+          },
+          "recipient" : "Photographer",
+          "severity" : 76,
+          "tone" : "warning",
+          "type" : "subject_too_far"
+        },
+        {
+          "confidence" : 0.7559051513671875,
+          "instruction" : "Separate arm from body",
+          "priority" : 36.283447265625,
+          "reasonData" : {
+            "arms_flat_against_body_score" : 0.83152313665910205,
+            "pose_package" : 0
+          },
+          "recipient" : "Subject",
+          "severity" : 48,
+          "tone" : "waiting",
+          "type" : "arms_flat_against_body"
+        }
+      ],
+      "measurements" : {
+        "backgroundLuminance" : 108.50789439817605,
+        "faceAnalysis" : null,
+        "faceBox" : null,
+        "faceLuminance" : null,
+        "groupAnalysis" : null,
+        "horizonAngleDegrees" : null,
+        "horizonConfidence" : 0,
+        "personBox" : {
+          "confidence" : 0.76769489049911499,
+          "height" : 0.34123885631561279,
+          "label" : "person",
+          "width" : 0.092964836367728079,
+          "x" : 0.72906197825998953,
+          "y" : 0.4934430718421936
+        },
+        "poseAnalysis" : {
+          "armsFlatAgainstBodyScore" : 0.83152313665910205,
+          "armVisibilityScore" : 1,
+          "bodyProfileScore" : 0,
+          "bodySquarenessScore" : 1,
+          "confidence" : 0.7559051513671875,
+          "headToTorsoRatio" : null,
+          "minWristEdgeDistance" : 0.20967191457748413,
+          "shoulderHeightAsymmetry" : 0.001244707895388642,
+          "shoulderLineAngleDegrees" : 0.46084124702029167,
+          "shouldersHighScore" : null,
+          "stanceWidth" : 0.042609091682658307,
+          "torsoAngleDegrees" : 0.37830822005284404,
+          "visibleKeypointCount" : 16,
+          "wristToFaceDistance" : null
+        },
+        "poseKeypoints" : [
+          {
+            "confidence" : 0.68896484375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_ear_joint)",
+            "x" : 0.75667548179626465,
+            "y" : 0.51136612892150879
+          },
+          {
+            "confidence" : 0.85986328125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_foot_joint)",
+            "x" : 0.75462430715560913,
+            "y" : 0.77691555023193359
+          },
+          {
+            "confidence" : 0.66357421875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_forearm_joint)",
+            "x" : 0.73228096961975098,
+            "y" : 0.59305870532989502
+          },
+          {
+            "confidence" : 0.5478515625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_hand_joint)",
+            "x" : 0.73487484455108643,
+            "y" : 0.63749229907989502
+          },
+          {
+            "confidence" : 0.85302734375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_leg_joint)",
+            "x" : 0.75461465120315552,
+            "y" : 0.71070367097854614
+          },
+          {
+            "confidence" : 0.82568359375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_shoulder_1_joint)",
+            "x" : 0.744354248046875,
+            "y" : 0.54340702295303345
+          },
+          {
+            "confidence" : 0.7919921875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: left_upLeg_joint)",
+            "x" : 0.75439882278442383,
+            "y" : 0.64139056205749512
+          },
+          {
+            "confidence" : 0.809814453125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: neck_1_joint)",
+            "x" : 0.7707575261592865,
+            "y" : 0.54361939430236816
+          },
+          {
+            "confidence" : 0.71337890625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_ear_joint)",
+            "x" : 0.78536498546600342,
+            "y" : 0.51374030113220215
+          },
+          {
+            "confidence" : 0.833984375,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_foot_joint)",
+            "x" : 0.78667974472045898,
+            "y" : 0.80498659610748291
+          },
+          {
+            "confidence" : 0.77783203125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_forearm_joint)",
+            "x" : 0.81267303228378296,
+            "y" : 0.59430032968521118
+          },
+          {
+            "confidence" : 0.5263671875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_hand_joint)",
+            "x" : 0.79032808542251587,
+            "y" : 0.60430169105529785
+          },
+          {
+            "confidence" : 0.86962890625,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_leg_joint)",
+            "x" : 0.78453117609024048,
+            "y" : 0.71984678506851196
+          },
+          {
+            "confidence" : 0.7939453125,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_shoulder_1_joint)",
+            "x" : 0.797160804271698,
+            "y" : 0.54383176565170288
+          },
+          {
+            "confidence" : 0.76171875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: right_upLeg_joint)",
+            "x" : 0.78581970930099487,
+            "y" : 0.64220678806304932
+          },
+          {
+            "confidence" : 0.77685546875,
+            "key" : "VNHumanBodyPoseObservationJointName(_rawValue: root)",
+            "x" : 0.77010926604270935,
+            "y" : 0.64179867506027222
+          }
+        ],
+        "skyOrOpenAreaRatio" : 0.88942863752024059
+      }
+    }
+  ],
+  "inputDirectory" : "\/Users\/gli\/Downloads\/test_photos"
+}

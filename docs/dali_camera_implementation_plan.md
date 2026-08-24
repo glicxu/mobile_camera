@@ -1,6 +1,6 @@
 # Dali Camera V1 Implementation And Testing Plan
 
-**Status:** Initial implementation plan
+**Status:** Prototype 0 implemented; V1 measurement/rule expansion in progress
 **Companion doc:** `docs/dali_camera.md`
 **Purpose:** Define how to build and test the V1 algorithmic coaching functionality.
 
@@ -580,7 +580,54 @@ This order proves the core interaction before spending time on advanced scene un
 
 ---
 
-## 11. Open Technical Choices
+## 11. Current Prototype Status
+
+Implemented in the iOS prototype:
+
+- live AVFoundation camera preview,
+- still photo capture to Photos,
+- front/back camera switching,
+- Vision person rectangle detection,
+- Vision face rectangle detection,
+- Vision body pose keypoint extraction for debug display,
+- Vision horizon-angle measurement when available,
+- normalized preview-space boxes and keypoints,
+- sampled face/background luminance,
+- sampled sky/open-area ratio for scenic-preservation heuristics,
+- CoreMotion roll and rotation-rate motion measurement,
+- deterministic rules for the initial V1 issue set,
+- focused `CoachingEngine` unit tests for initial V1 rules,
+- one-instruction coaching controller with stability delay and repeat cooldown,
+- timestamped JSON Lines session logging for advice changes and captures,
+- debug-panel log sharing for field-test review,
+- AVFoundation session configuration isolated from SwiftUI state to keep Swift 6 builds clean,
+- saved-photo review mode using `PhotosPicker` to run the coaching algorithm on existing images,
+- suggested-reframe crop overlay for still-photo coaching fixtures,
+- swipe comparison between the original photo and a generated reframed crop,
+- saved-photo tilt testing with a generated leveled comparison image,
+- manual saved-photo tilt fixture buttons for deterministic `Tilt left` / `Tilt right` UX tests,
+- debug overlays for boxes, keypoints, horizon line, issue labels, and measurement values.
+
+Current heuristic limitations:
+
+- `body_mask` is not implemented yet; person bounds come from Vision rectangles and face fallback.
+- `horizon_y` is a placeholder midpoint until the horizon observation is projected more precisely.
+- `sky_or_open_area_ratio` is a lightweight top-third brightness/blue heuristic, not semantic scene understanding.
+- `cameraStable` currently uses motion magnitude, while tilt advice separately uses roll.
+- log review workflow still needs reviewer tooling outside the app.
+
+Recommended next implementation step:
+
+1. Use saved-photo review mode to build a small fixture set of good/cropped/backlit/tilted/scenic photos.
+2. Compare suggested reframe overlays against human-preferred crops.
+3. Compare leveled images against tilted originals to tune horizon thresholds.
+4. Tune thresholds from those fixtures and real iPhone footage.
+5. Add a more precise `horizon_y` projection or hide the horizon line until projection is trustworthy.
+6. Add reviewer tooling to summarize exported JSONL logs.
+
+---
+
+## 12. Open Technical Choices
 
 The implementation should still choose:
 
@@ -605,7 +652,7 @@ Important selection criteria:
 
 ---
 
-## 12. First Prototype Definition
+## 13. First Prototype Definition
 
 The first useful prototype can be smaller than full V1.
 

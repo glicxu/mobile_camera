@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dali Prototype 1 Image Viewer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0c0f12;
+      --panel: #151a1f;
+      --panel-2: #1d242b;
+      --text: #eef4f1;
+      --muted: #9eaaa7;
+      --line: #34414a;
+      --teal: #33d2bf;
+      --yellow: #f4c84a;
+      --orange: #ff9f43;
+      --red: #ff5d5d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 280px minmax(420px, 1fr) 360px;
+    }
+
+    aside, .analysis {
+      background: var(--panel);
+      border-color: var(--line);
+      overflow: auto;
+      max-height: 100vh;
+    }
+
+    aside { border-right: 1px solid var(--line); }
+    .analysis { border-left: 1px solid var(--line); }
+
+    header {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 16px; letter-spacing: 0; }
+    h2 { font-size: 15px; margin-bottom: 10px; }
+    h3 { font-size: 13px; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+    p { color: var(--muted); font-size: 13px; line-height: 1.45; }
+
+    .list {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .thumb {
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 8px;
+      border-radius: 8px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .thumb.active {
+      outline: 2px solid var(--teal);
+      border-color: transparent;
+    }
+
+    .thumb img {
+      width: 58px;
+      height: 58px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: #000;
+    }
+
+    .thumb strong {
+      display: block;
+      font-size: 12px;
+      line-height: 1.25;
+      word-break: break-word;
+    }
+
+    .thumb span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    main {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-width: 0;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #10151a;
+    }
+
+    .toolbar button {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 8px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    .stage {
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .image-wrap {
+      position: relative;
+      max-width: 100%;
+      max-height: calc(100vh - 86px);
+    }
+
+    .image-wrap img {
+      display: block;
+      max-width: 100%;
+      max-height: calc(100vh - 86px);
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      background: #000;
+    }
+
+    svg.overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .analysis {
+      padding: 16px;
+    }
+
+    .section {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .chip {
+      font-size: 12px;
+      line-height: 1;
+      padding: 7px 8px;
+      border-radius: 7px;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    .issue {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+
+    .issue strong {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 5px;
+    }
+
+    .issue.warning { border-color: rgba(244, 200, 74, 0.65); }
+    .issue.danger { border-color: rgba(255, 93, 93, 0.65); }
+    .issue.waiting { border-color: rgba(158, 170, 167, 0.65); }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 7px 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    code { color: var(--teal); }
+
+    @media (max-width: 1040px) {
+      .app {
+        grid-template-columns: 220px 1fr;
+      }
+      .analysis {
+        grid-column: 1 / -1;
+        max-height: none;
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <header>
+        <h1>Prototype 1 Viewer</h1>
+        <p id="summary">Loading analysis...</p>
+      </header>
+      <div class="list" id="imageList"></div>
+    </aside>
+
+    <main>
+      <div class="toolbar">
+        <button id="prevButton">Previous</button>
+        <button id="nextButton">Next</button>
+        <p id="currentName"></p>
+      </div>
+      <div class="stage">
+        <div class="image-wrap" id="imageWrap">
+          <img id="photo" alt="">
+          <svg class="overlay" id="overlay" viewBox="0 0 1000 1000" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+    </main>
+
+    <section class="analysis">
+      <div class="section">
+        <h2 id="fileName">No image selected</h2>
+        <p id="filePath"></p>
+      </div>
+      <div class="section">
+        <h3>Issues</h3>
+        <div id="issues"></div>
+      </div>
+      <div class="section">
+        <h3>Metrics</h3>
+        <div class="chips" id="metrics"></div>
+      </div>
+      <div class="section">
+        <h3>Pose Points</h3>
+        <div class="kv" id="posePoints"></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const postureTypes = new Set([
+      'hand_near_face', 'arm_hidden', 'body_too_square', 'body_too_profile',
+      'arms_flat_against_body', 'hand_cut_off', 'shoulders_high',
+      'face_occluded', 'eyes_occluded', 'face_too_profile',
+      'face_turned_away', 'chin_too_high', 'chin_too_low'
+    ]);
+
+    const connections = [
+      ['leftshoulder', 'rightshoulder'],
+      ['leftshoulder', 'leftforearm'],
+      ['leftforearm', 'lefthand'],
+      ['rightshoulder', 'rightforearm'],
+      ['rightforearm', 'righthand'],
+      ['leftshoulder', 'leftupleg'],
+      ['rightshoulder', 'rightupleg'],
+      ['leftupleg', 'rightupleg'],
+      ['leftupleg', 'leftleg'],
+      ['leftleg', 'leftfoot'],
+      ['rightupleg', 'rightleg'],
+      ['rightleg', 'rightfoot'],
+      ['neck', 'head']
+    ];
+
+    let data = null;
+    let selectedIndex = 0;
+
+    const $ = id => document.getElementById(id);
+    const fmt = value => value === null || value === undefined ? '--' : Number(value).toFixed(2);
+    const imageUrl = item => `/image?path=${encodeURIComponent(item.imagePath)}`;
+    const norm = key => key.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    function pointMap(points) {
+      const map = new Map();
+      for (const point of points || []) map.set(norm(point.key), point);
+      return map;
+    }
+
+    function findPoint(map, name) {
+      const target = norm(name);
+      for (const [key, value] of map.entries()) {
+        if (key.includes(target)) return value;
+      }
+      return null;
+    }
+
+    function toneClass(tone) {
+      if (tone.includes('danger')) return 'danger';
+      if (tone.includes('warning')) return 'warning';
+      return 'waiting';
+    }
+
+    function renderList() {
+      $('imageList').innerHTML = '';
+      data.images.forEach((item, index) => {
+        const button = document.createElement('button');
+        button.className = `thumb ${index === selectedIndex ? 'active' : ''}`;
+        button.innerHTML = `
+          <img src="${imageUrl(item)}" alt="">
+          <span>
+            <strong>${item.fileName}</strong>
+            <span>${item.issues.length} issues · ${item.measurements.poseKeypoints.length} pose pts</span>
+          </span>
+        `;
+        button.addEventListener('click', () => selectImage(index));
+        $('imageList').appendChild(button);
+      });
+    }
+
+    function metricChips(item) {
+      const m = item.measurements;
+      const pose = m.poseAnalysis || {};
+      const face = m.faceAnalysis || {};
+      return [
+        ['person', m.personBox ? 'yes' : 'no'],
+        ['face', m.faceBox ? 'yes' : 'no'],
+        ['pose pts', m.poseKeypoints.length],
+        ['face lum', fmt(m.faceLuminance)],
+        ['bg lum', fmt(m.backgroundLuminance)],
+        ['yaw', fmt(face.yawEstimate)],
+        ['pitch', fmt(face.pitchEstimate)],
+        ['eyes', fmt(face.eyeVisibilityScore)],
+        ['occ', fmt(face.occlusionScore)],
+        ['arms', fmt(pose.armVisibilityScore)],
+        ['square', fmt(pose.bodySquarenessScore)],
+        ['profile', fmt(pose.bodyProfileScore)],
+        ['flat', fmt(pose.armsFlatAgainstBodyScore)],
+        ['hand-face', fmt(pose.wristToFaceDistance)],
+        ['hand-edge', fmt(pose.minWristEdgeDistance)],
+        ['shoulders', fmt(pose.shouldersHighScore)]
+      ];
+    }
+
+    function renderAnalysis(item) {
+      $('fileName').textContent = item.fileName;
+      $('filePath').textContent = item.imagePath;
+      $('currentName').textContent = `${selectedIndex + 1} of ${data.images.length} · ${item.fileName}`;
+
+      $('issues').innerHTML = item.issues.map(issue => {
+        const reasons = Object.entries(issue.reasonData || {})
+          .map(([key, value]) => `<span class="chip">${key}: ${fmt(value)}</span>`)
+          .join('');
+        const posture = postureTypes.has(issue.type) ? '<span class="chip">posture</span>' : '';
+        return `
+          <div class="issue ${toneClass(issue.tone)}">
+            <strong>${issue.recipient}: ${issue.instruction}</strong>
+            <p><code>${issue.type}</code> · confidence ${fmt(issue.confidence)} · priority ${fmt(issue.priority)}</p>
+            <div class="chips" style="margin-top:8px">${posture}${reasons}</div>
+          </div>
+        `;
+      }).join('') || '<p>No issues detected.</p>';
+
+      $('metrics').innerHTML = metricChips(item)
+        .map(([key, value]) => `<span class="chip">${key}: ${value}</span>`)
+        .join('');
+
+      $('posePoints').innerHTML = (item.measurements.poseKeypoints || [])
+        .map(point => `<span>${point.key}</span><code>${fmt(point.x)}, ${fmt(point.y)} · ${fmt(point.confidence)}</code>`)
+        .join('');
+    }
+
+    function renderOverlay(item) {
+      const overlay = $('overlay');
+      overlay.innerHTML = '';
+      const m = item.measurements;
+      const add = node => overlay.appendChild(node);
+      const svg = name => document.createElementNS('http://www.w3.org/2000/svg', name);
+      const x = value => value * 1000;
+      const y = value => value * 1000;
+
+      function rect(box, color, label) {
+        if (!box) return;
+        const r = svg('rect');
+        r.setAttribute('x', x(box.x));
+        r.setAttribute('y', y(box.y));
+        r.setAttribute('width', x(box.width));
+        r.setAttribute('height', y(box.height));
+        r.setAttribute('fill', 'none');
+        r.setAttribute('stroke', color);
+        r.setAttribute('stroke-width', '5');
+        add(r);
+        const t = svg('text');
+        t.textContent = label;
+        t.setAttribute('x', x(box.x) + 8);
+        t.setAttribute('y', Math.max(20, y(box.y) - 8));
+        t.setAttribute('fill', color);
+        t.setAttribute('font-size', '28');
+        t.setAttribute('font-weight', '700');
+        add(t);
+      }
+
+      rect(m.personBox, '#33d2bf', 'person');
+      rect(m.faceBox, '#f4c84a', 'face');
+
+      const points = pointMap(m.poseKeypoints);
+      for (const [a, b] of connections) {
+        const p1 = findPoint(points, a);
+        const p2 = findPoint(points, b);
+        if (!p1 || !p2) continue;
+        const line = svg('line');
+        line.setAttribute('x1', x(p1.x));
+        line.setAttribute('y1', y(p1.y));
+        line.setAttribute('x2', x(p2.x));
+        line.setAttribute('y2', y(p2.y));
+        line.setAttribute('stroke', '#ff9f43');
+        line.setAttribute('stroke-width', '5');
+        line.setAttribute('stroke-linecap', 'round');
+        add(line);
+      }
+
+      for (const point of m.poseKeypoints || []) {
+        const c = svg('circle');
+        c.setAttribute('cx', x(point.x));
+        c.setAttribute('cy', y(point.y));
+        c.setAttribute('r', '8');
+        c.setAttribute('fill', '#ff9f43');
+        c.setAttribute('stroke', '#111');
+        c.setAttribute('stroke-width', '3');
+        add(c);
+      }
+    }
+
+    function selectImage(index) {
+      selectedIndex = (index + data.images.length) % data.images.length;
+      const item = data.images[selectedIndex];
+      $('photo').src = imageUrl(item);
+      $('photo').alt = item.fileName;
+      renderList();
+      renderAnalysis(item);
+      renderOverlay(item);
+    }
+
+    $('prevButton').addEventListener('click', () => selectImage(selectedIndex - 1));
+    $('nextButton').addEventListener('click', () => selectImage(selectedIndex + 1));
+    window.addEventListener('keydown', event => {
+      if (event.key === 'ArrowLeft') selectImage(selectedIndex - 1);
+      if (event.key === 'ArrowRight') selectImage(selectedIndex + 1);
+    });
+
+    fetch('/analysis.json')
+      .then(response => response.json())
+      .then(payload => {
+        data = payload;
+        $('summary').textContent = `${payload.images.length} images · ${payload.inputDirectory}`;
+        selectImage(0);
+      })
+      .catch(error => {
+        $('summary').textContent = `Could not load analysis: ${error}`;
+      });
+  </script>
+</body>
+</html>
