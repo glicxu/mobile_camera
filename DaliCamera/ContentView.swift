@@ -27,7 +27,7 @@ struct ContentView: View {
                 advice: camera.advice,
                 measurements: camera.measurements,
                 issues: camera.issues,
-                debugEnabled: camera.debugEnabled
+                debugEnabled: false
             )
 
             VStack {
@@ -51,6 +51,10 @@ struct ContentView: View {
 
             if camera.permissionDenied {
                 permissionView
+            }
+
+            if camera.debugEnabled {
+                floatingDebugPanel
             }
 
             if showTutor {
@@ -267,6 +271,32 @@ struct ContentView: View {
         .foregroundStyle(.white)
         .background(.black.opacity(0.88), in: RoundedRectangle(cornerRadius: 8))
         .padding(24)
+    }
+
+    private var floatingDebugPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Debug")
+                .font(.caption.bold())
+                .foregroundStyle(.teal)
+                .textCase(.uppercase)
+            Text("roll \(camera.measurements.cameraRollDegrees, specifier: "%.1f") deg")
+            Text("face \(camera.measurements.faceLuminance ?? -1, specifier: "%.0f") bg \(camera.measurements.backgroundLuminance ?? -1, specifier: "%.0f")")
+            Text(camera.issues.isEmpty ? "issues none" : "issues \(camera.issues.map(\.type).joined(separator: ", "))")
+                .lineLimit(4)
+        }
+        .font(.caption.monospaced())
+        .foregroundStyle(.white)
+        .padding(10)
+        .frame(maxWidth: 330, alignment: .leading)
+        .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.white.opacity(0.16), lineWidth: 1)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding(.top, 78)
+        .padding(.trailing, 16)
+        .zIndex(20)
     }
 
     private func toneColor(_ tone: AdviceTone) -> Color {
