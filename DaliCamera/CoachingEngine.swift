@@ -141,9 +141,15 @@ final class CoachingEngine {
         }
     }
 
-    func selectAdvice(from issues: [PhotoIssue], now: Date = Date()) -> Advice {
+    func reset() {
+        stableIssueKey = nil
+        lastAdvice = nil
+        lastAdviceAt = .distantPast
+    }
+
+    func selectAdvice(from issues: [PhotoIssue], now: Date = Date(), fallback: Advice? = nil) -> Advice {
         let topIssue = issues.first { $0.confidence > 0.45 }
-        let key = topIssue?.type ?? "ready"
+        let key = topIssue?.type ?? fallback?.type ?? "ready"
 
         if stableIssueKey != key {
             stableIssueKey = key
@@ -159,8 +165,8 @@ final class CoachingEngine {
         }
 
         guard let topIssue else {
-            let ready = Advice(type: "ready", recipient: "Camera", instruction: "Great shot", tone: .ready)
-            if oldEnough || lastAdvice?.type != "ready" {
+            let ready = fallback ?? Advice(type: "ready", recipient: "Camera", instruction: "Great shot", tone: .ready)
+            if oldEnough || lastAdvice?.type != ready.type {
                 commit(ready, now: now)
             }
             return ready
@@ -500,6 +506,38 @@ final class CoachingEngine {
 
     private func posePackageIndex(_ package: PosePackageID) -> Int {
         PosePackageID.allCases.firstIndex(of: package) ?? 0
+    }
+}
+
+/// Optional creative guidance advances only by explicit confirmation or skipping.
+struct GuidedSession {
+    let pose: GuidedPose?
+    let position: GuidedCameraPosition?
+    var moveRight = false
+    private(set) var stepIndex = 0
+
+    var isActive: Bool { pose != nil || position != nil }
+    var steps: [GuidedStep] { (position?.steps(moveRight: moveRight) ?? []) + (pose?.steps ?? []) }
+    var currentStep: GuidedStep? { steps.indices.contains(stepIndex) ? steps[stepIndex] : nil }
+    var isComplete: Bool { isActive && currentStep == nil }
+    var advice: Advice? {
+        guard isActive else { return nil }
+        return Advice(
+            type: "guided_\(pose?.id ?? "none")_\(position?.id ?? "none")_\(stepIndex)",
+            recipient: currentStep?.recipient ?? "Camera",
+            instruction: currentStep?.instruction ?? "Sequence finished. Take a photo when you're ready.",
+            tone: .waiting
+        )
+    }
+
+    mutating func advance() { stepIndex = min(stepIndex + 1, steps.count) }
+
+    func prioritizedIssues(_ issues: [PhotoIssue]) -> [PhotoIssue] {
+        guard isActive else { return issues }
+        // Keep urgent visibility and framing corrections; optional styling must not fight the chosen pose.
+        let urgent: Set<String> = ["subject_missing", "face_missing", "subject_too_close",
+                                   "subject_too_far", "feet_cropped", "limb_cropped"]
+        return issues.filter { urgent.contains($0.type) && !(pose?.conflicts.contains($0.type) ?? false) }
     }
 }
 

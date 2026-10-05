@@ -3,6 +3,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
     @StateObject private var camera = CameraModel()
     @AppStorage("hasSeenDaliTutor") private var hasSeenDaliTutor = false
     @AppStorage("beautifyStrength") private var storedBeautifyStrength = 0
@@ -12,7 +14,6 @@ struct ContentView: View {
     @AppStorage("beautifyClarityEnabled") private var storedBeautifyClarityEnabled = true
     @AppStorage("beautifySubjectEmphasisEnabled") private var storedBeautifySubjectEmphasisEnabled = true
     @State private var showTutor = false
-    @State private var tutorStepIndex = 0
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var showingFolderImporter = false
     @State private var showConfiguration = false
@@ -20,133 +21,25 @@ struct ContentView: View {
     @State private var reviewPhotoIndex = 0
     @State private var reviewVariant: ReviewVariant = .original
     @State private var showFullScreenReviewImage = false
+    @State private var startReviewComparison = false
     @State private var shootingMode: ShootingMode = .people
-
-    private let tutorSteps = [
-        TutorStep(
-            title: "Subject",
-            instruction: "Use these when Dali cannot clearly see the person or needs the subject's attention.",
-            symbolName: "person.crop.rectangle",
-            examples: [
-                "Frame the person",
-                "Face the camera"
-            ]
-        ),
-        TutorStep(
-            title: "Photographer movement",
-            instruction: "Move your body or change distance while keeping the same person and scene in view.",
-            symbolName: "arrow.left.and.right",
-            examples: [
-                "Move left",
-                "Move right",
-                "Step back",
-                "Step closer",
-                "Lower camera",
-                "Raise camera"
-            ]
-        ),
-        TutorStep(
-            title: "Camera handling",
-            instruction: "Adjust the phone itself when the frame is tilted, shaky, or in the wrong orientation.",
-            symbolName: "camera.viewfinder",
-            examples: [
-                "Tilt left",
-                "Tilt right",
-                "Hold steady",
-                "Switch to portrait",
-                "Switch to landscape"
-            ]
-        ),
-        TutorStep(
-            title: "Framing",
-            instruction: "Use these to keep the person comfortable in the frame while preserving the place around them.",
-            symbolName: "rectangle.inset.filled",
-            examples: [
-                "Keep their feet in frame",
-                "Give them more headroom",
-                "Put them slightly left",
-                "Put them slightly right",
-                "Include more of the view",
-                "Leave more space above them"
-            ]
-        ),
-        TutorStep(
-            title: "Lighting",
-            instruction: "Use these when the face is too dark, the background is too bright, or the angle is fighting the light.",
-            symbolName: "sun.max",
-            examples: [
-                "Turn them toward the light",
-                "Move them out of shadow",
-                "Try a slightly different angle",
-                "Face the light",
-                "Find brighter light"
-            ]
-        ),
-        TutorStep(
-            title: "Subject direction",
-            instruction: "Say these to the person in the photo when a small pose or position change would help.",
-            symbolName: "figure.wave",
-            examples: [
-                "Ask them to turn slightly left",
-                "Ask them to turn slightly right",
-                "Ask them to face the light",
-                "Ask them to step slightly forward"
-            ]
-        ),
-        TutorStep(
-            title: "Readiness",
-            instruction: "Use these when the frame is good enough and the photographer can take the shot.",
-            symbolName: "checkmark.circle",
-            examples: [
-                "Hold there",
-                "Great shot",
-                "Ready",
-                "Take it"
-            ]
-        )
-    ]
+    @State private var sharedPhoto: SharedPhoto?
+    @State private var showDiscardConfirmation = false
+    @State private var showPoseChooser = false
+    @State private var guideCollection: PosePackageID = .masculine
+    @State private var chosenGuidePose: GuidedPose?
+    @State private var chosenCameraPosition: GuidedCameraPosition?
+    @State private var guideMoveRight = false
 
     var body: some View {
         ZStack {
             if let reviewImage = camera.reviewImage {
                 reviewSlideshowView(original: reviewImage)
             } else {
-                CameraPreview(session: camera.session)
-                    .ignoresSafeArea()
-
-                OverlayView(
-                    advice: camera.advice,
-                    measurements: camera.measurements,
-                    issues: camera.issues,
-                    debugEnabled: camera.debugEnabled && shootingMode.showsGuidance
-                )
-                .opacity(shootingMode.showsGuidance ? 1 : 0)
+                liveCameraView
             }
 
-            if camera.reviewImage == nil {
-                VStack {
-                    topBar
-                    Spacer()
-                    if let captureStatus = camera.captureStatus {
-                        Text(captureStatus)
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 8))
-                            .padding(.bottom, 8)
-                    }
-                    if shootingMode.showsGuidance {
-                        adviceCard
-                    }
-                    controls
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 18)
-            }
-
-            if camera.permissionDenied {
+            if camera.permissionDenied, camera.reviewImage == nil {
                 permissionView
             }
 
@@ -154,9 +47,6 @@ struct ContentView: View {
                 floatingDebugPanel
             }
 
-            if showTutor {
-                tutorCard
-            }
         }
         .background(Color.black)
         .statusBarHidden(true)
@@ -176,12 +66,39 @@ struct ContentView: View {
                 selectedPhotoItems = []
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                camera.start()
+            } else if phase == .background {
+                camera.stop()
+            }
+        }
+        .sheet(item: $sharedPhoto) { photo in
+            PhotoShareSheet(image: photo.image)
+        }
+        .sheet(isPresented: $showPoseChooser) { poseChooser }
+        .sheet(isPresented: $showTutor) { tutorCard }
+        .onChange(of: shootingMode) { _, mode in
+            if !mode.showsGuidance { camera.beginGuidance(pose: nil, position: nil) }
+        }
+        .confirmationDialog("Discard the unsaved original?", isPresented: $showDiscardConfirmation, titleVisibility: .visible) {
+            Button("Discard photo", role: .destructive) {
+                camera.discardUnsavedCapture()
+                if camera.reviewImage == nil { camera.start() }
+            }
+            Button("Keep photo", role: .cancel) {}
+        } message: {
+            Text("Only discard it if you no longer need it or have already shared a copy.")
+        }
         .onChange(of: camera.selectedPosePackage) { _, _ in
             camera.refreshStillPhotoAdvice()
         }
         .onChange(of: camera.beautifySettings) { _, _ in
             persistBeautifySettings()
             camera.refreshBeautify()
+        }
+        .onChange(of: availableReviewVariants) { _, variants in
+            if !variants.contains(reviewVariant) { reviewVariant = .original }
         }
         .fileImporter(
             isPresented: $showingFolderImporter,
@@ -203,19 +120,85 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showConfiguration) {
             configurationSheet
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .fullScreenCover(isPresented: $showFullScreenReviewImage) {
+        .fullScreenCover(isPresented: $showFullScreenReviewImage, onDismiss: { startReviewComparison = false }) {
             if let reviewImage = camera.reviewImage {
                 ZoomableReviewImageView(
                     image: currentReviewDisplayImage(original: reviewImage),
                     originalImage: reviewImage,
                     title: reviewVariant.title,
                     subtitle: reviewImageSubtitle,
+                    startComparing: startReviewComparison,
                     isPresented: $showFullScreenReviewImage
                 )
             }
+        }
+    }
+
+    private var liveCameraView: some View {
+        GeometryReader { proxy in
+            if proxy.size.width > proxy.size.height {
+                HStack(spacing: 12) {
+                    viewfinder
+                    VStack(spacing: 8) {
+                        topBar
+                        liveAdvicePanel
+                        controls
+                    }
+                    .frame(width: min(360, proxy.size.width * 0.44))
+                }
+                .padding(12)
+            } else {
+                VStack(spacing: 8) {
+                    topBar
+                    viewfinder
+                    liveAdvicePanel
+                        .frame(maxHeight: proxy.size.height * 0.34)
+                    controls
+                }
+                .padding(12)
+            }
+        }
+    }
+
+    private var viewfinder: some View {
+        ZStack {
+            CameraPreview(session: camera.session, mirrored: camera.isFrontCamera, onRotationChange: camera.updatePreviewRotation)
+            if shootingMode.showsGuidance {
+                OverlayView(
+                    advice: camera.advice,
+                    measurements: camera.measurements,
+                    issues: camera.issues,
+                    debugEnabled: camera.debugEnabled,
+                    contentAspectRatio: camera.previewAspectRatio,
+                    guidedAction: camera.guidedAction
+                )
+                .accessibilityHidden(true)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .accessibilityLabel("Camera preview")
+    }
+
+    private var liveAdvicePanel: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                if camera.hasUnsavedCapture { captureRecoveryControls }
+                if let status = camera.exportStatus {
+                    Text(status).font(.subheadline).foregroundStyle(.white)
+                }
+                if let status = camera.captureStatus {
+                    Text(status).font(.subheadline).foregroundStyle(.white)
+                }
+                if shootingMode.showsGuidance {
+                    adviceCard
+                    guidedControls
+                }
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -248,6 +231,7 @@ struct ContentView: View {
                 showTutor = true
             } label: {
                 Image(systemName: "questionmark.circle")
+                    .accessibilityLabel("Help")
                     .font(.title3.bold())
                     .frame(width: 44, height: 44)
             }
@@ -265,7 +249,8 @@ struct ContentView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.white)
             .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
-            .disabled(camera.reviewImage != nil)
+            .disabled(camera.reviewImage != nil || camera.isCapturing || camera.isAnalyzingPhoto)
+            .accessibilityLabel("Switch camera")
         }
     }
 
@@ -291,6 +276,9 @@ struct ContentView: View {
                 }
 
                 Section("Beautify") {
+                    Text("Portrait polish applies in photo review. Captures are saved as originals; save a copy to keep an enhancement.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("Portrait polish")
@@ -301,6 +289,7 @@ struct ContentView: View {
                         }
 
                         Slider(value: beautifyStrengthBinding, in: 0...10, step: 1)
+                            .accessibilityLabel("Portrait polish strength")
                     }
 
                     Toggle("Face brightness", isOn: $camera.beautifySettings.faceBrightnessEnabled)
@@ -347,9 +336,7 @@ struct ContentView: View {
             let image = currentReviewDisplayImage(original: original)
             let imageHeight = max(280, proxy.size.height * 0.52)
 
-            ZStack {
-                Color.black
-
+            ScrollView {
                 VStack(spacing: 0) {
                     reviewSlideshowTopBar
                         .padding(.horizontal, 12)
@@ -360,9 +347,11 @@ struct ContentView: View {
                         .padding(.horizontal, 12)
                         .padding(.bottom, 8)
 
-                    posePackagePicker
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 8)
+                    if camera.debugEnabled {
+                        posePackagePicker
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 8)
+                    }
 
                     reviewImagePane(
                         image: image,
@@ -372,8 +361,18 @@ struct ContentView: View {
                     )
                     .frame(maxWidth: .infinity, minHeight: imageHeight, maxHeight: imageHeight)
 
-                    detailedAnalysisPanel
+                    VStack(spacing: 12) {
+                        reviewActions(original: original)
+                        beautifyControls
+                        if camera.hasUnsavedCapture { captureRecoveryControls }
+                    }
+                    .padding(12)
+                    if camera.debugEnabled {
+                        detailedAnalysisPanel
+                            .frame(height: 420)
+                    }
                 }
+                .padding(.bottom, max(16, proxy.safeAreaInsets.bottom))
             }
         }
         .background(Color.black)
@@ -390,17 +389,19 @@ struct ContentView: View {
                 camera.start()
             } label: {
                 Image(systemName: "camera.viewfinder")
-                    .frame(width: 42, height: 42)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.black)
             .background(.teal, in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityLabel("Back to camera")
 
             Button {
                 showPreviousReviewPhoto()
             } label: {
                 Image(systemName: "chevron.left")
-                    .frame(width: 42, height: 42)
+                    .accessibilityLabel("Previous photo")
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .foregroundStyle(canNavigateReviewPhotos ? .white : .white.opacity(0.32))
@@ -423,7 +424,8 @@ struct ContentView: View {
                 showNextReviewPhoto()
             } label: {
                 Image(systemName: "chevron.right")
-                    .frame(width: 42, height: 42)
+                    .accessibilityLabel("Next photo")
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .foregroundStyle(canNavigateReviewPhotos ? .white : .white.opacity(0.32))
@@ -432,21 +434,24 @@ struct ContentView: View {
 
             PhotosPicker(selection: $selectedPhotoItems, maxSelectionCount: 20, matching: .images) {
                 Image(systemName: "photo.on.rectangle.angled")
-                    .frame(width: 42, height: 42)
+                    .accessibilityLabel("Choose photos from library")
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.black)
             .background(.teal, in: RoundedRectangle(cornerRadius: 8))
 
-            Button {
-                showingFolderImporter = true
-            } label: {
-                Image(systemName: "folder")
-                    .frame(width: 42, height: 42)
+            if camera.debugEnabled {
+                Button {
+                    showingFolderImporter = true
+                } label: {
+                    Image(systemName: "folder")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.black)
+                .background(.teal, in: RoundedRectangle(cornerRadius: 8))
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.black)
-            .background(.teal, in: RoundedRectangle(cornerRadius: 8))
         }
         .font(.headline)
         .background(.black)
@@ -461,27 +466,29 @@ struct ContentView: View {
             }
             .pickerStyle(.segmented)
 
-            Button {
-                camera.simulateTilt(degrees: -7)
-                reviewVariant = .tilted
-            } label: {
-                Image(systemName: "rotate.left")
-                    .frame(width: 40, height: 34)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.white)
-            .background(.white.opacity(0.11), in: RoundedRectangle(cornerRadius: 8))
+            if camera.debugEnabled {
+                Button {
+                    camera.simulateTilt(degrees: -7)
+                    reviewVariant = .tilted
+                } label: {
+                    Image(systemName: "rotate.left")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .background(.white.opacity(0.11), in: RoundedRectangle(cornerRadius: 8))
 
-            Button {
-                camera.simulateTilt(degrees: 7)
-                reviewVariant = .tilted
-            } label: {
-                Image(systemName: "rotate.right")
-                    .frame(width: 40, height: 34)
+                Button {
+                    camera.simulateTilt(degrees: 7)
+                    reviewVariant = .tilted
+                } label: {
+                    Image(systemName: "rotate.right")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .background(.white.opacity(0.11), in: RoundedRectangle(cornerRadius: 8))
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.white)
-            .background(.white.opacity(0.11), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 
@@ -538,8 +545,9 @@ struct ContentView: View {
                 showFullScreenReviewImage = true
             } label: {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .accessibilityLabel("Open full-screen photo")
                     .font(.headline.bold())
-                    .frame(width: 42, height: 42)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)
@@ -726,6 +734,7 @@ struct ContentView: View {
             }
 
             Slider(value: beautifyStrengthBinding, in: 0...10, step: 1)
+                            .accessibilityLabel("Portrait polish strength")
                 .tint(.teal)
 
             HStack(spacing: 8) {
@@ -735,7 +744,7 @@ struct ContentView: View {
                 } label: {
                     Label("Reset", systemImage: "arrow.counterclockwise")
                         .font(.caption.bold())
-                        .frame(minHeight: 34)
+                        .frame(minHeight: 44)
                         .padding(.horizontal, 10)
                 }
                 .buttonStyle(.plain)
@@ -748,7 +757,7 @@ struct ContentView: View {
                     } label: {
                         Label("Show", systemImage: "sparkles")
                             .font(.caption.bold())
-                            .frame(minHeight: 34)
+                            .frame(minHeight: 44)
                             .padding(.horizontal, 10)
                     }
                     .buttonStyle(.plain)
@@ -759,9 +768,11 @@ struct ContentView: View {
                 Spacer()
             }
 
-            FlowLayout(spacing: 6, lineSpacing: 6) {
-                ForEach(beautifyDebugChips, id: \.self) { chip in
-                    metricChip(chip)
+            if camera.debugEnabled {
+                FlowLayout(spacing: 6, lineSpacing: 6) {
+                    ForEach(beautifyDebugChips, id: \.self) { chip in
+                        metricChip(chip)
+                    }
                 }
             }
         }
@@ -948,98 +959,27 @@ struct ContentView: View {
     }
 
     private var tutorCard: some View {
-        let step = tutorSteps[tutorStepIndex]
-
-        return VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Image(systemName: step.symbolName)
-                    .font(.title2.bold())
-                    .foregroundStyle(.teal)
-                    .frame(width: 36, height: 36)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("How to use Dali")
-                        .font(.caption.bold())
-                        .foregroundStyle(.white.opacity(0.62))
-                        .textCase(.uppercase)
-                    Text(step.title)
-                        .font(.title3.bold())
-                        .foregroundStyle(.white)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Label("Frame your friend and the view", systemImage: "person.crop.rectangle")
+                        .font(.title2.bold())
+                    Text("Dali shows one suggestion at a time. Subject means the person in the photo; Photographer means you.")
+                    Text("Use Poses & angles for optional guided steps. Tap Done / Next when comfortable, or skip any step. You can take a photo whenever you like.")
+                    Text("Tap the thumbnail to review your latest photo. Originals save to Photos; Save a copy keeps the enhancement you are viewing.")
+                    Button("Start taking photos") { showTutor = false }
+                        .buttonStyle(.borderedProminent)
+                        .frame(minHeight: 44)
                 }
-
-                Spacer()
-
-                Button {
-                    showTutor = false
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.headline.bold())
-                        .frame(width: 36, height: 36)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.82))
+                .padding(24)
             }
-
-            Text(step.instruction)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.86))
-                .fixedSize(horizontal: false, vertical: true)
-
-            FlowLayout(spacing: 8, lineSpacing: 8) {
-                ForEach(step.examples, id: \.self) { example in
-                    Text(example)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 7)
-                        .background(.white.opacity(0.11), in: RoundedRectangle(cornerRadius: 6))
+            .navigationTitle("Welcome to Dali")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showTutor = false }
                 }
-            }
-
-            HStack {
-                Text("\(tutorStepIndex + 1) of \(tutorSteps.count)")
-                    .font(.caption.bold())
-                    .foregroundStyle(.white.opacity(0.58))
-
-                Spacer()
-
-                Button {
-                    tutorStepIndex = max(0, tutorStepIndex - 1)
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .frame(width: 42, height: 42)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(tutorStepIndex == 0 ? .white.opacity(0.28) : .white)
-                .disabled(tutorStepIndex == 0)
-
-                Button {
-                    if tutorStepIndex == tutorSteps.count - 1 {
-                        showTutor = false
-                    } else {
-                        tutorStepIndex += 1
-                    }
-                } label: {
-                    Text(tutorStepIndex == tutorSteps.count - 1 ? "Done" : "Next")
-                        .font(.headline)
-                        .frame(minWidth: 78, minHeight: 42)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.black)
-                .background(.teal, in: RoundedRectangle(cornerRadius: 8))
             }
         }
-        .padding(16)
-        .background(.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(.white.opacity(0.16), lineWidth: 1)
-        }
-        .padding(.horizontal, 18)
-        .frame(maxWidth: 460)
-        .shadow(radius: 20)
     }
 
     private var adviceCard: some View {
@@ -1056,8 +996,7 @@ struct ContentView: View {
                 .font(.title2.bold())
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
         .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
@@ -1066,6 +1005,106 @@ struct ContentView: View {
                 .stroke(toneColor(camera.advice.tone).opacity(0.7), lineWidth: 1)
         }
         .padding(.bottom, 14)
+    }
+
+    private var guidedControls: some View {
+        VStack(spacing: 6) {
+            if camera.guidedSession.isActive {
+                Text(camera.guidedSession.isComplete ? "Sequence finished" : "Step \(camera.guidedSession.stepIndex + 1) of \(camera.guidedSession.steps.count) · Confirm when comfortable")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+            }
+            HStack {
+                Button("Poses & angles") {
+                    chosenGuidePose = camera.guidedSession.pose
+                    guideCollection = chosenGuidePose?.package ?? .masculine
+                    chosenCameraPosition = camera.guidedSession.position
+                    guideMoveRight = camera.guidedSession.moveRight
+                    showPoseChooser = true
+                }
+                if camera.guidedSession.isActive {
+                    Button("Natural") { camera.beginGuidance(pose: nil, position: nil) }
+                }
+            }
+            .font(.caption.bold())
+            .buttonStyle(.bordered)
+            .tint(.teal)
+            if camera.guidedSession.currentStep != nil {
+                HStack {
+                    Button("Done / Next") { camera.advanceGuidance() }
+                    Button("Skip this step") { camera.advanceGuidance() }
+                }
+                .font(.caption.bold())
+                .buttonStyle(.bordered)
+                .tint(.teal)
+                .disabled(camera.guidedAction == nil)
+            }
+        }
+        .padding(8)
+        .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.bottom, 8)
+    }
+
+    private var poseChooser: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Choose a pose, a camera position, or both. Either collection is available to anyone. Each step is optional; take a photo whenever you like.")
+                }
+                Section("Subject pose") {
+                    Picker("Collection", selection: $guideCollection) {
+                        Text("Male / Masculine").tag(PosePackageID.masculine)
+                        Text("Female / Feminine").tag(PosePackageID.feminine)
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: guideCollection) { _, collection in
+                        if chosenGuidePose?.package != collection { chosenGuidePose = nil }
+                    }
+                    Picker("Pose", selection: $chosenGuidePose) {
+                        Text("No pose guidance").tag(Optional<GuidedPose>.none)
+                        ForEach(GuidedPose.allCases.filter { $0.package == guideCollection }) { pose in
+                            Text(pose.title).tag(Optional(pose))
+                        }
+                    }
+                    if let pose = chosenGuidePose {
+                        PoseReferenceView(pose: pose)
+                            .frame(height: 150)
+                            .frame(maxWidth: .infinity)
+                        Text(pose.cues[0])
+                        Text("Left and right refer to the subject's own sides. Confirm or skip each step yourself.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                Section("Photographer position") {
+                    Picker("Position", selection: $chosenCameraPosition) {
+                        Text("No position guidance").tag(Optional<GuidedCameraPosition>.none)
+                        ForEach(GuidedCameraPosition.allCases) { position in
+                            Text(position.title).tag(Optional(position))
+                        }
+                    }
+                    if chosenCameraPosition == .side {
+                        Toggle("Move to your right", isOn: $guideMoveRight)
+                    }
+                    if let position = chosenCameraPosition, let step = position.steps(moveRight: guideMoveRight).first {
+                        Label(step.instruction, systemImage: step.action.symbol)
+                        Text("Directions use the photographer's viewpoint. Camera height is relative to the subject, including when seated.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("Poses & angles")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showPoseChooser = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(chosenGuidePose == nil && chosenCameraPosition == nil ? "Use Natural" : "Start") {
+                        camera.beginGuidance(pose: chosenGuidePose, position: chosenCameraPosition, moveRight: guideMoveRight)
+                        showPoseChooser = false
+                    }
+                }
+            }
+        }
     }
 
     private var reviewAnalysisCard: some View {
@@ -1373,10 +1412,23 @@ struct ContentView: View {
         let thumbnail = camera.latestPhotoThumbnail
 
         return HStack {
-            PhotosPicker(selection: $selectedPhotoItems, maxSelectionCount: 20, matching: .images) {
-                PhotoLibraryButtonLabel(thumbnail: thumbnail)
+            if thumbnail != nil {
+                Button {
+                    reviewPhotos = []
+                    reviewPhotoIndex = 0
+                    reviewVariant = .original
+                    camera.openLatestCapture()
+                } label: {
+                    PhotoLibraryButtonLabel(thumbnail: thumbnail)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Review latest photo")
+            } else {
+                PhotosPicker(selection: $selectedPhotoItems, maxSelectionCount: 20, matching: .images) {
+                    PhotoLibraryButtonLabel(thumbnail: nil)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             Spacer()
 
@@ -1394,6 +1446,7 @@ struct ContentView: View {
                 .accessibilityLabel("Take photo")
             }
             .buttonStyle(.plain)
+            .disabled(!camera.cameraReady || camera.isCapturing || camera.isSaving || camera.hasUnsavedCapture || camera.isAnalyzingPhoto)
 
             Spacer()
 
@@ -1412,11 +1465,70 @@ struct ContentView: View {
             Text("Enable camera access in Settings to test Dali coaching.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white.opacity(0.72))
+            Button("Open Settings") { openSettings() }
+                .buttonStyle(.borderedProminent)
         }
         .padding(24)
         .foregroundStyle(.white)
         .background(.black.opacity(0.88), in: RoundedRectangle(cornerRadius: 8))
         .padding(24)
+    }
+
+    private func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+    }
+
+    private var captureRecoveryControls: some View {
+        VStack(spacing: 8) {
+            Text("Your original has not been saved to Photos.")
+                .font(.subheadline.bold())
+            HStack {
+                Button("Retry save") { camera.retryCaptureSave() }
+                Button("Share original") {
+                    if let image = camera.latestPhotoThumbnail { sharedPhoto = SharedPhoto(image: image) }
+                }
+            }
+            HStack {
+                Button("Settings") { openSettings() }
+                Button("Discard…", role: .destructive) { showDiscardConfirmation = true }
+            }
+        }
+        .buttonStyle(.bordered)
+        .foregroundStyle(.white)
+        .padding(10)
+        .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 8))
+        .disabled(camera.isSaving)
+    }
+
+    private func reviewActions(original: UIImage) -> some View {
+        VStack(spacing: 10) {
+            if let status = camera.exportStatus {
+                Text(status).font(.subheadline).foregroundStyle(.white)
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack { reviewActionButtons(original: original) }
+                VStack { reviewActionButtons(original: original) }
+            }
+            if camera.canRetryExport {
+                Button("Retry saving copy") { camera.retryExport() }
+                Button("Open Settings") { openSettings() }
+            }
+        }
+        .buttonStyle(.bordered)
+        .tint(.teal)
+    }
+
+    @ViewBuilder
+    private func reviewActionButtons(original: UIImage) -> some View {
+        Button("Compare") {
+            startReviewComparison = true
+            showFullScreenReviewImage = true
+        }
+        .disabled(camera.isAnalyzingPhoto || reviewVariant == .original)
+        Button("Save a copy") { camera.saveCopy(currentReviewDisplayImage(original: original)) }
+            .disabled(camera.isSaving || camera.isAnalyzingPhoto)
+        Button("Share") { sharedPhoto = SharedPhoto(image: currentReviewDisplayImage(original: original)) }
+            .disabled(camera.isAnalyzingPhoto)
     }
 
     private var floatingDebugPanel: some View {
@@ -1473,17 +1585,76 @@ struct ContentView: View {
     }
 }
 
-private struct TutorStep {
-    let title: String
-    let instruction: String
-    let symbolName: String
-    let examples: [String]
-}
-
 private struct ReviewPhoto: Identifiable {
     let id = UUID()
     let data: Data
     let title: String
+}
+
+/// A schematic reference, not a detector overlay or an idealized body shape.
+private struct PoseReferenceView: View {
+    let pose: GuidedPose
+
+    private var joints: [CGPoint] {
+        // Head, neck, hip, left elbow/wrist, right elbow/wrist, left knee/foot, right knee/foot.
+        let coordinates: [(Double, Double)]
+        switch pose {
+        case .relaxedStanding:
+            coordinates = [(50, 18), (50, 34), (50, 78), (30, 55), (28, 79), (70, 55), (72, 79), (39, 103), (33, 128), (61, 103), (67, 128)]
+        case .threeQuarter:
+            coordinates = [(51, 18), (49, 34), (54, 78), (34, 55), (36, 79), (62, 55), (65, 79), (47, 103), (43, 128), (62, 102), (69, 125)]
+        case .handInPocket:
+            coordinates = [(50, 18), (50, 34), (50, 78), (28, 55), (43, 79), (70, 55), (72, 79), (39, 103), (33, 128), (61, 103), (67, 128)]
+        case .seatedLean:
+            coordinates = [(58, 24), (57, 40), (42, 80), (66, 60), (68, 88), (77, 62), (81, 89), (65, 92), (63, 128), (83, 94), (84, 128)]
+        case .walking:
+            coordinates = [(50, 18), (50, 34), (50, 78), (27, 51), (18, 72), (71, 47), (81, 32), (30, 99), (16, 119), (68, 99), (79, 129)]
+        case .weightShift:
+            coordinates = [(50, 18), (49, 34), (57, 78), (28, 55), (31, 80), (70, 55), (75, 79), (36, 104), (47, 128), (59, 103), (60, 128)]
+        case .footForward:
+            coordinates = [(50, 18), (50, 34), (50, 78), (31, 55), (29, 79), (69, 55), (72, 79), (47, 103), (55, 130), (59, 100), (66, 120)]
+        case .handAtWaist:
+            coordinates = [(50, 18), (50, 34), (54, 78), (25, 55), (45, 67), (72, 55), (74, 79), (45, 103), (41, 128), (64, 103), (69, 128)]
+        case .seatedAngle:
+            coordinates = [(46, 20), (46, 36), (45, 78), (27, 56), (57, 85), (67, 56), (68, 86), (71, 92), (77, 128), (82, 90), (89, 126)]
+        case .overShoulder:
+            coordinates = [(58, 18), (48, 34), (49, 78), (31, 54), (32, 80), (62, 54), (59, 80), (41, 103), (37, 128), (56, 103), (60, 128)]
+        }
+        return coordinates.map { CGPoint(x: $0.0, y: $0.1) }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let scale = min(proxy.size.width / 100, proxy.size.height / 140)
+            let originX = (proxy.size.width - 100 * scale) / 2
+            let points = joints.map { CGPoint(x: originX + $0.x * scale, y: $0.y * scale) }
+            Path { path in
+                for chain in [[1, 2], [1, 3, 4], [1, 5, 6], [2, 7, 8], [2, 9, 10]] {
+                    path.move(to: points[chain[0]])
+                    for index in chain.dropFirst() { path.addLine(to: points[index]) }
+                }
+                path.addEllipse(in: CGRect(x: points[0].x - 9 * scale, y: points[0].y - 10 * scale, width: 18 * scale, height: 20 * scale))
+            }
+            .stroke(.teal, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Pose sketch: \(pose.title)")
+    }
+}
+
+private struct SharedPhoto: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+
+private struct PhotoShareSheet: UIViewControllerRepresentable {
+    let image: UIImage
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [image], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 private struct PhotoLibraryButtonLabel: View {
@@ -1520,6 +1691,7 @@ private struct ZoomableReviewImageView: View {
     let originalImage: UIImage
     let title: String
     let subtitle: String?
+    let startComparing: Bool
     @Binding var isPresented: Bool
 
     @State private var scale = 1.0
@@ -1560,8 +1732,9 @@ private struct ZoomableReviewImageView: View {
                             resetZoom()
                         } label: {
                             Image(systemName: compareMode ? "rectangle.split.1x2.fill" : "rectangle.split.1x2")
+                                .accessibilityLabel(compareMode ? "Show selected photo" : "Compare with original")
                                 .font(.headline.bold())
-                                .frame(width: 42, height: 42)
+                                .frame(width: 44, height: 44)
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.white)
@@ -1571,8 +1744,9 @@ private struct ZoomableReviewImageView: View {
                             isPresented = false
                         } label: {
                             Image(systemName: "xmark")
+                                .accessibilityLabel("Close photo")
                                 .font(.headline.bold())
-                                .frame(width: 42, height: 42)
+                                .frame(width: 44, height: 44)
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.white)
@@ -1607,6 +1781,9 @@ private struct ZoomableReviewImageView: View {
                             .background(.black.opacity(0.58), in: RoundedRectangle(cornerRadius: 8))
 
                         if compareMode {
+                            Slider(value: $comparePosition, in: 0.04...0.96)
+                                .frame(maxWidth: 160)
+                                .accessibilityLabel("Comparison split")
                             Text("Original | \(title)")
                                 .font(.caption.bold())
                                 .foregroundStyle(.white.opacity(0.82))
@@ -1619,6 +1796,7 @@ private struct ZoomableReviewImageView: View {
                 }
             }
         }
+        .onAppear { compareMode = startComparing }
     }
 
     private func zoomableImageArea(size: CGSize) -> some View {

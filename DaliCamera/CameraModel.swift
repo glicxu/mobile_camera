@@ -29,6 +29,25 @@ final class CameraModel: NSObject, ObservableObject {
     )
     @Published var issues: [PhotoIssue] = []
     @Published var permissionDenied = false
+    @Published private(set) var previewAspectRatio: CGFloat = 3.0 / 4.0
+    @Published private(set) var isFrontCamera = false
+    @Published private(set) var cameraReady = false
+    private var videoRotation: CGFloat = 90
+    nonisolated(unsafe) private var configuredCameraPosition: AVCaptureDevice.Position?
+
+    func updatePreviewRotation(_ angle: CGFloat) {
+        guard videoRotation != angle else { return }
+        videoRotation = angle
+        coachingEngine.reset()
+        let session = session
+        sessionQueue.async {
+            for output in session.outputs {
+                if let connection = output.connection(with: .video), connection.isVideoRotationAngleSupported(angle) {
+                    connection.videoRotationAngle = angle
+                }
+            }
+        }
+    }
     @Published var debugEnabled = false
     @Published var captureStatus: String?
     @Published var reviewImage: UIImage?
@@ -41,6 +60,135 @@ final class CameraModel: NSObject, ObservableObject {
     @Published var beautifyResult: BeautifyResult?
     @Published var selectedPosePackage: PosePackageID = .neutral
     @Published var latestPhotoThumbnail: UIImage?
+    @Published private(set) var isCapturing = false
+    @Published private(set) var isSaving = false
+    @Published private(set) var hasUnsavedCapture = false
+    @Published private(set) var exportStatus: String?
+    @Published private(set) var isAnalyzingPhoto = false
+    @Published private(set) var guidedSession = GuidedSession(pose: nil, position: nil)
+
+    func beginGuidance(pose: GuidedPose?, position: GuidedCameraPosition?, moveRight: Bool = false) {
+        guidedSession = GuidedSession(pose: pose, position: position, moveRight: moveRight)
+        coachingEngine.reset()
+        advice = Advice(type: "waiting", recipient: "Camera", instruction: "Checking framing…", tone: .waiting)
+    }
+
+    func advanceGuidance() {
+        guard advice.type == guidedSession.advice?.type, guidedSession.currentStep != nil else { return }
+        guidedSession.advance()
+        coachingEngine.reset()
+        advice = guidedSession.advice ?? advice
+    }
+
+    var guidedAction: GuidedAction? {
+        advice.type == guidedSession.advice?.type ? guidedSession.currentStep?.action : nil
+    }
+    private var latestCaptureData: Data?
+    private var pendingCaptureData: Data?
+    private var pendingExportData: Data?
+    private var analysisID = UUID()
+
+    private static var captureStore: PendingCaptureStore {
+        PendingCaptureStore(url: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("PendingCapture.photo"))
+    }
+
+    override init() {
+        super.init()
+        if let data = try? Self.captureStore.load() {
+            latestCaptureData = data
+            pendingCaptureData = data
+            latestPhotoThumbnail = UIImage(data: data)
+            hasUnsavedCapture = true
+            exportStatus = "Unsaved photo recovered. Save or share it before taking another."
+        }
+    }
+
+    func openLatestCapture() {
+        guard let latestCaptureData else { return }
+        analyzeStillPhoto(data: latestCaptureData)
+    }
+
+    func retryCaptureSave() {
+        guard let pendingCaptureData else { return }
+        savePhotoData(pendingCaptureData, isCapture: true)
+    }
+
+    func discardUnsavedCapture() {
+        guard !isSaving else { return }
+        do {
+            try Self.captureStore.remove()
+            pendingCaptureData = nil
+            latestCaptureData = nil
+            latestPhotoThumbnail = nil
+            hasUnsavedCapture = false
+            exportStatus = nil
+            clearStillPhoto()
+        } catch {
+            exportStatus = "Could not discard photo. Please try again."
+        }
+    }
+
+    func saveCopy(_ image: UIImage) {
+        guard !isSaving else { return }
+        guard let data = image.jpegData(compressionQuality: 0.95) else {
+            exportStatus = "Could not prepare photo for saving."
+            return
+        }
+        pendingExportData = data
+        savePhotoData(data, isCapture: false)
+    }
+
+    func retryExport() {
+        guard let pendingExportData else { return }
+        savePhotoData(pendingExportData, isCapture: false)
+    }
+
+    var canRetryExport: Bool { pendingExportData != nil && !isSaving }
+
+    private func savePhotoData(_ data: Data, isCapture: Bool) {
+        guard !isSaving else { return }
+        isSaving = true
+        exportStatus = isCapture ? "Saving original…" : "Saving copy…"
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { [weak self] status in
+            guard status == .authorized || status == .limited else {
+                Task { @MainActor [weak self] in
+                    self?.isSaving = false
+                    self?.exportStatus = "Photos access is needed. Enable it in Settings, then retry, or share the photo."
+                }
+                return
+            }
+            PHPhotoLibrary.shared().performChanges {
+                let request = PHAssetCreationRequest.forAsset()
+                request.addResource(with: .photo, data: data, options: nil)
+            } completionHandler: { success, error in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.isSaving = false
+                    if success {
+                        if isCapture {
+                            self.pendingCaptureData = nil
+                            self.hasUnsavedCapture = false
+                            try? Self.captureStore.remove()
+                        } else {
+                            self.pendingExportData = nil
+                        }
+                        self.exportStatus = isCapture ? "Original saved to Photos" : "Copy saved to Photos"
+                    } else {
+                        self.exportStatus = "Save failed. Your photo is still available. \(error?.localizedDescription ?? "Please retry.")"
+                    }
+                    if isCapture {
+                        self.sessionLogger.recordCapture(
+                            status: success ? "saved" : "save_failed",
+                            measurements: self.measurements,
+                            issues: self.issues,
+                            advice: self.advice
+                        )
+                    }
+                }
+            }
+        }
+    }
 
     nonisolated(unsafe) let session = AVCaptureSession()
 
@@ -63,11 +211,13 @@ final class CameraModel: NSObject, ObservableObject {
     func start() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
-            configureAndStart()
+            permissionDenied = false
+            if reviewImage == nil && !isAnalyzingPhoto { configureAndStart() }
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
                 Task { @MainActor in
-                    granted ? self?.configureAndStart() : (self?.permissionDenied = true)
+                    self?.permissionDenied = !granted
+                    if granted { self?.start() }
                 }
             }
         default:
@@ -76,6 +226,7 @@ final class CameraModel: NSObject, ObservableObject {
     }
 
     func stop() {
+        cameraReady = false
         let session = session
         sessionQueue.async {
             if session.isRunning {
@@ -86,11 +237,18 @@ final class CameraModel: NSObject, ObservableObject {
     }
 
     func switchCamera() {
+        guard !isCapturing else { return }
         cameraPosition = cameraPosition == .back ? .front : .back
+        isFrontCamera = cameraPosition == .front
+        cameraReady = false
+        coachingEngine.reset()
         configureAndStart()
     }
 
     func clearStillPhoto() {
+        coachingEngine.reset()
+        analysisID = UUID()
+        isAnalyzingPhoto = false
         reviewImage = nil
         reframedImage = nil
         tiltedImage = nil
@@ -103,13 +261,20 @@ final class CameraModel: NSObject, ObservableObject {
     }
 
     func analyzeStillPhoto(data: Data) {
+        stop()
+        let requestID = UUID()
+        analysisID = requestID
+        isAnalyzingPhoto = true
         captureStatus = "Analyzing photo..."
 
         videoQueue.async { [weak self] in
             guard let self,
                   let image = UIImage(data: data) else {
                 Task { @MainActor [weak self] in
+                    guard self?.analysisID == requestID else { return }
+                    self?.isAnalyzingPhoto = false
                     self?.captureStatus = "Could not read photo"
+                    self?.start()
                 }
                 return
             }
@@ -117,7 +282,10 @@ final class CameraModel: NSObject, ObservableObject {
             let normalizedImage = self.normalizedImage(image)
             guard let cgImage = normalizedImage.cgImage else {
                 Task { @MainActor [weak self] in
+                    guard self?.analysisID == requestID else { return }
+                    self?.isAnalyzingPhoto = false
                     self?.captureStatus = "Could not read photo"
+                    self?.start()
                 }
                 return
             }
@@ -126,7 +294,8 @@ final class CameraModel: NSObject, ObservableObject {
             let analysis = self.analyzeImage(cgImage: cgImage, orientation: .up)
 
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.analysisID == requestID else { return }
+                self.isAnalyzingPhoto = false
                 let nextIssues = self.coachingEngine.issues(for: analysis.measurements, posePackage: self.selectedPosePackage)
                 let nextAdvice = self.coachingEngine.selectAdvice(from: nextIssues, now: now.addingTimeInterval(2))
                 let suggestion = self.reframeSuggestion(for: analysis.measurements, imageSize: normalizedImage.size)
@@ -178,12 +347,21 @@ final class CameraModel: NSObject, ObservableObject {
     }
 
     func capturePhoto() {
+        guard cameraReady, !isCapturing, !hasUnsavedCapture, !isSaving, !isAnalyzingPhoto, reviewImage == nil else { return }
+        isCapturing = true
         let settings = AVCapturePhotoSettings()
-        settings.flashMode = .auto
+        settings.flashMode = .off
         let photoOutput = photoOutput
         captureStatus = "Capturing..."
         sessionQueue.async { [weak self] in
             guard let self else { return }
+            guard self.session.isRunning, photoOutput.connection(with: .video) != nil else {
+                Task { @MainActor in
+                    self.isCapturing = false
+                    self.captureStatus = "Camera is not ready. Please try again."
+                }
+                return
+            }
             photoOutput.capturePhoto(with: settings, delegate: self)
         }
     }
@@ -194,13 +372,18 @@ final class CameraModel: NSObject, ObservableObject {
         let photoOutput = photoOutput
         let session = session
         let videoQueue = videoQueue
+        let angle = videoRotation
         sessionQueue.async { [weak self] in
             guard let self else {
                 return
             }
 
+            if self.configuredCameraPosition == cameraPosition {
+                if !session.isRunning { session.startRunning() }
+                return
+            }
             session.beginConfiguration()
-            session.sessionPreset = .high
+            session.sessionPreset = .photo
             session.inputs.forEach { session.removeInput($0) }
             session.outputs.forEach { session.removeOutput($0) }
 
@@ -210,6 +393,7 @@ final class CameraModel: NSObject, ObservableObject {
                 session.canAddInput(input)
             else {
                 session.commitConfiguration()
+                Task { @MainActor [weak self] in self?.captureStatus = "Camera unavailable. Try switching cameras or reopen the app." }
                 return
             }
 
@@ -231,15 +415,18 @@ final class CameraModel: NSObject, ObservableObject {
                 photoOutput.maxPhotoQualityPrioritization = .quality
             }
 
-            if let connection = output.connection(with: .video), connection.isVideoRotationAngleSupported(90) {
-                connection.videoRotationAngle = 90
-            }
-
-            if let connection = photoOutput.connection(with: .video), connection.isVideoRotationAngleSupported(90) {
-                connection.videoRotationAngle = 90
+            for captureOutput in [output as AVCaptureOutput, photoOutput as AVCaptureOutput] {
+                if let connection = captureOutput.connection(with: .video) {
+                    if connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
+                    if connection.isVideoMirroringSupported {
+                        connection.automaticallyAdjustsVideoMirroring = false
+                        connection.isVideoMirrored = cameraPosition == .front
+                    }
+                }
             }
 
             session.commitConfiguration()
+            self.configuredCameraPosition = cameraPosition
 
             if !session.isRunning {
                 session.startRunning()
@@ -258,7 +445,10 @@ final class CameraModel: NSObject, ObservableObject {
         motionManager.deviceMotionUpdateInterval = 0.12
         motionManager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
             guard let self, let motion else { return }
-            self.currentRollDegrees = motion.attitude.roll * 180 / .pi
+            self.currentRollDegrees = PreviewGeometry.rollDegrees(
+                gravityX: motion.gravity.x, gravityY: motion.gravity.y,
+                rotation: Double(self.videoRotation), mirrored: self.isFrontCamera
+            )
             let rotationRate = motion.rotationRate
             self.currentMotionMagnitude = sqrt(
                 rotationRate.x * rotationRate.x
@@ -1028,7 +1218,16 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         let faceRequest = VNDetectFaceLandmarksRequest()
         let poseRequest = VNDetectHumanBodyPoseRequest()
         let horizonRequest = VNDetectHorizonRequest()
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right, options: [:])
+        let frameAspectRatio = CGFloat(CVPixelBufferGetWidth(pixelBuffer)) / CGFloat(CVPixelBufferGetHeight(pixelBuffer))
+        let frameRotation = connection.videoRotationAngle
+        let frameMirrored = connection.isVideoMirrored
+        Task { @MainActor [weak self] in
+            guard let self, self.reviewImage == nil, !self.isAnalyzingPhoto,
+                  self.videoRotation == frameRotation, self.isFrontCamera == frameMirrored else { return }
+            self.previewAspectRatio = frameAspectRatio
+            self.cameraReady = true
+        }
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
 
         do {
             try handler.perform([humanRequest, faceRequest, poseRequest, horizonRequest])
@@ -1076,7 +1275,10 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         let skyOrOpenAreaRatio = skyOrOpenAreaRatio(in: pixelBuffer)
 
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, self.reviewImage == nil, !self.isAnalyzingPhoto,
+                  self.videoRotation == frameRotation, self.isFrontCamera == frameMirrored else { return }
+            self.previewAspectRatio = frameAspectRatio
+            self.cameraReady = true
             let cameraMotion = self.currentMotionMagnitude
             let nextMeasurements = Measurements(
                 personBox: person,
@@ -1096,8 +1298,10 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
                 skyOrOpenAreaRatio: skyOrOpenAreaRatio,
                 timestamp: now
             )
-            let nextIssues = self.coachingEngine.issues(for: nextMeasurements, includePosture: false)
-            let nextAdvice = self.coachingEngine.selectAdvice(from: nextIssues, now: now)
+            let nextIssues = self.guidedSession.prioritizedIssues(
+                self.coachingEngine.issues(for: nextMeasurements, includePosture: false)
+            )
+            let nextAdvice = self.coachingEngine.selectAdvice(from: nextIssues, now: now, fallback: self.guidedSession.advice)
             self.measurements = nextMeasurements
             self.issues = nextIssues
             self.advice = nextAdvice
@@ -1109,11 +1313,24 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
 extension CameraModel: AVCapturePhotoCaptureDelegate {
     nonisolated func photoOutput(
         _ output: AVCapturePhotoOutput,
+        didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings,
+        error: Error?
+    ) {
+        guard let error else { return }
+        Task { @MainActor [weak self] in
+            self?.isCapturing = false
+            self?.captureStatus = "Capture failed: \(error.localizedDescription)"
+        }
+    }
+
+    nonisolated func photoOutput(
+        _ output: AVCapturePhotoOutput,
         didFinishProcessingPhoto photo: AVCapturePhoto,
         error: Error?
     ) {
         if let error {
             Task { @MainActor [weak self] in
+                self?.isCapturing = false
                 self?.captureStatus = "Capture failed: \(error.localizedDescription)"
             }
             return
@@ -1121,49 +1338,25 @@ extension CameraModel: AVCapturePhotoCaptureDelegate {
 
         guard let data = photo.fileDataRepresentation() else {
             Task { @MainActor [weak self] in
+                self?.isCapturing = false
                 self?.captureStatus = "Capture failed"
             }
             return
         }
-        let thumbnail = UIImage(data: data)
-
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            guard status == .authorized || status == .limited else {
-                Task { @MainActor [weak self] in
-                    self?.captureStatus = "Photos permission needed"
-                }
-                return
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.isCapturing = false
+            self.latestCaptureData = data
+            self.pendingCaptureData = data
+            self.hasUnsavedCapture = true
+            self.latestPhotoThumbnail = UIImage(data: data)
+            self.captureStatus = nil
+            do {
+                try Self.captureStore.retain(data)
+            } catch {
+                self.captureStatus = "Recovery copy unavailable. Keep the app open until the photo is saved or shared."
             }
-
-            PHPhotoLibrary.shared().performChanges {
-                let request = PHAssetCreationRequest.forAsset()
-                request.addResource(with: .photo, data: data, options: nil)
-            } completionHandler: { success, error in
-                Task { @MainActor [weak self] in
-                    if success {
-                        self?.captureStatus = "Saved to Photos"
-                        self?.latestPhotoThumbnail = thumbnail
-                        if let self {
-                            self.sessionLogger.recordCapture(
-                                status: "saved",
-                                measurements: self.measurements,
-                                issues: self.issues,
-                                advice: self.advice
-                            )
-                        }
-                    } else {
-                        self?.captureStatus = "Save failed: \(error?.localizedDescription ?? "Unknown error")"
-                        if let self {
-                            self.sessionLogger.recordCapture(
-                                status: "save_failed",
-                                measurements: self.measurements,
-                                issues: self.issues,
-                                advice: self.advice
-                            )
-                        }
-                    }
-                }
-            }
+            self.savePhotoData(data, isCapture: true)
         }
     }
 }
