@@ -3,9 +3,11 @@ import XCTest
 final class PhoneReadinessUITests: XCTestCase {
     @MainActor
     func testOnboardingIsDismissibleAndHelpCanBeReopened() {
+        allowCameraPrompt()
         let app = XCUIApplication()
         app.launchArguments = ["-hasSeenDaliTutor", "NO"]
         app.launch()
+        app.tap()
         XCTAssertTrue(app.buttons["Start taking photos"].waitForExistence(timeout: 15))
         attachScreenshot("Welcome")
         app.buttons["Start taking photos"].tap()
@@ -17,9 +19,11 @@ final class PhoneReadinessUITests: XCTestCase {
 
     @MainActor
     func testPoseChooserAndLandscapeControls() {
+        allowCameraPrompt()
         let app = XCUIApplication()
         app.launchArguments = ["-hasSeenDaliTutor", "YES"]
         app.launch()
+        app.tap()
         XCTAssertTrue(app.buttons["Poses & angles"].waitForExistence(timeout: 15))
         attachScreenshot("Camera portrait")
         app.buttons["Poses & angles"].tap()
@@ -35,6 +39,29 @@ final class PhoneReadinessUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Configure"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         XCUIDevice.shared.orientation = .portrait
+    }
+
+    @MainActor
+    func testLargeTextKeepsShutterAndHelpReachable() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["Take photo"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Help"].isHittable)
+        attachScreenshot("Camera large text")
+    }
+
+    @MainActor
+    private func allowCameraPrompt() {
+        addUIInterruptionMonitor(withDescription: "Camera permission") { alert in
+            for label in ["Allow", "OK"] where alert.buttons[label].exists {
+                alert.buttons[label].tap()
+                return true
+            }
+            return false
+        }
     }
 
     @MainActor

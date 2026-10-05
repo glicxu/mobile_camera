@@ -383,6 +383,7 @@ final class CameraModel: NSObject, ObservableObject {
                 return
             }
             session.beginConfiguration()
+            self.configuredCameraPosition = nil
             session.sessionPreset = .photo
             session.inputs.forEach { session.removeInput($0) }
             session.outputs.forEach { session.removeOutput($0) }
@@ -1221,6 +1222,7 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         let frameAspectRatio = CGFloat(CVPixelBufferGetWidth(pixelBuffer)) / CGFloat(CVPixelBufferGetHeight(pixelBuffer))
         let frameRotation = connection.videoRotationAngle
         let frameMirrored = connection.isVideoMirrored
+        guard (frameAspectRatio < 1) == (frameRotation == 90 || frameRotation == 270) else { return }
         Task { @MainActor [weak self] in
             guard let self, self.reviewImage == nil, !self.isAnalyzingPhoto,
                   self.videoRotation == frameRotation, self.isFrontCamera == frameMirrored else { return }
@@ -1232,6 +1234,10 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         do {
             try handler.perform([humanRequest, faceRequest, poseRequest, horizonRequest])
         } catch {
+            Task { @MainActor [weak self] in
+                guard let self, self.reviewImage == nil, !self.isAnalyzingPhoto else { return }
+                self.advice = Advice(type: "unavailable", recipient: "Camera", instruction: "Guidance unavailable. You can still take a photo.", tone: .waiting)
+            }
             return
         }
 
