@@ -35,7 +35,7 @@ jobs:
           DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for k,vs in d["devices"].items() if "iOS" in k for v in vs if v["name"].startswith("iPhone")))')
           echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
       - name: Build and run tests
-        run: xcodebuild test -project DaliCamera.xcodeproj -scheme DaliCamera -destination "platform=iOS Simulator,id=$DEVICE_ID" -resultBundlePath TestResults.xcresult CODE_SIGNING_ALLOWED=NO
+        run: xcodebuild test -project DaliCamera.xcodeproj -scheme DaliCamera -destination "platform=iOS Simulator,id=$DEVICE_ID" -parallel-testing-enabled NO -test-timeouts-enabled YES -maximum-test-execution-time-allowance 90 -resultBundlePath TestResults.xcresult CODE_SIGNING_ALLOWED=NO
       - name: Build for physical iPhone
         run: xcodebuild build -project DaliCamera.xcodeproj -scheme DaliCamera -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
       - name: Export simulator screenshots

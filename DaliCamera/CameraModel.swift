@@ -209,6 +209,7 @@ final class CameraModel: NSObject, ObservableObject {
     }
 
     func start() {
+        guard reviewImage == nil, !isAnalyzingPhoto else { return }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             permissionDenied = false

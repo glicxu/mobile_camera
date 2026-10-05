@@ -65,6 +65,23 @@ final class PhoneReadinessUITests: XCTestCase {
     }
 
     @MainActor
+    func testReviewActionsAndFullScreenPhoto() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launchEnvironment["DALI_UI_REVIEW"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["Save a copy"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["Share"].exists)
+        XCTAssertTrue(app.buttons["Back to camera"].exists)
+        attachScreenshot("Photo review")
+        app.buttons["Open full-screen photo"].tap()
+        XCTAssertTrue(app.buttons["Close photo"].waitForExistence(timeout: 5))
+        attachScreenshot("Full-screen photo")
+        app.buttons["Close photo"].tap()
+        XCTAssertTrue(app.buttons["Save a copy"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     private func attachScreenshot(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name

@@ -53,7 +53,7 @@ struct ContentView: View {
         .persistentSystemOverlays(.hidden)
         .task {
             loadStoredBeautifySettings()
-            camera.start()
+            if !loadReviewFixtureForUITests() { camera.start() }
             if !hasSeenDaliTutor {
                 showTutor = true
                 hasSeenDaliTutor = true
@@ -161,6 +161,24 @@ struct ContentView: View {
                 .padding(12)
             }
         }
+    }
+
+    private func loadReviewFixtureForUITests() -> Bool {
+        #if DEBUG
+        guard ProcessInfo.processInfo.environment["DALI_UI_REVIEW"] == "1" else { return false }
+        // A deterministic review fixture keeps UI tests independent of camera hardware.
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 800)).image { context in
+            UIColor.systemTeal.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 600, height: 800))
+            UIColor.systemOrange.setFill()
+            context.fill(CGRect(x: 180, y: 180, width: 240, height: 440))
+        }
+        guard let data = image.pngData() else { return false }
+        camera.analyzeStillPhoto(data: data)
+        return true
+        #else
+        return false
+        #endif
     }
 
     private var viewfinder: some View {

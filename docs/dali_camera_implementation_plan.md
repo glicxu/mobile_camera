@@ -4,6 +4,8 @@
 **Companion doc:** `docs/dali_camera.md`
 **Purpose:** Define how to build and test the V1 algorithmic coaching functionality.
 
+**Posture extension:** [Phase 5: posture and camera-position suggestions](dali_camera_product_design_improvement_plan.md#phase-5-add-posture-and-camera-position-suggestions) defines 10 posture suggestions (five male/masculine and five female/feminine examples), five camera positions, implementation tasks, and acceptance criteria. An initial native implementation now provides selectable, manually confirmed sequences. The full-frame preview alignment implementation and Dart-core parity are included. See [phone testing](phone_testing.md) for build instructions, automated validation, and the physical-device acceptance checklist.
+
 ---
 
 ## 1. Objective
