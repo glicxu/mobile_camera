@@ -2,7 +2,7 @@
 
 Date: October 4, 2026
 
-Status: Phone-test candidate. Code changes for capture/review, guidance, preview geometry, onboarding, accessibility, and Dart-core parity are implemented. Automated macOS validation is in progress; physical-device acceptance remains a phone-testing task. See [phone testing](phone_testing.md).
+Status: Ready for iPhone testing. Code changes for capture/review, guidance, preview geometry, onboarding, accessibility, and Dart-core parity are implemented. Automated macOS validation passed; physical-device acceptance remains a phone-testing task. See [phone testing](phone_testing.md).
 
 ## Implementation progress
 
@@ -19,7 +19,7 @@ The initial implementation adds:
 
 Readiness work now includes a full-frame preview shared with the overlay, consistent capture rotation/mirroring, upright Vision input, display-relative gravity roll, a fixed shutter area with scrollable advice, shorter onboarding, accessible control labels, large-text/simulator UI checks, and the shared Xcode scheme.
 
-The Dart core includes matching guidance sessions, preview geometry, and adapter-based photo recovery/export logic. All 20 Dart tests pass and analysis is clean. Native XCTest and simulator UI coverage are run by the Phone readiness macOS workflow, including an unsigned physical-iPhone build. Simulator screenshots and test results are exported for review.
+The Dart core includes matching guidance sessions, preview geometry, and adapter-based photo recovery/export logic. Validation passed for source commit `406f29fc9413c8f67e40aecad3a824e419a80e87`: 20 Dart tests, clean Dart analysis, 24 native unit tests, four simulator UI tests, and an unsigned physical-iPhone build. See the [successful Phone readiness run](https://github.com/glicxu/mobile_camera/actions/runs/37251635866). Simulator screenshots and test results are available as artifacts; the final large-text and portrait screenshots were visually reviewed.
 
 Remaining acceptance work is on-device: camera/Photos permission recovery, real sensor alignment, lighting quality, VoiceOver interaction, and comfortable use of the pose suggestions. Follow [the iPhone checklist](phone_testing.md). Creative pose steps deliberately remain manually confirmed; automatic pose verification is not a claim of this build. The Dart package is shared core logic, not a completed Flutter/Android camera application.
 

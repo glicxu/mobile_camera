@@ -15,7 +15,7 @@ open DaliCamera.xcodeproj
 1. Connect your iPhone and enable Developer Mode if Xcode requests it.
 2. Choose the **DaliCamera** scheme and your iPhone as the destination.
 3. Under the app target's **Signing & Capabilities**, select your Apple development team. Automatic signing is enabled. If your team cannot use the existing bundle identifier, change it to a unique identifier.
-4. Press **Run**. Grant camera access. Dismiss the short welcome sheet.
+4. Press **Run**. Dismiss the short welcome sheet, then grant camera access.
 
 The CI device build is unsigned. Install through Xcode with your own signing team; the CI artifact is not a directly installable IPA.
 
@@ -56,6 +56,13 @@ The CI device build is unsigned. Install through Xcode with your own signing tea
 - Try seated, walking, and over-shoulder poses. Skip anything uncomfortable. These are optional style prompts, not body-quality judgments.
 
 ## Automated checks
+
+Verified source: `406f29fc9413c8f67e40aecad3a824e419a80e87` on `codex/phone-readiness-20261004`. The [final validation run](https://github.com/glicxu/mobile_camera/actions/runs/37251635866) passed on October 4, 2026 (Pacific time):
+
+- 24 native unit tests and four iPhone simulator UI tests.
+- Physical-iPhone build with signing disabled.
+- 20 Dart tests and clean static analysis.
+- Final large-text and portrait screenshots visually reviewed; screenshots and test bundles are attached to the run.
 
 The **Phone readiness** GitHub Actions workflow builds the app, runs native unit/UI tests on an iPhone simulator, builds for physical iPhone without signing, and checks the Dart core. Test bundles and simulator screenshot attachments are uploaded as artifacts.
 
