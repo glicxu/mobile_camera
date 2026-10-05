@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
     @StateObject private var camera = CameraModel()
     @AppStorage("hasSeenDaliTutor") private var hasSeenDaliTutor = false
@@ -236,13 +237,21 @@ struct ContentView: View {
 
     private var topBar: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Dali V1")
-                    .font(.caption.bold())
-                    .foregroundStyle(.teal)
-                Text(shootingMode.title)
-                    .font(.title3.bold())
+            if dynamicTypeSize.isAccessibilitySize {
+                Text(shootingMode.shortTitle)
+                    .font(.headline.bold())
                     .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Dali V1")
+                        .font(.caption.bold())
+                        .foregroundStyle(.teal)
+                    Text(shootingMode.title)
+                        .font(.title3.bold())
+                        .foregroundStyle(.white)
+                }
             }
 
             Spacer()
@@ -251,7 +260,7 @@ struct ContentView: View {
                 showConfiguration = true
             } label: {
                 Image(systemName: "slider.horizontal.3")
-                    .font(.title3.bold())
+                    .font(.system(size: 20, weight: .bold))
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
@@ -264,7 +273,7 @@ struct ContentView: View {
             } label: {
                 Image(systemName: "questionmark.circle")
                     .accessibilityLabel("Help")
-                    .font(.title3.bold())
+                    .font(.system(size: 20, weight: .bold))
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
@@ -275,7 +284,7 @@ struct ContentView: View {
                 camera.switchCamera()
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath.camera")
-                    .font(.title3.bold())
+                    .font(.system(size: 20, weight: .bold))
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
@@ -577,7 +586,7 @@ struct ContentView: View {
             } label: {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                     .accessibilityLabel("Open full-screen photo")
-                    .font(.headline.bold())
+                    .font(.system(size: 20, weight: .bold))
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
@@ -742,7 +751,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: "sparkles")
-                    .font(.headline.bold())
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(.teal)
                     .frame(width: 28, height: 28)
 
@@ -833,7 +842,7 @@ struct ContentView: View {
                 analysisSection(title: "Pose Package") {
                     HStack(spacing: 8) {
                         Image(systemName: "shippingbox")
-                            .font(.headline.bold())
+                            .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(.teal)
                             .frame(width: 28, height: 28)
                         Text(camera.selectedPosePackage.title)
@@ -1015,21 +1024,17 @@ struct ContentView: View {
     }
 
     private var adviceCard: some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(camera.advice.recipient)
                 .font(.caption.bold())
                 .textCase(.uppercase)
                 .foregroundStyle(.white.opacity(0.72))
-                .frame(width: 96)
-                .padding(.vertical, 8)
-                .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
-
             Text(camera.advice.instruction)
                 .font(.title2.bold())
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
@@ -1037,7 +1042,7 @@ struct ContentView: View {
                 .stroke(toneColor(camera.advice.tone).opacity(0.7), lineWidth: 1)
         }
         .accessibilityElement(children: .combine)
-        .padding(.bottom, 14)
+        .padding(.bottom, 8)
     }
 
     private var guidedControls: some View {
@@ -1150,7 +1155,7 @@ struct ContentView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 11) {
                 Image(systemName: summary.symbolName)
-                    .font(.title3.bold())
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(toneColor(summary.tone))
                     .frame(width: 30, height: 30)
 
@@ -1717,7 +1722,7 @@ private struct PhotoLibraryButtonLabel: View {
                     }
             } else {
                 Image(systemName: "photo")
-                    .font(.title3.bold())
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(.black)
             }
         }
@@ -1773,7 +1778,7 @@ private struct ZoomableReviewImageView: View {
                         } label: {
                             Image(systemName: compareMode ? "rectangle.split.1x2.fill" : "rectangle.split.1x2")
                                 .accessibilityLabel(compareMode ? "Show selected photo" : "Compare with original")
-                                .font(.headline.bold())
+                                .font(.system(size: 20, weight: .bold))
                                 .frame(width: 44, height: 44)
                         }
                         .buttonStyle(.plain)
@@ -1785,7 +1790,7 @@ private struct ZoomableReviewImageView: View {
                         } label: {
                             Image(systemName: "xmark")
                                 .accessibilityLabel("Close photo")
-                                .font(.headline.bold())
+                                .font(.system(size: 20, weight: .bold))
                                 .frame(width: 44, height: 44)
                         }
                         .buttonStyle(.plain)
