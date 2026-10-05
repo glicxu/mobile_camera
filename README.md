@@ -1,5 +1,8 @@
 # Dali Camera
 
+For the current phone-testing build, setup steps, and acceptance checklist, see
+[`docs/phone_testing.md`](docs/phone_testing.md).
+
 Prototype iOS app for testing the V1 algorithmic camera coach.
 
 ## Run On iPhone
@@ -22,6 +25,11 @@ The first phone-testable build includes:
 - deterministic coaching rules,
 - one active instruction at a time,
 - debug overlay with detected boxes and issue names.
+
+## Cross-Platform Port
+
+The proposed Flutter and native-adapter migration is documented in
+[`docs/dali_camera_cross_platform_port_plan.md`](docs/dali_camera_cross_platform_port_plan.md).
 
 ## Current Prototype Advice
 

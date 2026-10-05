@@ -7,6 +7,7 @@ struct OverlayView: View {
     let debugEnabled: Bool
     var reframeSuggestion: ReframeSuggestion? = nil
     var contentAspectRatio: CGFloat? = nil
+    var guidedAction: GuidedAction? = nil
 
     var body: some View {
         GeometryReader { proxy in
@@ -15,11 +16,11 @@ struct OverlayView: View {
             ZStack {
                 ruleOfThirds(in: contentRect)
 
-                if let person = measurements.personBox {
+                if debugEnabled, let person = measurements.personBox {
                     box(person.rect, in: contentRect, color: .teal, label: "person detected")
                 }
 
-                if let face = measurements.faceBox {
+                if debugEnabled, let face = measurements.faceBox {
                     box(face.rect, in: contentRect, color: .yellow, label: "face detected")
                 }
 
@@ -65,9 +66,15 @@ struct OverlayView: View {
 
     private var directionHint: some View {
         Group {
-            if advice.type != "ready", let arrow = arrowText(for: advice.instruction) {
-                Text(arrow)
-                    .font(.system(size: 54, weight: .heavy))
+            if let guidedAction {
+                Image(systemName: guidedAction.symbol)
+                    .font(.system(size: 40, weight: .semibold))
+                    .foregroundStyle(.teal)
+                    .shadow(radius: 10)
+                    .accessibilityHidden(true)
+            } else if !advice.type.hasPrefix("guided_"), advice.type != "ready", let symbol = advice.directionSymbol {
+                Image(systemName: symbol)
+                    .font(.system(size: 40, weight: .semibold))
                     .foregroundStyle(.teal)
                     .shadow(radius: 10)
             }
@@ -266,23 +273,7 @@ struct OverlayView: View {
             return CGRect(origin: .zero, size: size)
         }
 
-        let containerAspectRatio = size.width / max(1, size.height)
-
-        if containerAspectRatio > contentAspectRatio {
-            let width = size.height * contentAspectRatio
-            return CGRect(x: (size.width - width) / 2, y: 0, width: width, height: size.height)
-        } else {
-            let height = size.width / contentAspectRatio
-            return CGRect(x: 0, y: (size.height - height) / 2, width: size.width, height: height)
-        }
+        return PreviewGeometry.fittedRect(in: size, aspectRatio: contentAspectRatio)
     }
 
-    private func arrowText(for instruction: String) -> String? {
-        let lower = instruction.lowercased()
-        if lower.contains("left") { return "<-" }
-        if lower.contains("right") { return "->" }
-        if lower.contains("raise") { return "^" }
-        if lower.contains("lower") { return "v" }
-        return nil
-    }
 }

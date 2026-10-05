@@ -2,6 +2,138 @@ import CoreGraphics
 import XCTest
 
 final class CoachingEngineTests: XCTestCase {
+    func testPreviewGeometryFitsTheWholeFrameInPortraitAndLandscape() {
+        let portrait = PreviewGeometry.fittedRect(in: CGSize(width: 390, height: 500), aspectRatio: 3.0 / 4.0)
+        XCTAssertEqual(portrait, CGRect(x: 7.5, y: 0, width: 375, height: 500))
+        let landscape = PreviewGeometry.fittedRect(in: CGSize(width: 500, height: 300), aspectRatio: 4.0 / 3.0)
+        XCTAssertEqual(landscape, CGRect(x: 50, y: 0, width: 400, height: 300))
+        XCTAssertEqual(PreviewGeometry.fittedRect(in: .zero, aspectRatio: 1), .zero)
+    }
+
+    func testGravityRollIsRelativeToDisplayRotationAndMirroring() {
+        XCTAssertEqual(PreviewGeometry.rollDegrees(gravityX: 0, gravityY: -1, rotation: 90, mirrored: false), 0, accuracy: 0.001)
+        XCTAssertEqual(PreviewGeometry.rollDegrees(gravityX: -1, gravityY: 0, rotation: 0, mirrored: false), 0, accuracy: 0.001)
+        XCTAssertEqual(PreviewGeometry.rollDegrees(gravityX: 1, gravityY: 0, rotation: 180, mirrored: false), 0, accuracy: 0.001)
+        let back = PreviewGeometry.rollDegrees(gravityX: 0.1, gravityY: -0.99, rotation: 90, mirrored: false)
+        let front = PreviewGeometry.rollDegrees(gravityX: 0.1, gravityY: -0.99, rotation: 90, mirrored: true)
+        XCTAssertEqual(front, -back, accuracy: 0.001)
+        XCTAssertEqual(PreviewGeometry.rollDegrees(gravityX: 0, gravityY: 0, rotation: 90, mirrored: false), 0)
+    }
+
+    func testDirectionSymbolsDistinguishCameraRotationFromSubjectDirection() {
+        let camera = Advice(type: "camera_tilted", recipient: "Photographer", instruction: "Tilt left", tone: .warning)
+        let subject = Advice(type: "face_too_profile", recipient: "Subject", instruction: "Turn left", tone: .warning)
+        XCTAssertNotEqual(camera.directionSymbol, subject.directionSymbol)
+    }
+    func testGuidanceCatalogHasTenPosesAndFiveCameraPositions() {
+        XCTAssertEqual(Set(GuidedPose.allCases.map(\.id)).count, 10)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .masculine }.count, 5)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .feminine }.count, 5)
+        XCTAssertEqual(Set(GuidedCameraPosition.allCases.map(\.id)).count, 5)
+        for pose in GuidedPose.allCases {
+            XCTAssertEqual(pose.steps.count, 2)
+            XCTAssertTrue(pose.steps.allSatisfy { $0.recipient == "Subject" && !$0.instruction.isEmpty })
+        }
+        for position in GuidedCameraPosition.allCases {
+            XCTAssertTrue(position.steps(moveRight: false).allSatisfy { $0.recipient == "Photographer" })
+        }
+    }
+
+    func testGuidanceProgressesOnlyWhenExplicitlyAdvanced() {
+        var session = GuidedSession(pose: .handInPocket, position: .elevated)
+        XCTAssertEqual(session.steps.count, 4)
+        XCTAssertEqual(session.currentStep?.action, .cameraHeight)
+        session.advance()
+        XCTAssertEqual(session.currentStep?.action, .cameraPitch)
+        session.advance()
+        XCTAssertEqual(session.currentStep?.recipient, "Subject")
+        session.advance()
+        XCTAssertFalse(session.isComplete)
+        session.advance()
+        XCTAssertTrue(session.isComplete)
+        session.advance()
+        XCTAssertEqual(session.stepIndex, 4)
+        XCTAssertEqual(session.advice?.tone, .waiting)
+    }
+
+    func testNaturalGuidanceDoesNotAddInstructions() {
+        let session = GuidedSession(pose: nil, position: nil)
+        XCTAssertFalse(session.isActive)
+        XCTAssertNil(session.advice)
+        let issues = CoachingEngine().issues(for: measurements(personBox: nil))
+        XCTAssertEqual(session.prioritizedIssues(issues), issues)
+    }
+
+    func testMissingSubjectInterruptsGuidanceWithoutAdvancingIt() {
+        let engine = CoachingEngine()
+        let session = GuidedSession(pose: .walking, position: nil)
+        let issues = session.prioritizedIssues(engine.issues(for: measurements(personBox: nil)))
+        let now = Date()
+        _ = engine.selectAdvice(from: issues, now: now, fallback: session.advice)
+        let advice = engine.selectAdvice(from: issues, now: now.addingTimeInterval(2), fallback: session.advice)
+        XCTAssertEqual(advice.type, "subject_missing")
+        XCTAssertEqual(session.stepIndex, 0)
+        _ = engine.selectAdvice(from: [], now: now.addingTimeInterval(4), fallback: session.advice)
+        XCTAssertEqual(engine.selectAdvice(from: [], now: now.addingTimeInterval(6), fallback: session.advice), session.advice)
+        XCTAssertEqual(session.stepIndex, 0)
+    }
+
+    func testPoseConflictsAndPhotographerSideAreExplicit() {
+        XCTAssertTrue(GuidedPose.overShoulder.conflicts.contains("face_missing"))
+        XCTAssertTrue(GuidedPose.overShoulder.conflicts.contains("face_too_profile"))
+        XCTAssertTrue(GuidedPose.walking.conflicts.contains("camera_unstable"))
+        XCTAssertTrue(GuidedPose.seatedAngle.conflicts.contains("feet_cropped"))
+        XCTAssertTrue(GuidedCameraPosition.side.steps(moveRight: false).last!.instruction.contains("your left"))
+        XCTAssertTrue(GuidedCameraPosition.side.steps(moveRight: true).last!.instruction.contains("your right"))
+        XCTAssertEqual(GuidedPose.threeQuarter.steps.first?.instruction, "Turn your body slightly to your right.")
+    }
+
+    func testOverShoulderSuppressesFaceDirectionButKeepsMissingSubject() {
+        let engine = CoachingEngine()
+        let session = GuidedSession(pose: .overShoulder, position: nil)
+        let box = DetectionBox(rect: CGRect(x: 0.3, y: 0.12, width: 0.3, height: 0.65), confidence: 0.9, label: "person")
+        let issues = engine.issues(for: measurements(personBox: box, faceBox: nil))
+        XCTAssertTrue(issues.contains { $0.type == "face_missing" })
+        XCTAssertFalse(session.prioritizedIssues(issues).contains { $0.type == "face_missing" })
+        XCTAssertEqual(session.prioritizedIssues(engine.issues(for: measurements(personBox: nil))).first?.type, "subject_missing")
+    }
+
+    func testChangingGuidanceDoesNotRetainAnOldInstruction() {
+        let engine = CoachingEngine()
+        var first = GuidedSession(pose: .walking, position: .elevated)
+        first.advance()
+        let now = Date()
+        _ = engine.selectAdvice(from: [], now: now, fallback: first.advice)
+        _ = engine.selectAdvice(from: [], now: now.addingTimeInterval(2), fallback: first.advice)
+        engine.reset()
+        let replacement = GuidedSession(pose: .handAtWaist, position: nil)
+        let initial = engine.selectAdvice(from: [], now: now.addingTimeInterval(3), fallback: replacement.advice)
+        XCTAssertNotEqual(initial.type, first.advice?.type)
+        XCTAssertEqual(engine.selectAdvice(from: [], now: now.addingTimeInterval(5), fallback: replacement.advice), replacement.advice)
+        XCTAssertEqual(replacement.stepIndex, 0)
+        XCTAssertEqual(replacement.currentStep?.completion, .userConfirmed)
+    }
+
+    func testPendingCaptureSurvivesStoreRecreationUntilExplicitRemoval() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let original = Data([0, 17, 42, 255])
+        try PendingCaptureStore(url: url).retain(original)
+
+        let reopenedStore = PendingCaptureStore(url: url)
+        XCTAssertEqual(try reopenedStore.load(), original)
+        try reopenedStore.remove()
+        XCTAssertNil(try reopenedStore.load())
+        XCTAssertNoThrow(try reopenedStore.remove())
+    }
+
+    func testPendingCaptureWriteFailureIsReported() {
+        let missingDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let store = PendingCaptureStore(url: missingDirectory.appendingPathComponent("capture.photo"))
+        XCTAssertThrowsError(try store.retain(Data([1, 2, 3])))
+        XCTAssertNil(try store.load())
+    }
+
     func testSubjectMissingProducesHighestPriorityDangerIssue() {
         let issues = CoachingEngine().issues(for: measurements(personBox: nil))
 
