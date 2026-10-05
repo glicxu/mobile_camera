@@ -567,8 +567,6 @@ private struct PoseTipLibrary {
                 tip("shoulders_high", "Subject", "Relax shoulders"),
                 tip("face_occluded", "Subject", "Clear the face"),
                 tip("eyes_occluded", "Subject", "Show your eyes"),
-                tip("face_too_profile", "Subject", "Turn face slightly"),
-                tip("face_turned_away", "Subject", "Look toward camera"),
                 tip("chin_too_high", "Subject", "Lower chin slightly"),
                 tip("chin_too_low", "Subject", "Lift chin slightly")
             ])

@@ -19,7 +19,7 @@ The initial implementation adds:
 
 Readiness work now includes a full-frame preview shared with the overlay, consistent capture rotation/mirroring, upright Vision input, display-relative gravity roll, a fixed shutter area with scrollable advice, shorter onboarding, accessible control labels, large-text/simulator UI checks, and the shared Xcode scheme.
 
-The Dart core includes matching guidance sessions, preview geometry, and adapter-based photo recovery/export logic. All 19 Dart tests pass and analysis is clean. Native XCTest and simulator UI coverage are run by the Phone readiness macOS workflow, including an unsigned physical-iPhone build. Simulator screenshots and test results are exported for review.
+The Dart core includes matching guidance sessions, preview geometry, and adapter-based photo recovery/export logic. All 20 Dart tests pass and analysis is clean. Native XCTest and simulator UI coverage are run by the Phone readiness macOS workflow, including an unsigned physical-iPhone build. Simulator screenshots and test results are exported for review.
 
 Remaining acceptance work is on-device: camera/Photos permission recovery, real sensor alignment, lighting quality, VoiceOver interaction, and comfortable use of the pose suggestions. Follow [the iPhone checklist](phone_testing.md). Creative pose steps deliberately remain manually confirmed; automatic pose verification is not a claim of this build. The Dart package is shared core logic, not a completed Flutter/Android camera application.
 

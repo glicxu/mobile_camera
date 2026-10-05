@@ -53,10 +53,11 @@ struct ContentView: View {
         .persistentSystemOverlays(.hidden)
         .task {
             loadStoredBeautifySettings()
-            if !loadReviewFixtureForUITests() { camera.start() }
             if !hasSeenDaliTutor {
                 showTutor = true
                 hasSeenDaliTutor = true
+            } else if !loadReviewFixtureForUITests() {
+                camera.start()
             }
         }
         .onChange(of: selectedPhotoItems) { _, items in
@@ -67,7 +68,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
+            if phase == .active && !showTutor {
                 camera.start()
             } else if phase == .background {
                 camera.stop()
@@ -78,6 +79,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showPoseChooser) { poseChooser }
         .sheet(isPresented: $showTutor) { tutorCard }
+        .onChange(of: showTutor) { _, showing in
+            if showing { camera.stop() } else { camera.start() }
+        }
         .onChange(of: shootingMode) { _, mode in
             if !mode.showsGuidance { camera.beginGuidance(pose: nil, position: nil) }
         }
@@ -89,6 +93,16 @@ struct ContentView: View {
             Button("Keep photo", role: .cancel) {}
         } message: {
             Text("Only discard it if you no longer need it or have already shared a copy.")
+        }
+        .onChange(of: camera.advice) { _, advice in
+            guard UIAccessibility.isVoiceOverRunning, camera.reviewImage == nil,
+                  shootingMode.showsGuidance, !showTutor, !showPoseChooser, !showConfiguration else { return }
+            UIAccessibility.post(notification: .announcement, argument: "\(advice.recipient). \(advice.instruction)")
+        }
+        .onChange(of: camera.exportStatus) { _, status in
+            if UIAccessibility.isVoiceOverRunning, let status {
+                UIAccessibility.post(notification: .announcement, argument: status)
+            }
         }
         .onChange(of: camera.selectedPosePackage) { _, _ in
             camera.refreshStillPhotoAdvice()
@@ -987,6 +1001,7 @@ struct ContentView: View {
                     Text("Tap the thumbnail to review your latest photo. Originals save to Photos; Save a copy keeps the enhancement you are viewing.")
                     Button("Start taking photos") { showTutor = false }
                         .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
                         .frame(minHeight: 44)
                 }
                 .padding(24)
@@ -1022,6 +1037,7 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(toneColor(camera.advice.tone).opacity(0.7), lineWidth: 1)
         }
+        .accessibilityElement(children: .combine)
         .padding(.bottom, 14)
     }
 
@@ -1046,6 +1062,7 @@ struct ContentView: View {
             }
             .font(.caption.bold())
             .buttonStyle(.bordered)
+            .controlSize(.large)
             .tint(.teal)
             if camera.guidedSession.currentStep != nil {
                 HStack {
@@ -1054,6 +1071,7 @@ struct ContentView: View {
                 }
                 .font(.caption.bold())
                 .buttonStyle(.bordered)
+                .controlSize(.large)
                 .tint(.teal)
                 .disabled(camera.guidedAction == nil)
             }
@@ -1485,6 +1503,7 @@ struct ContentView: View {
                 .foregroundStyle(.white.opacity(0.72))
             Button("Open Settings") { openSettings() }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
         }
         .padding(24)
         .foregroundStyle(.white)
@@ -1512,6 +1531,7 @@ struct ContentView: View {
             }
         }
         .buttonStyle(.bordered)
+        .controlSize(.large)
         .foregroundStyle(.white)
         .padding(10)
         .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 8))
@@ -1533,6 +1553,7 @@ struct ContentView: View {
             }
         }
         .buttonStyle(.bordered)
+        .controlSize(.large)
         .tint(.teal)
     }
 

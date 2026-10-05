@@ -11,6 +11,7 @@ final class PhoneReadinessUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Start taking photos"].waitForExistence(timeout: 15))
         attachScreenshot("Welcome")
         app.buttons["Start taking photos"].tap()
+        app.tap()
         XCTAssertTrue(app.buttons["Help"].waitForExistence(timeout: 5))
         app.buttons["Help"].tap()
         XCTAssertTrue(app.navigationBars["Welcome to Dali"].waitForExistence(timeout: 5))

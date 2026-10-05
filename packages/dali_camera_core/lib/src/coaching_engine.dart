@@ -739,8 +739,6 @@ const _commonTips = <(String, String, String)>[
   ('shoulders_high', 'Subject', 'Relax shoulders'),
   ('face_occluded', 'Subject', 'Clear the face'),
   ('eyes_occluded', 'Subject', 'Show your eyes'),
-  ('face_too_profile', 'Subject', 'Turn face slightly'),
-  ('face_turned_away', 'Subject', 'Look toward camera'),
   ('chin_too_high', 'Subject', 'Lower chin slightly'),
   ('chin_too_low', 'Subject', 'Lift chin slightly'),
 ];

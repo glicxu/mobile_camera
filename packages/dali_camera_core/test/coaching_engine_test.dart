@@ -3,6 +3,28 @@ import 'package:test/test.dart';
 
 void main() {
   group('Swift coaching parity', () {
+    test('Natural face direction preserves the measured side', () {
+      for (final yaw in [0.55, -0.55]) {
+        final issues = CoachingEngine().issues(
+          _measurements(
+            faceAnalysis: FaceAnalysis(
+              confidence: 0.82,
+              landmarkPointCount: 28,
+              eyeVisibilityScore: 1,
+              yawEstimate: yaw,
+              pitchEstimate: 0.3,
+              occlusionScore: 0.05,
+            ),
+          ),
+        );
+        expect(
+          issues
+              .firstWhere((issue) => issue.type == 'face_too_profile')
+              .instruction,
+          yaw > 0 ? 'Turn face slightly left' : 'Turn face slightly right',
+        );
+      }
+    });
     test('subject missing produces danger issue', () {
       final issues = CoachingEngine().issues(_measurements(personBox: null));
       expect(issues.first.type, 'subject_missing');
@@ -68,7 +90,7 @@ void main() {
         issues
             .firstWhere((item) => item.type == 'face_too_profile')
             .instruction,
-        'Turn face slightly',
+        'Turn face slightly left',
       );
       expect(
         issues.firstWhere((item) => item.type == 'eyes_occluded').instruction,
