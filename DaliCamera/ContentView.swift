@@ -1101,6 +1101,7 @@ struct ContentView: View {
                             Text(pose.title).tag(Optional(pose))
                         }
                     }
+                    .accessibilityIdentifier("guidedPosePicker")
                     if let pose = chosenGuidePose {
                         PoseReferenceView(pose: pose)
                             .frame(height: 150)
@@ -1117,6 +1118,7 @@ struct ContentView: View {
                             Text(position.title).tag(Optional(position))
                         }
                     }
+                    .accessibilityIdentifier("guidedPositionPicker")
                     if chosenCameraPosition == .side {
                         Toggle("Move to your right", isOn: $guideMoveRight)
                     }
