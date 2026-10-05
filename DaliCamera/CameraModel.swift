@@ -210,6 +210,12 @@ final class CameraModel: NSObject, ObservableObject {
 
     func start() {
         guard reviewImage == nil, !isAnalyzingPhoto else { return }
+        #if targetEnvironment(simulator)
+        cameraReady = false
+        captureStatus = "Camera capture needs an iPhone. You can choose a photo to try review."
+        advice = Advice(type: "unavailable", recipient: "Camera", instruction: "Choose a photo to try Dali.", tone: .waiting)
+        return
+        #else
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             permissionDenied = false
@@ -224,6 +230,7 @@ final class CameraModel: NSObject, ObservableObject {
         default:
             permissionDenied = true
         }
+        #endif
     }
 
     func stop() {
@@ -243,7 +250,7 @@ final class CameraModel: NSObject, ObservableObject {
         isFrontCamera = cameraPosition == .front
         cameraReady = false
         coachingEngine.reset()
-        configureAndStart()
+        start()
     }
 
     func clearStillPhoto() {

@@ -372,7 +372,7 @@ struct ContentView: View {
                 VStack(spacing: 0) {
                     reviewSlideshowTopBar
                         .padding(.horizontal, 12)
-                        .padding(.top, max(12, proxy.safeAreaInsets.top + 6))
+                        .padding(.top, 12)
                         .padding(.bottom, 8)
 
                     reviewModePicker
@@ -404,11 +404,10 @@ struct ContentView: View {
                             .frame(height: 420)
                     }
                 }
-                .padding(.bottom, max(16, proxy.safeAreaInsets.bottom))
+                .padding(.bottom, 16)
             }
         }
         .background(Color.black)
-        .ignoresSafeArea()
     }
 
     private var reviewSlideshowTopBar: some View {
@@ -1792,7 +1791,7 @@ private struct ZoomableReviewImageView: View {
                         .background(.black.opacity(0.58), in: RoundedRectangle(cornerRadius: 8))
                     }
                     .padding(.horizontal, 14)
-                    .padding(.top, max(14, proxy.safeAreaInsets.top + 8))
+                    .padding(.top, 14)
 
                     Spacer()
                 }
@@ -1823,7 +1822,7 @@ private struct ZoomableReviewImageView: View {
                             Slider(value: $comparePosition, in: 0.04...0.96)
                                 .frame(maxWidth: 160)
                                 .accessibilityLabel("Comparison split")
-                            Text("Original | \(title)")
+                            Text("\(title) | Original")
                                 .font(.caption.bold())
                                 .foregroundStyle(.white.opacity(0.82))
                                 .frame(minHeight: 38)
@@ -1831,7 +1830,7 @@ private struct ZoomableReviewImageView: View {
                                 .background(.black.opacity(0.58), in: RoundedRectangle(cornerRadius: 8))
                         }
                     }
-                    .padding(.bottom, max(18, proxy.safeAreaInsets.bottom + 10))
+                    .padding(.bottom, 18)
                 }
             }
         }
@@ -1874,6 +1873,18 @@ private struct ZoomableReviewImageView: View {
             }
         }
         .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Photo zoom")
+        .accessibilityValue(Text("\(scale, specifier: "%.1f") times"))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: scale = min(6, scale + 0.5)
+            case .decrement: scale = max(1, scale - 0.5)
+            @unknown default: break
+            }
+            lastScale = scale
+            if scale <= 1.01 { resetZoom() }
+        }
         .gesture(compareMode ? nil : zoomGesture)
         .simultaneousGesture(compareMode ? nil : panGesture)
         .onTapGesture(count: 2) {
