@@ -2,6 +2,29 @@ import CoreGraphics
 import XCTest
 
 final class CoachingEngineTests: XCTestCase {
+    func testPreviewGeometryFitsTheWholeFrameInPortraitAndLandscape() {
+        let portrait = PreviewGeometry.fittedRect(in: CGSize(width: 390, height: 500), aspectRatio: 3.0 / 4.0)
+        XCTAssertEqual(portrait, CGRect(x: 7.5, y: 0, width: 375, height: 500))
+        let landscape = PreviewGeometry.fittedRect(in: CGSize(width: 500, height: 300), aspectRatio: 4.0 / 3.0)
+        XCTAssertEqual(landscape, CGRect(x: 50, y: 0, width: 400, height: 300))
+        XCTAssertEqual(PreviewGeometry.fittedRect(in: .zero, aspectRatio: 1), .zero)
+    }
+
+    func testGravityRollIsRelativeToDisplayRotationAndMirroring() {
+        XCTAssertEqual(PreviewGeometry.rollDegrees(gravityX: 0, gravityY: -1, rotation: 90, mirrored: false), 0, accuracy: 0.001)
+        XCTAssertEqual(PreviewGeometry.rollDegrees(gravityX: -1, gravityY: 0, rotation: 0, mirrored: false), 0, accuracy: 0.001)
+        XCTAssertEqual(PreviewGeometry.rollDegrees(gravityX: 1, gravityY: 0, rotation: 180, mirrored: false), 0, accuracy: 0.001)
+        let back = PreviewGeometry.rollDegrees(gravityX: 0.1, gravityY: -0.99, rotation: 90, mirrored: false)
+        let front = PreviewGeometry.rollDegrees(gravityX: 0.1, gravityY: -0.99, rotation: 90, mirrored: true)
+        XCTAssertEqual(front, -back, accuracy: 0.001)
+        XCTAssertEqual(PreviewGeometry.rollDegrees(gravityX: 0, gravityY: 0, rotation: 90, mirrored: false), 0)
+    }
+
+    func testDirectionSymbolsDistinguishCameraRotationFromSubjectDirection() {
+        let camera = Advice(type: "camera_tilted", recipient: "Photographer", instruction: "Tilt left", tone: .warning)
+        let subject = Advice(type: "face_too_profile", recipient: "Subject", instruction: "Turn left", tone: .warning)
+        XCTAssertNotEqual(camera.directionSymbol, subject.directionSymbol)
+    }
     func testGuidanceCatalogHasTenPosesAndFiveCameraPositions() {
         XCTAssertEqual(Set(GuidedPose.allCases.map(\.id)).count, 10)
         XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .masculine }.count, 5)

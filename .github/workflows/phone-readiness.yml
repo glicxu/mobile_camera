@@ -10,6 +10,19 @@ permissions:
   contents: read
 
 jobs:
+  dart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.12.2'
+      - name: Check shared core
+        working-directory: packages/dali_camera_core
+        run: |
+          dart pub get
+          dart analyze
+          dart test
   ios:
     runs-on: macos-15
     timeout-minutes: 30
@@ -30,4 +43,3 @@ jobs:
         with:
           name: ios-test-results
           path: TestResults.xcresult
-

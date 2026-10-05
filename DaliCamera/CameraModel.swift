@@ -1271,6 +1271,7 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         let faceLuminance = face.flatMap { luminance(in: pixelBuffer, normalizedRect: $0.rect) }
         let backgroundLuminance = luminance(in: pixelBuffer, normalizedRect: nil)
         let horizon = horizonRequest.results?.first
+        let hasHorizon = horizon != nil
         let horizonAngleDegrees = horizon.map { Double($0.angle) * 180 / .pi }
         let skyOrOpenAreaRatio = skyOrOpenAreaRatio(in: pixelBuffer)
 
@@ -1290,8 +1291,8 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
                 faceLuminance: faceLuminance,
                 backgroundLuminance: backgroundLuminance,
                 horizonAngleDegrees: horizonAngleDegrees,
-                horizonY: horizon == nil ? nil : 0.5,
-                horizonConfidence: horizon == nil ? 0 : 0.72,
+                horizonY: hasHorizon ? 0.5 : nil,
+                horizonConfidence: hasHorizon ? 0.72 : 0,
                 cameraRollDegrees: self.currentRollDegrees,
                 cameraMotion: cameraMotion,
                 cameraStable: cameraMotion < 0.22,
