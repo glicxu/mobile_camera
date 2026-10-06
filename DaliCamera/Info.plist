@@ -22,10 +22,14 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Dali Camera uses the camera to analyze framing and coach the photographer before capture.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Dali listens for the “Cheese” shutter command while Voice shutter is enabled.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Dali Camera saves captured photos to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Dali Camera lets you choose saved photos to test framing advice.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Dali recognizes the “Cheese” shutter command while Voice shutter is enabled.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

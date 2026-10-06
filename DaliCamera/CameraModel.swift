@@ -32,8 +32,10 @@ final class CameraModel: NSObject, ObservableObject {
     @Published private(set) var previewAspectRatio: CGFloat = 3.0 / 4.0
     @Published private(set) var isFrontCamera = false
     @Published private(set) var cameraReady = false
+    @Published private(set) var cameraControlCapabilities = CameraControlCapabilities.unavailable
     private var videoRotation: CGFloat = 90
     nonisolated(unsafe) private var configuredCameraPosition: AVCaptureDevice.Position?
+    nonisolated(unsafe) private var activeCaptureDevice: AVCaptureDevice?
 
     func updatePreviewRotation(_ angle: CGFloat) {
         guard videoRotation != angle else { return }
@@ -203,6 +205,8 @@ final class CameraModel: NSObject, ObservableObject {
     private var cameraPosition: AVCaptureDevice.Position = .back
     private var currentRollDegrees = 0.0
     private var currentMotionMagnitude = 0.0
+    private var previousSubjectCenter: CGPoint?
+    private var previousSubjectTimestamp: Date?
 
     var sessionLogURL: URL? {
         sessionLogger.exportURL()
@@ -249,8 +253,72 @@ final class CameraModel: NSObject, ObservableObject {
         cameraPosition = cameraPosition == .back ? .front : .back
         isFrontCamera = cameraPosition == .front
         cameraReady = false
+        cameraControlCapabilities = .unavailable
+        activeCaptureDevice = nil
+        previousSubjectCenter = nil
+        previousSubjectTimestamp = nil
         coachingEngine.reset()
         start()
+    }
+
+    func setExposureBias(_ requestedBias: Double) {
+        guard let device = activeCaptureDevice else { return }
+        let sessionQueue = sessionQueue
+        sessionQueue.async { [weak self] in
+            let minimum = Double(device.minExposureTargetBias)
+            let maximum = Double(device.maxExposureTargetBias)
+            let bias = Float(min(maximum, max(minimum, requestedBias)))
+            do {
+                try device.lockForConfiguration()
+                device.setExposureTargetBias(bias, completionHandler: nil)
+                device.unlockForConfiguration()
+                let snapshot = Self.cameraControlSnapshot(for: device)
+                Task { @MainActor [weak self] in self?.cameraControlCapabilities = snapshot }
+            } catch {
+                Task { @MainActor [weak self] in self?.captureStatus = "Exposure control is temporarily unavailable." }
+            }
+        }
+    }
+
+    func setFocusExposureLocked(_ locked: Bool) {
+        guard let device = activeCaptureDevice else { return }
+        sessionQueue.async { [weak self] in
+            do {
+                try device.lockForConfiguration()
+                if locked {
+                    if device.isFocusModeSupported(.locked) { device.focusMode = .locked }
+                    if device.isExposureModeSupported(.locked) { device.exposureMode = .locked }
+                } else {
+                    if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
+                    if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
+                }
+                device.unlockForConfiguration()
+                let snapshot = Self.cameraControlSnapshot(for: device)
+                Task { @MainActor [weak self] in self?.cameraControlCapabilities = snapshot }
+            } catch {
+                Task { @MainActor [weak self] in self?.captureStatus = "Focus and exposure lock are temporarily unavailable." }
+            }
+        }
+    }
+
+    func resetCameraControlsToAuto() {
+        guard let device = activeCaptureDevice else { return }
+        sessionQueue.async { [weak self] in
+            do {
+                try device.lockForConfiguration()
+                if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
+                if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
+                if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                    device.whiteBalanceMode = .continuousAutoWhiteBalance
+                }
+                device.setExposureTargetBias(0, completionHandler: nil)
+                device.unlockForConfiguration()
+                let snapshot = Self.cameraControlSnapshot(for: device)
+                Task { @MainActor [weak self] in self?.cameraControlCapabilities = snapshot }
+            } catch {
+                Task { @MainActor [weak self] in self?.captureStatus = "Could not return every camera control to Auto." }
+            }
+        }
     }
 
     func clearStillPhoto() {
@@ -392,6 +460,7 @@ final class CameraModel: NSObject, ObservableObject {
             }
             session.beginConfiguration()
             self.configuredCameraPosition = nil
+            self.activeCaptureDevice = nil
             session.sessionPreset = .photo
             session.inputs.forEach { session.removeInput($0) }
             session.outputs.forEach { session.removeOutput($0) }
@@ -406,6 +475,7 @@ final class CameraModel: NSObject, ObservableObject {
                 return
             }
 
+            self.activeCaptureDevice = device
             session.addInput(input)
 
             let output = AVCaptureVideoDataOutput()
@@ -436,11 +506,43 @@ final class CameraModel: NSObject, ObservableObject {
 
             session.commitConfiguration()
             self.configuredCameraPosition = cameraPosition
+            let controlSnapshot = Self.cameraControlSnapshot(for: device)
+            Task { @MainActor [weak self] in self?.cameraControlCapabilities = controlSnapshot }
 
             if !session.isRunning {
                 session.startRunning()
             }
         }
+    }
+
+    private nonisolated static func cameraControlSnapshot(for device: AVCaptureDevice) -> CameraControlCapabilities {
+        let duration = CMTimeGetSeconds(device.exposureDuration)
+        let lensName: String
+        switch device.deviceType {
+        case .builtInUltraWideCamera: lensName = "Ultra Wide"
+        case .builtInWideAngleCamera: lensName = "Wide"
+        case .builtInTelephotoCamera: lensName = "Telephoto"
+        case .builtInDualCamera: lensName = "Dual Camera"
+        case .builtInDualWideCamera: lensName = "Dual Wide Camera"
+        case .builtInTripleCamera: lensName = "Triple Camera"
+        case .builtInTrueDepthCamera: lensName = "TrueDepth"
+        default: lensName = device.localizedName
+        }
+
+        return CameraControlCapabilities(
+            isAvailable: true,
+            cameraName: device.localizedName,
+            lensName: lensName,
+            supportsExposureBias: device.maxExposureTargetBias > device.minExposureTargetBias,
+            minimumExposureBias: Double(device.minExposureTargetBias),
+            maximumExposureBias: Double(device.maxExposureTargetBias),
+            currentExposureBias: Double(device.exposureTargetBias),
+            supportsFocusLock: device.isFocusModeSupported(.locked),
+            supportsExposureLock: device.isExposureModeSupported(.locked),
+            isFocusExposureLocked: device.focusMode == .locked && device.exposureMode == .locked,
+            currentISO: Double(device.iso),
+            currentExposureDurationSeconds: duration.isFinite && duration > 0 ? duration : nil
+        )
     }
 
     private func applyBeautify(to image: UIImage, measurements: Measurements) {
@@ -469,6 +571,38 @@ final class CameraModel: NSObject, ObservableObject {
 
     private nonisolated func normalizedTopLeftRect(_ rect: CGRect) -> CGRect {
         CGRect(x: rect.minX, y: 1 - rect.maxY, width: rect.width, height: rect.height)
+    }
+
+    private nonisolated func salientObject(
+        from request: VNGenerateObjectnessBasedSaliencyImageRequest
+    ) -> DetectionBox? {
+        guard let objects = request.results?.first?.salientObjects else { return nil }
+        return objects
+            .map {
+                DetectionBox(
+                    rect: normalizedTopLeftRect($0.boundingBox),
+                    confidence: CGFloat($0.confidence),
+                    label: "salient_object"
+                )
+            }
+            .max { first, second in
+                first.rect.width * first.rect.height < second.rect.width * second.rect.height
+            }
+    }
+
+    private func subjectMotion(for person: DetectionBox?, at timestamp: Date, cameraMotion: Double) -> Double {
+        defer {
+            previousSubjectCenter = person.map { CGPoint(x: $0.rect.midX, y: $0.rect.midY) }
+            previousSubjectTimestamp = person == nil ? nil : timestamp
+        }
+        guard cameraMotion < 0.3,
+              let person,
+              let previousCenter = previousSubjectCenter,
+              let previousTimestamp = previousSubjectTimestamp else { return 0 }
+        let interval = timestamp.timeIntervalSince(previousTimestamp)
+        guard interval > 0.08, interval < 0.8 else { return 0 }
+        let center = CGPoint(x: person.rect.midX, y: person.rect.midY)
+        return hypot(Double(center.x - previousCenter.x), Double(center.y - previousCenter.y)) / interval
     }
 
     private nonisolated func estimatePersonFromFace(_ face: DetectionBox) -> DetectionBox {
@@ -835,10 +969,11 @@ final class CameraModel: NSObject, ObservableObject {
         let faceRequest = VNDetectFaceLandmarksRequest()
         let poseRequest = VNDetectHumanBodyPoseRequest()
         let horizonRequest = VNDetectHorizonRequest()
+        let saliencyRequest = VNGenerateObjectnessBasedSaliencyImageRequest()
         let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
 
         do {
-            try handler.perform([humanRequest, faceRequest, poseRequest, horizonRequest])
+            try handler.perform([humanRequest, faceRequest, poseRequest, horizonRequest, saliencyRequest])
         } catch {
             let emptyMeasurements = stillMeasurements(
                 person: nil,
@@ -898,7 +1033,8 @@ final class CameraModel: NSObject, ObservableObject {
             backgroundLuminance: luminance(in: cgImage, normalizedRect: nil),
             horizonAngleDegrees: horizon.map { Double($0.angle) * 180 / .pi },
             horizonConfidence: horizon == nil ? 0 : 0.72,
-            skyOrOpenAreaRatio: skyOrOpenAreaRatio(in: cgImage)
+            skyOrOpenAreaRatio: skyOrOpenAreaRatio(in: cgImage),
+            salientObjectBox: salientObject(from: saliencyRequest)
         )
 
         return (measurements, [])
@@ -1062,7 +1198,8 @@ final class CameraModel: NSObject, ObservableObject {
         backgroundLuminance: Double?,
         horizonAngleDegrees: Double?,
         horizonConfidence: Double,
-        skyOrOpenAreaRatio: Double
+        skyOrOpenAreaRatio: Double,
+        salientObjectBox: DetectionBox? = nil
     ) -> Measurements {
         Measurements(
             personBox: person,
@@ -1080,7 +1217,8 @@ final class CameraModel: NSObject, ObservableObject {
             cameraMotion: 0,
             cameraStable: true,
             skyOrOpenAreaRatio: skyOrOpenAreaRatio,
-            timestamp: Date()
+            timestamp: Date(),
+            salientObjectBox: salientObjectBox
         )
     }
 
@@ -1227,6 +1365,7 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         let faceRequest = VNDetectFaceLandmarksRequest()
         let poseRequest = VNDetectHumanBodyPoseRequest()
         let horizonRequest = VNDetectHorizonRequest()
+        let saliencyRequest = VNGenerateObjectnessBasedSaliencyImageRequest()
         let frameAspectRatio = CGFloat(CVPixelBufferGetWidth(pixelBuffer)) / CGFloat(CVPixelBufferGetHeight(pixelBuffer))
         let frameRotation = connection.videoRotationAngle
         let frameMirrored = connection.isVideoMirrored
@@ -1240,7 +1379,7 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
 
         do {
-            try handler.perform([humanRequest, faceRequest, poseRequest, horizonRequest])
+            try handler.perform([humanRequest, faceRequest, poseRequest, horizonRequest, saliencyRequest])
         } catch {
             Task { @MainActor [weak self] in
                 guard let self, self.reviewImage == nil, !self.isAnalyzingPhoto else { return }
@@ -1288,6 +1427,7 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         let hasHorizon = horizon != nil
         let horizonAngleDegrees = horizon.map { Double($0.angle) * 180 / .pi }
         let skyOrOpenAreaRatio = skyOrOpenAreaRatio(in: pixelBuffer)
+        let salientObjectBox = salientObject(from: saliencyRequest)
 
         Task { @MainActor [weak self] in
             guard let self, self.reviewImage == nil, !self.isAnalyzingPhoto,
@@ -1295,6 +1435,7 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
             self.previewAspectRatio = frameAspectRatio
             self.cameraReady = true
             let cameraMotion = self.currentMotionMagnitude
+            let subjectMotion = self.subjectMotion(for: person, at: now, cameraMotion: cameraMotion)
             let nextMeasurements = Measurements(
                 personBox: person,
                 faceBox: face,
@@ -1311,7 +1452,9 @@ extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
                 cameraMotion: cameraMotion,
                 cameraStable: cameraMotion < 0.22,
                 skyOrOpenAreaRatio: skyOrOpenAreaRatio,
-                timestamp: now
+                timestamp: now,
+                salientObjectBox: salientObjectBox,
+                subjectMotion: subjectMotion
             )
             let nextIssues = self.guidedSession.prioritizedIssues(
                 self.coachingEngine.issues(for: nextMeasurements, includePosture: false)

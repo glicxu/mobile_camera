@@ -4,9 +4,9 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
     @StateObject private var camera = CameraModel()
+    @StateObject private var voiceShutter = VoiceShutterController()
     @AppStorage("hasSeenDaliTutor") private var hasSeenDaliTutor = false
     @AppStorage("beautifyStrength") private var storedBeautifyStrength = 0
     @AppStorage("beautifyFaceBrightnessEnabled") private var storedBeautifyFaceBrightnessEnabled = true
@@ -18,17 +18,29 @@ struct ContentView: View {
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var showingFolderImporter = false
     @State private var showConfiguration = false
+    @State private var showCameraControls = false
+    @State private var cameraControlMode: CameraControlMode = .auto
     @State private var reviewPhotos: [ReviewPhoto] = []
     @State private var reviewPhotoIndex = 0
     @State private var reviewVariant: ReviewVariant = .original
     @State private var showFullScreenReviewImage = false
     @State private var startReviewComparison = false
-    @State private var shootingMode: ShootingMode = .people
+    @State private var shootingMode: PhotographicSituation = .auto
+    @State private var automaticSituation: PhotographicSituation = .personScene
+    @State private var situationClassifier = SituationClassifier()
+    @State private var selectedAngle: CameraAngleChoice = .eyeLevel
+    @State private var coachingEnabled = true
     @State private var sharedPhoto: SharedPhoto?
     @State private var showDiscardConfirmation = false
     @State private var showPoseChooser = false
-    @State private var guideCollection: PosePackageID = .masculine
+    @State private var showLandscapeChooser = false
+    @State private var guideCollection: GuidedPoseCollectionID = .masculine
+    @State private var selectedPosePackage: GuidedPoseCollectionID?
     @State private var chosenGuidePose: GuidedPose?
+    @State private var examplePose: GuidedPose?
+    @State private var chosenLandscapeRecipe: LandscapeCompositionRecipe?
+    @State private var landscapeExampleRecipe: LandscapeCompositionRecipe?
+    @State private var selectedLandscapePackage: LandscapeCompositionPackageID?
     @State private var chosenCameraPosition: GuidedCameraPosition?
     @State private var guideMoveRight = false
 
@@ -53,6 +65,7 @@ struct ContentView: View {
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .task {
+            voiceShutter.onTakePhoto = { camera.capturePhoto() }
             loadStoredBeautifySettings()
             if !hasSeenDaliTutor {
                 showTutor = true
@@ -71,20 +84,63 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && !showTutor {
                 camera.start()
+                if camera.reviewImage == nil { voiceShutter.resumeIfEnabled() }
             } else if phase == .background {
                 camera.stop()
+                voiceShutter.pauseListening()
+            }
+        }
+        .onChange(of: camera.reviewImage) { _, image in
+            if image == nil && scenePhase == .active && !showTutor {
+                voiceShutter.resumeIfEnabled()
+            } else {
+                voiceShutter.pauseListening()
             }
         }
         .sheet(item: $sharedPhoto) { photo in
             PhotoShareSheet(image: photo.image)
         }
-        .sheet(isPresented: $showPoseChooser) { poseChooser }
+        .sheet(isPresented: $showPoseChooser) {
+            postureMontage
+        }
+        .sheet(isPresented: $showLandscapeChooser) {
+            landscapeCompositionChooser
+        }
+        .sheet(item: $examplePose) { pose in
+            postureExampleSheet(for: pose)
+        }
+        .sheet(item: $landscapeExampleRecipe) { recipe in
+            landscapeCompositionExampleSheet(for: recipe)
+        }
         .sheet(isPresented: $showTutor) { tutorCard }
         .onChange(of: showTutor) { _, showing in
-            if showing { camera.stop() } else { camera.start() }
+            if showing {
+                camera.stop()
+                voiceShutter.pauseListening()
+            } else {
+                camera.start()
+                if camera.reviewImage == nil { voiceShutter.resumeIfEnabled() }
+            }
         }
-        .onChange(of: shootingMode) { _, mode in
-            if !mode.showsGuidance { camera.beginGuidance(pose: nil, position: nil) }
+        .onChange(of: shootingMode) { _, _ in
+            showPoseChooser = false
+            showLandscapeChooser = false
+            if !activeSituation.supportsPoseGuidance { camera.beginGuidance(pose: nil, position: nil) }
+        }
+        .onChange(of: activeSituation) { _, situation in
+            guard let firstAngle = situation.angleChoices.first else { return }
+            selectedAngle = firstAngle
+            chosenGuidePose = nil
+            chosenCameraPosition = nil
+            showPoseChooser = false
+            showLandscapeChooser = false
+            if situation != .landscape { chosenLandscapeRecipe = nil }
+            camera.beginGuidance(pose: nil, position: nil)
+        }
+        .onChange(of: camera.measurements.timestamp) { _, _ in
+            guard coachingEnabled, shootingMode == .auto,
+                  !camera.isCapturing, !camera.guidedSession.isActive else { return }
+            automaticSituation = situationClassifier.update(with: camera.measurements)
         }
         .confirmationDialog("Discard the unsaved original?", isPresented: $showDiscardConfirmation, titleVisibility: .visible) {
             Button("Discard photo", role: .destructive) {
@@ -97,7 +153,8 @@ struct ContentView: View {
         }
         .onChange(of: camera.advice) { _, advice in
             guard UIAccessibility.isVoiceOverRunning, camera.reviewImage == nil,
-                  shootingMode.showsGuidance, !showTutor, !showPoseChooser, !showConfiguration else { return }
+                  activeSituation.showsPersonOverlay, coachingEnabled,
+                  !showTutor, !showPoseChooser, !showLandscapeChooser, !showConfiguration else { return }
             UIAccessibility.post(notification: .announcement, argument: "\(advice.recipient). \(advice.instruction)")
         }
         .onChange(of: camera.exportStatus) { _, status in
@@ -132,9 +189,15 @@ struct ContentView: View {
         }
         .onDisappear {
             camera.stop()
+            voiceShutter.pauseListening()
         }
         .sheet(isPresented: $showConfiguration) {
             configurationSheet
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showCameraControls) {
+            cameraControlSheet
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -159,8 +222,7 @@ struct ContentView: View {
                     viewfinder
                     VStack(spacing: 8) {
                         topBar
-                        liveAdvicePanel
-                        controls
+                        lowerCameraControls
                     }
                     .frame(width: min(360, proxy.size.width * 0.44))
                 }
@@ -169,9 +231,8 @@ struct ContentView: View {
                 VStack(spacing: 8) {
                     topBar
                     viewfinder
-                    liveAdvicePanel
-                        .frame(maxHeight: proxy.size.height * 0.34)
-                    controls
+                    lowerCameraControls
+                        .frame(height: coachingEnabled ? min(max(proxy.size.height * 0.42, 310), 430) : 84)
                 }
                 .padding(12)
             }
@@ -199,7 +260,7 @@ struct ContentView: View {
     private var viewfinder: some View {
         ZStack {
             CameraPreview(session: camera.session, mirrored: camera.isFrontCamera, onRotationChange: camera.updatePreviewRotation)
-            if shootingMode.showsGuidance {
+            if coachingEnabled && activeSituation.showsPersonOverlay {
                 OverlayView(
                     advice: camera.advice,
                     measurements: camera.measurements,
@@ -226,35 +287,379 @@ struct ContentView: View {
                 if let status = camera.captureStatus {
                     Text(status).font(.subheadline).foregroundStyle(.white)
                 }
-                if shootingMode.showsGuidance {
-                    adviceCard
-                    guidedControls
+                switch activeSituation {
+                case .portrait, .personScene, .group, .action:
+                    if camera.guidedSession.isActive, camera.guidedSession.pose != nil {
+                        activePoseCard
+                    } else {
+                        situationGuidanceCard
+                    }
+                    if camera.guidedSession.isActive {
+                        guidedControls
+                    }
+                case .closeUp:
+                    situationGuidanceCard
+                case .landscape:
+                    if chosenLandscapeRecipe != nil {
+                        activeLandscapeCompositionCard
+                    }
+                    landscapeGuidanceCard
+                case .auto:
+                    EmptyView()
                 }
             }
             .frame(maxWidth: .infinity)
         }
     }
 
-    private var topBar: some View {
-        HStack {
-            if dynamicTypeSize.isAccessibilitySize {
-                Text(shootingMode.shortTitle)
-                    .font(.headline.bold())
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Dali V1")
-                        .font(.caption.bold())
-                        .foregroundStyle(.teal)
-                    Text(shootingMode.title)
-                        .font(.title3.bold())
-                        .foregroundStyle(.white)
+    private var lowerCameraControls: some View {
+        VStack(spacing: 8) {
+            if coachingEnabled {
+                coachingSelectionRow
+                liveAdvicePanel
+            }
+            controls
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private var coachingSelectionRow: some View {
+        HStack(spacing: 6) {
+            Menu {
+                ForEach(PhotographicSituation.allCases) { mode in
+                    Button {
+                        shootingMode = mode
+                    } label: {
+                        HStack {
+                            Label(mode.title, systemImage: mode.symbol)
+                            if shootingMode == mode {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
                 }
+            } label: {
+                selectionControlLabel(
+                    title: "Situation",
+                    value: shootingMode == .auto ? "Auto" : shootingMode.title,
+                    symbol: shootingMode == .auto ? "wand.and.stars" : shootingMode.symbol
+                )
+            }
+            .accessibilityLabel("Situation, \(shootingMode == .auto ? "Auto" : shootingMode.title)")
+            .accessibilityIdentifier("situationMenu")
+
+            if activeSituation.showsPersonOverlay {
+                Button {
+                    selectedPosePackage = nil
+                    showPoseChooser = true
+                } label: {
+                    selectionControlLabel(
+                        title: "Posture",
+                        value: chosenGuidePose?.title ?? "Natural",
+                        symbol: "figure.stand"
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Posture, \(chosenGuidePose?.title ?? "Natural")")
+                .accessibilityIdentifier("postureMenu")
             }
 
+            if activeSituation == .landscape {
+                Button {
+                    selectedLandscapePackage = nil
+                    showLandscapeChooser = true
+                } label: {
+                    selectionControlLabel(
+                        title: "Landscape",
+                        value: chosenLandscapeRecipe?.title ?? "Natural",
+                        symbol: "mountain.2"
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Landscape, \(chosenLandscapeRecipe?.title ?? "Natural")")
+                .accessibilityIdentifier("landscapeMenu")
+            }
+        }
+    }
+
+    private func selectionControlLabel(title: String, value: String, symbol: String) -> some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: symbol)
+                Text(title)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .font(.caption2.bold())
+            .foregroundStyle(.teal)
+            Text(value)
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .frame(maxWidth: .infinity, minHeight: 46)
+        .padding(.horizontal, 4)
+        .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var activeSituation: PhotographicSituation {
+        shootingMode == .auto ? automaticSituation : shootingMode
+    }
+
+    private func selectPosture(_ pose: GuidedPose?) {
+        chosenGuidePose = pose
+        guideCollection = pose?.package ?? guideCollection
+        if let pose {
+            let recommendedAngle = pose.recommendedCameraAngle
+            selectedAngle = recommendedAngle
+            chosenCameraPosition = recommendedAngle.guidedPosition
+        } else {
+            chosenCameraPosition = nil
+        }
+        camera.beginGuidance(pose: pose, position: chosenCameraPosition, moveRight: guideMoveRight)
+    }
+
+    private var postureMontage: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    Button {
+                        selectPosture(nil)
+                        showPoseChooser = false
+                    } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "leaf.fill")
+                                .font(.title2)
+                                .foregroundStyle(.teal)
+                                .frame(width: 46, height: 46)
+                                .background(.teal.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Natural")
+                                    .font(.headline)
+                                Text("No posture coaching")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if chosenGuidePose == nil {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.teal)
+                            }
+                        }
+                        .padding(12)
+                        .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(chosenGuidePose == nil ? .teal : .clear, lineWidth: 2)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("naturalPostureOption")
+
+                    if let selectedPosePackage {
+                        postureMontageSection(for: selectedPosePackage)
+                    } else {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Choose a package")
+                                .font(.title2.bold())
+                            Text("Start with the kind of portrait, then choose a pose.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        ForEach(GuidedPoseCollectionID.allCases) { package in
+                            posturePackageCard(for: package)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .background(Color(uiColor: .systemBackground))
+            .navigationTitle(selectedPosePackage?.title ?? "Posture packages")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if selectedPosePackage != nil {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button {
+                            selectedPosePackage = nil
+                        } label: {
+                            Label("Packages", systemImage: "chevron.left")
+                        }
+                        .accessibilityIdentifier("backToPosturePackages")
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showPoseChooser = false }
+                }
+            }
+            .accessibilityIdentifier("postureMontage")
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func posturePackageCard(for package: GuidedPoseCollectionID) -> some View {
+        let poses = GuidedPose.allCases.filter { $0.package == package }
+
+        return Button {
+            selectedPosePackage = package
+            guideCollection = package
+        } label: {
+            HStack(spacing: 12) {
+                HStack(spacing: 6) {
+                    ForEach(Array(poses.prefix(3))) { pose in
+                        Image(pose.exampleAssetName)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 38, height: 86)
+                            .clipped()
+                    }
+                }
+                .frame(width: 126, height: 86)
+                .clipShape(RoundedRectangle(cornerRadius: 13))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(package.title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text("\(poses.count) poses")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.teal)
+                    Text(posturePackageDescription(package))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 4)
+                if chosenGuidePose?.package == package {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.teal)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(10)
+            .background(.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 17))
+            .overlay {
+                RoundedRectangle(cornerRadius: 17)
+                    .stroke(chosenGuidePose?.package == package ? .teal : .clear, lineWidth: 2)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(package.title), \(poses.count) poses, \(posturePackageDescription(package))")
+        .accessibilityIdentifier("posturePackage_\(package.rawValue)")
+    }
+
+    private func posturePackageDescription(_ package: GuidedPoseCollectionID) -> String {
+        switch package {
+        case .masculine: return "relaxed and structured solo poses"
+        case .feminine: return "soft and expressive solo poses"
+        case .couples: return "coordinated two-person poses"
+        case .friendsGroups: return "natural poses for three or more people"
+        case .family: return "warm poses across ages and generations"
+        }
+    }
+
+    private func postureMontageSection(for package: GuidedPoseCollectionID) -> some View {
+        let poses = GuidedPose.allCases.filter { $0.package == package }
+        let columns = [GridItem(.adaptive(minimum: 145, maximum: 230), spacing: 12)]
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(package.title)
+                .font(.title3.bold())
+
+            LazyVGrid(columns: columns, spacing: 14) {
+                ForEach(poses) { pose in
+                    Button {
+                        selectPosture(pose)
+                        showPoseChooser = false
+                    } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ZStack(alignment: .topTrailing) {
+                                Image(pose.exampleAssetName)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(maxWidth: .infinity)
+                                    .aspectRatio(0.82, contentMode: .fit)
+                                    .clipped()
+
+                                if chosenGuidePose == pose {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(.white, .teal)
+                                        .padding(8)
+                                }
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                            Text(pose.title)
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.primary)
+                                .lineLimit(2)
+
+                            Text(pose.category.title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Label(pose.recommendedCameraAngle.title, systemImage: pose.recommendedCameraAngle.symbol)
+                                .font(.caption2.bold())
+                                .foregroundStyle(.teal)
+                                .lineLimit(1)
+
+                            Label(pose.recommendedLighting.title, systemImage: pose.recommendedLighting.symbol)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(chosenGuidePose == pose ? .teal : .clear, lineWidth: 2)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(pose.title), \(pose.category.title), \(pose.setting.title)")
+                    .accessibilityIdentifier("postureOption_\(pose.rawValue)")
+                }
+            }
+        }
+    }
+
+    private var topBar: some View {
+        HStack {
+            Text("Dali V1")
+                .font(.headline.bold())
+                .foregroundStyle(.teal)
+
             Spacer()
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    coachingEnabled.toggle()
+                    showPoseChooser = false
+                    if coachingEnabled {
+                        camera.refreshStillPhotoAdvice()
+                    } else {
+                        camera.beginGuidance(pose: nil, position: nil)
+                    }
+                }
+            } label: {
+                Image(systemName: coachingEnabled ? "lightbulb.fill" : "lightbulb.slash")
+                    .font(.system(size: 20, weight: .bold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(coachingEnabled ? .black : .white)
+            .background(coachingEnabled ? .teal : .black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityLabel(coachingEnabled ? "Turn coaching off" : "Turn coaching on")
+            .accessibilityIdentifier("coachingToggle")
 
             Button {
                 showConfiguration = true
@@ -298,14 +703,6 @@ struct ContentView: View {
     private var configurationSheet: some View {
         NavigationStack {
             Form {
-                Section("Camera") {
-                    Picker("Mode", selection: $shootingMode) {
-                        ForEach(ShootingMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                }
-
                 Section("Guidance") {
                     Picker("Pose package", selection: $camera.selectedPosePackage) {
                         ForEach(PosePackageID.allCases) { package in
@@ -350,6 +747,163 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private var cameraControlSheet: some View {
+        let capabilities = camera.cameraControlCapabilities
+
+        return NavigationStack {
+            Form {
+                Section {
+                    Picker("Camera control", selection: $cameraControlMode) {
+                        ForEach(CameraControlMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("cameraControlMode")
+                    .onChange(of: cameraControlMode) { _, mode in
+                        if mode == .auto { camera.resetCameraControlsToAuto() }
+                    }
+                } footer: {
+                    Text(cameraControlMode == .auto
+                         ? "The phone chooses camera settings."
+                         : "Dali explains simple adjustments; you decide whether to use them.")
+                }
+
+                Section {
+                    Toggle(
+                        "Say “Cheese”",
+                        isOn: Binding(
+                            get: { voiceShutter.isEnabled },
+                            set: { voiceShutter.setEnabled($0) }
+                        )
+                    )
+                    .accessibilityIdentifier("voiceShutterToggle")
+
+                    Label(
+                        voiceShutter.statusText,
+                        systemImage: voiceShutter.isListening ? "waveform.circle.fill" : "mic.circle"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(voiceShutter.isListening ? .green : .secondary)
+                    .accessibilityIdentifier("voiceShutterStatus")
+
+                    if voiceShutter.permissionDenied {
+                        Button("Open Settings") { openSettings() }
+                    }
+                } header: {
+                    Text("Voice shutter")
+                } footer: {
+                    Text("Voice shutter listens only while the live camera is open. It pauses during photo review and when Dali is in the background.")
+                }
+
+                if capabilities.isAvailable {
+                    Section("This camera") {
+                        LabeledContent("Device", value: capabilities.cameraName)
+                        LabeledContent("Active lens", value: capabilities.lensName)
+                        if let duration = capabilities.currentExposureDurationSeconds {
+                            LabeledContent("Shutter", value: shutterDurationLabel(duration))
+                        }
+                        if let iso = capabilities.currentISO {
+                            LabeledContent("ISO", value: "\(Int(iso.rounded()))")
+                        }
+                    }
+
+                    Section("Basic controls") {
+                        if capabilities.supportsExposureBias {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Text("Exposure compensation")
+                                    Spacer()
+                                    Text(String(format: "%+.1f EV", capabilities.currentExposureBias))
+                                        .font(.headline.monospacedDigit())
+                                }
+                                Slider(
+                                    value: exposureBiasBinding,
+                                    in: capabilities.minimumExposureBias...capabilities.maximumExposureBias,
+                                    step: 0.1
+                                )
+                                .disabled(cameraControlMode == .auto)
+                                .accessibilityIdentifier("exposureBiasSlider")
+                                Text("Negative values protect bright areas; positive values brighten the image.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        if capabilities.supportsFocusLock || capabilities.supportsExposureLock {
+                            Toggle("Lock focus and exposure", isOn: focusExposureLockBinding)
+                                .disabled(cameraControlMode == .auto || !(capabilities.supportsFocusLock && capabilities.supportsExposureLock))
+                                .accessibilityIdentifier("focusExposureLock")
+                        }
+
+                        Button("Return camera controls to Auto") {
+                            cameraControlMode = .auto
+                            camera.resetCameraControlsToAuto()
+                        }
+                        .accessibilityIdentifier("resetCameraControls")
+                    }
+
+                    Section("Available on this camera") {
+                        capabilityRow("Exposure compensation", supported: capabilities.supportsExposureBias)
+                        capabilityRow("Focus lock", supported: capabilities.supportsFocusLock)
+                        capabilityRow("Exposure lock", supported: capabilities.supportsExposureLock)
+                    }
+                } else {
+                    Section {
+                        ContentUnavailableView(
+                            "Camera controls need an iPhone",
+                            systemImage: "iphone.gen3",
+                            description: Text("Dali reads the active camera's capabilities at runtime. Controls appear only when that camera supports them.")
+                        )
+                    }
+                }
+
+                Section("Placement test") {
+                    Text("The Camera button is beside the shutter so it stays available even when coaching is turned off. We can move it after testing this layout on the phone.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Camera controls")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showCameraControls = false }
+                }
+            }
+        }
+    }
+
+    private var exposureBiasBinding: Binding<Double> {
+        Binding(
+            get: { camera.cameraControlCapabilities.currentExposureBias },
+            set: { camera.setExposureBias($0) }
+        )
+    }
+
+    private var focusExposureLockBinding: Binding<Bool> {
+        Binding(
+            get: { camera.cameraControlCapabilities.isFocusExposureLocked },
+            set: { camera.setFocusExposureLocked($0) }
+        )
+    }
+
+    private func capabilityRow(_ title: String, supported: Bool) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Label(supported ? "Supported" : "Unavailable", systemImage: supported ? "checkmark.circle.fill" : "minus.circle")
+                .font(.caption.bold())
+                .foregroundStyle(supported ? .green : .secondary)
+        }
+    }
+
+    private func shutterDurationLabel(_ seconds: Double) -> String {
+        guard seconds > 0 else { return "—" }
+        if seconds >= 1 { return String(format: "%.1f s", seconds) }
+        return "1/\(max(1, Int((1 / seconds).rounded()))) s"
     }
 
     private func loadStoredBeautifySettings() {
@@ -1023,6 +1577,104 @@ struct ContentView: View {
         }
     }
 
+    private var situationGuidanceCard: some View {
+        let guidance = situationGuidance
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: guidance.symbol)
+                    .accessibilityHidden(true)
+                Text(shootingMode == .auto ? "Auto · \(activeSituation.title)" : activeSituation.title)
+            }
+            .font(.caption.bold())
+            .textCase(.uppercase)
+            .foregroundStyle(.teal)
+            Text(guidance.title)
+                .font(.title2.bold())
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(guidance.instruction)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.76))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.teal.opacity(0.65), lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("situationGuidanceCard")
+        .padding(.bottom, 8)
+    }
+
+    private var situationGuidance: (title: String, instruction: String, symbol: String) {
+        switch activeSituation {
+        case .portrait, .personScene:
+            let detail: String
+            switch camera.advice.recipient {
+            case "Photographer": detail = "Adjust the camera position or framing."
+            case "Subject": detail = "Ask the subject to make this adjustment."
+            default: detail = "Dali is analyzing the live camera view."
+            }
+            return (camera.advice.instruction, detail, camera.advice.directionSymbol ?? activeSituation.symbol)
+        case .group:
+            guard let group = camera.measurements.groupAnalysis else {
+                return ("Bring everyone into frame", "Step back until every person is visible.", "person.3")
+            }
+            if group.faceVisibilityRatio < 0.8 {
+                return ("Make every face visible", "Ask the group to adjust so no face is blocked.", "person.3")
+            }
+            if group.edgeCrowdingScore > 0.35 {
+                return ("Leave space at the edges", "Step back slightly so nobody is cut off.", "arrow.down.right.and.arrow.up.left")
+            }
+            if let spacing = group.spacingScore, spacing > 1.8 {
+                return ("Bring the group closer", "Reduce the gaps between people.", "arrow.left.and.right")
+            }
+            return ("Group looks ready", "Keep every face visible and take the photo.", "checkmark.circle")
+        case .action:
+            guard let person = camera.measurements.personBox else {
+                return ("Find the moving subject", "Frame the subject before following the action.", "figure.run")
+            }
+            if person.rect.minX < 0.06 || person.rect.maxX > 0.94 {
+                return ("Give the subject more room", "Keep space around them so movement stays in frame.", "arrow.left.and.right")
+            }
+            if camera.measurements.cameraMotion > 0.5 {
+                return ("Track more smoothly", "Follow the subject steadily before pressing the shutter.", "viewfinder")
+            }
+            if camera.measurements.subjectMotion >= 0.16 {
+                return ("Keep following the action", "Track the subject and take the photo as the moment develops.", "figure.run")
+            }
+            return ("Anticipate the movement", "Leave room in the direction the subject is moving.", "figure.run")
+        case .closeUp:
+            if camera.measurements.cameraMotion > 0.22 {
+                return ("Steady the close-up", "Hold the phone still so the detail stays sharp.", "viewfinder")
+            }
+            if let object = camera.measurements.salientObjectBox {
+                let area = object.rect.width * object.rect.height
+                if area < 0.18 {
+                    return ("Move closer to the detail", "Fill more of the frame while keeping the subject sharp.", "plus.magnifyingglass")
+                }
+                if area > 0.72 || object.rect.minX < 0.025 || object.rect.maxX > 0.975 {
+                    return ("Give the detail more space", "Step back slightly so its edges are not cut off.", "minus.magnifyingglass")
+                }
+            } else {
+                return ("Choose one clear detail", "Center the object you want Dali to evaluate.", "viewfinder")
+            }
+            if abs(camera.measurements.cameraRollDegrees) > 3 {
+                return ("Align the subject", "Rotate the phone slightly to straighten the composition.", "level")
+            }
+            return ("Simplify the background", "Fill the frame with the detail and remove distractions around it.", "viewfinder")
+        case .landscape:
+            let guidance = landscapeGuidance
+            return (guidance.title, guidance.instruction, guidance.symbol)
+        case .auto:
+            return ("Checking the scene", "Hold the camera steady while Dali chooses a situation.", "wand.and.stars")
+        }
+    }
+
     private var adviceCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(camera.advice.recipient)
@@ -1045,108 +1697,666 @@ struct ContentView: View {
         .padding(.bottom, 8)
     }
 
-    private var guidedControls: some View {
-        VStack(spacing: 6) {
-            if camera.guidedSession.isActive {
-                Text(camera.guidedSession.isComplete ? "Sequence finished" : "Step \(camera.guidedSession.stepIndex + 1) of \(camera.guidedSession.steps.count) · Confirm when comfortable")
-                    .font(.caption)
-                    .foregroundStyle(.white)
+    private var landscapeCompositionChooser: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Button {
+                        chosenLandscapeRecipe = nil
+                        showLandscapeChooser = false
+                    } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "leaf.fill")
+                                .font(.title2)
+                                .foregroundStyle(.teal)
+                                .frame(width: 46, height: 46)
+                                .background(.teal.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Natural")
+                                    .font(.headline)
+                                Text("No composition recipe; horizon guidance stays on")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if chosenLandscapeRecipe == nil {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.teal)
+                            }
+                        }
+                        .padding(12)
+                        .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(chosenLandscapeRecipe == nil ? .teal : .clear, lineWidth: 2)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("naturalLandscapeOption")
+
+                    if let selectedLandscapePackage {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label(selectedLandscapePackage.title, systemImage: selectedLandscapePackage.symbol)
+                                .font(.title2.bold())
+                            Text(selectedLandscapePackage.description)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 148), spacing: 12)], spacing: 12) {
+                            ForEach(LandscapeCompositionRecipe.allCases.filter { $0.package == selectedLandscapePackage }) { recipe in
+                                landscapeRecipeCard(for: recipe)
+                            }
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Choose a landscape package")
+                                .font(.title2.bold())
+                            Text("Start with the scene, then choose a composition.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        ForEach(LandscapeCompositionPackageID.allCases) { package in
+                            landscapePackageCard(for: package)
+                        }
+                    }
+                }
+                .padding()
             }
-            HStack {
-                Button("Poses & angles") {
-                    chosenGuidePose = camera.guidedSession.pose
-                    guideCollection = chosenGuidePose?.package ?? .masculine
-                    chosenCameraPosition = camera.guidedSession.position
-                    guideMoveRight = camera.guidedSession.moveRight
-                    showPoseChooser = true
+            .navigationTitle(selectedLandscapePackage?.title ?? "Landscape packages")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if selectedLandscapePackage != nil {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button {
+                            selectedLandscapePackage = nil
+                        } label: {
+                            Label("Packages", systemImage: "chevron.left")
+                        }
+                        .accessibilityIdentifier("backToLandscapePackages")
+                    }
                 }
-                if camera.guidedSession.isActive {
-                    Button("Natural") { camera.beginGuidance(pose: nil, position: nil) }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showLandscapeChooser = false }
                 }
             }
-            .font(.caption.bold())
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .tint(.teal)
-            if camera.guidedSession.currentStep != nil {
-                HStack {
-                    Button("Done / Next") { camera.advanceGuidance() }
-                    Button("Skip this step") { camera.advanceGuidance() }
+            .accessibilityIdentifier("landscapeCompositionChooser")
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func landscapePackageCard(for package: LandscapeCompositionPackageID) -> some View {
+        let recipes = LandscapeCompositionRecipe.allCases.filter { $0.package == package }
+
+        return Button {
+            selectedLandscapePackage = package
+        } label: {
+            HStack(spacing: 12) {
+                HStack(spacing: 5) {
+                    ForEach(Array(recipes.prefix(3))) { recipe in
+                        Image(recipe.exampleAssetName)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 38, height: 86)
+                            .clipped()
+                    }
                 }
-                .font(.caption.bold())
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .tint(.teal)
-                .disabled(camera.guidedAction == nil)
+                .frame(width: 124, height: 86)
+                .clipShape(RoundedRectangle(cornerRadius: 13))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(package.title, systemImage: package.symbol)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text(package.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                    Text("\(recipes.count) compositions")
+                        .font(.caption.bold())
+                        .foregroundStyle(.teal)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(10)
+            .background(.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 15))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("landscapePackage_\(package.id)")
+    }
+
+    private func landscapeRecipeCard(for recipe: LandscapeCompositionRecipe) -> some View {
+        Button {
+            chosenLandscapeRecipe = recipe
+            selectedAngle = recipe.recommendedCameraAngle
+            showLandscapeChooser = false
+        } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                Image(recipe.exampleAssetName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                Text(recipe.title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                Label(recipe.recommendedCameraAngle.title, systemImage: recipe.recommendedCameraAngle.symbol)
+                    .font(.caption2.bold())
+                    .foregroundStyle(.teal)
+                    .lineLimit(1)
+                Label(recipe.recommendedLight.title, systemImage: recipe.recommendedLight.symbol)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(8)
+            .background(.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 15))
+            .overlay {
+                RoundedRectangle(cornerRadius: 15)
+                    .stroke(chosenLandscapeRecipe == recipe ? .teal : .clear, lineWidth: 2)
             }
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(recipe.title). Recommended angle: \(recipe.recommendedCameraAngle.title). Best light: \(recipe.recommendedLight.title).")
+        .accessibilityIdentifier("landscapeOption_\(recipe.id)")
+    }
+
+    private var activeLandscapeCompositionCard: some View {
+        Group {
+            if let recipe = chosenLandscapeRecipe {
+                HStack(spacing: 12) {
+                    Image(recipe.exampleAssetName)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 86, height: 96)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(recipe.title)
+                            .font(.caption.bold())
+                            .textCase(.uppercase)
+                            .foregroundStyle(.teal)
+                        Text(recipe.instruction)
+                            .font(.headline.bold())
+                            .foregroundStyle(.white)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Label("Recommended angle: \(recipe.recommendedCameraAngle.title)", systemImage: recipe.recommendedCameraAngle.symbol)
+                            .font(.caption.bold())
+                            .foregroundStyle(.teal)
+                        Label("Best light: \(recipe.recommendedLight.title)", systemImage: recipe.recommendedLight.symbol)
+                            .font(.caption.bold())
+                            .foregroundStyle(.yellow)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(10)
+                .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(.teal.opacity(0.65), lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { landscapeExampleRecipe = recipe }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Landscape composition, \(recipe.title). Tap for the full example and safety note.")
+                .accessibilityAction(named: "Show composition example") { landscapeExampleRecipe = recipe }
+            }
+        }
+        .accessibilityIdentifier("activeLandscapeCard")
+    }
+
+    private func landscapeCompositionExampleSheet(for recipe: LandscapeCompositionRecipe) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Image(recipe.exampleAssetName)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .accessibilityLabel("Example photo for \(recipe.title)")
+                        .accessibilityIdentifier("landscapeExamplePhoto")
+
+                    Text(recipe.instruction)
+                        .font(.title3.bold())
+
+                    Label("Recommended camera angle: \(recipe.recommendedCameraAngle.title)", systemImage: recipe.recommendedCameraAngle.symbol)
+                        .font(.headline)
+                        .foregroundStyle(.teal)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label("Best light: \(recipe.recommendedLight.title)", systemImage: recipe.recommendedLight.symbol)
+                            .font(.headline)
+                        Text(recipe.recommendedLight.instruction)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label("Stay safe", systemImage: "exclamationmark.shield.fill")
+                            .font(.headline)
+                            .foregroundStyle(.orange)
+                        Text(recipe.safetyNote)
+                    }
+                    .padding(12)
+                    .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityIdentifier("landscapeSafetyNote")
+                }
+                .padding()
+            }
+            .navigationTitle(recipe.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { landscapeExampleRecipe = nil }
+                }
+            }
+        }
+    }
+
+    private var landscapeGuidanceCard: some View {
+        let guidance = landscapeGuidance
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: guidance.symbol)
+                    .accessibilityHidden(true)
+                Text(shootingMode == .auto ? "Auto · Landscape" : "Landscape guidance")
+            }
+            .font(.caption.bold())
+            .textCase(.uppercase)
+            .foregroundStyle(.teal)
+            Text(guidance.title)
+                .font(.title2.bold())
+                .foregroundStyle(.white)
+            Text(guidance.instruction)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.76))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.teal.opacity(0.65), lineWidth: 1)
+        }
+        .accessibilityIdentifier("landscapeGuidanceCard")
+    }
+
+    private var landscapeGuidance: (title: String, instruction: String, symbol: String) {
+        let horizonTilt = camera.measurements.horizonAngleDegrees ?? camera.measurements.cameraRollDegrees
+        if abs(horizonTilt) > 2.5 {
+            return (
+                "Level the horizon",
+                horizonTilt > 0 ? "Rotate the phone slightly counterclockwise." : "Rotate the phone slightly clockwise.",
+                "level"
+            )
+        }
+        if camera.measurements.horizonConfidence > 0.2 {
+            return (
+                "Horizon looks level",
+                "Place the horizon away from the center, then include a foreground element for depth.",
+                "checkmark.circle"
+            )
+        }
+        return (
+            "Build depth in the scene",
+            "Include a nearby subject, a middle distance, and the background before taking the photo.",
+            "mountain.2"
+        )
+    }
+
+    private var guidedControls: some View {
+        HStack(spacing: 8) {
+            Text(camera.guidedSession.isComplete
+                 ? "Sequence finished"
+                 : "Step \(camera.guidedSession.stepIndex + 1) of \(camera.guidedSession.steps.count)")
+                .font(.caption.bold())
+                .foregroundStyle(.white.opacity(0.72))
+
+            Spacer()
+
+            Button("Natural") {
+                selectPosture(nil)
+            }
+
+            if camera.guidedSession.currentStep != nil {
+                Button("Next") { camera.advanceGuidance() }
+                    .disabled(camera.guidedAction == nil)
+            }
+        }
+        .font(.caption.bold())
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(.teal)
         .padding(8)
         .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
         .padding(.bottom, 8)
     }
 
-    private var poseChooser: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Text("Choose a pose, a camera position, or both. Either collection is available to anyone. Each step is optional; take a photo whenever you like.")
-                }
-                Section("Subject pose") {
-                    Picker("Collection", selection: $guideCollection) {
-                        Text("Male / Masculine").tag(PosePackageID.masculine)
-                        Text("Female / Feminine").tag(PosePackageID.feminine)
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: guideCollection) { _, collection in
-                        if chosenGuidePose?.package != collection { chosenGuidePose = nil }
-                    }
-                    Picker("Pose", selection: $chosenGuidePose) {
-                        Text("No pose guidance").tag(Optional<GuidedPose>.none)
-                        ForEach(GuidedPose.allCases.filter { $0.package == guideCollection }) { pose in
-                            Text(pose.title).tag(Optional(pose))
-                        }
-                    }
-                    .accessibilityIdentifier("guidedPosePicker")
-                    if let pose = chosenGuidePose {
-                        PoseReferenceView(pose: pose)
-                            .frame(height: 150)
-                            .frame(maxWidth: .infinity)
-                        Text(pose.cues[0])
-                        Text("Left and right refer to the subject's own sides. Confirm or skip each step yourself.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
-                }
-                Section("Photographer position") {
-                    Picker("Position", selection: $chosenCameraPosition) {
-                        Text("No position guidance").tag(Optional<GuidedCameraPosition>.none)
-                        ForEach(GuidedCameraPosition.allCases) { position in
-                            Text(position.title).tag(Optional(position))
-                        }
-                    }
-                    .accessibilityIdentifier("guidedPositionPicker")
-                    if chosenCameraPosition == .side {
-                        Toggle("Move to your right", isOn: $guideMoveRight)
-                    }
-                    if let position = chosenCameraPosition, let step = position.steps(moveRight: guideMoveRight).first {
-                        Label(step.instruction, systemImage: step.action.symbol)
-                        Text("Directions use the photographer's viewpoint. Camera height is relative to the subject, including when seated.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .navigationTitle("Poses & angles")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showPoseChooser = false }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(chosenGuidePose == nil && chosenCameraPosition == nil ? "Use Natural" : "Start") {
-                        camera.beginGuidance(pose: chosenGuidePose, position: chosenCameraPosition, moveRight: guideMoveRight)
+    private var inlinePosePanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Pose & instruction")
+                    .font(.headline.bold())
+                    .foregroundStyle(.white)
+                Spacer()
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         showPoseChooser = false
                     }
+                } label: {
+                    Image(systemName: "xmark")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .accessibilityLabel("Close poses and angles")
+            }
+
+            Picker("Collection", selection: $guideCollection) {
+                ForEach(GuidedPoseCollectionID.allCases) { package in
+                    Text(package.title).tag(package)
                 }
             }
+            .pickerStyle(.segmented)
+            .onChange(of: guideCollection) { _, collection in
+                if chosenGuidePose?.package != collection {
+                    chosenGuidePose = GuidedPose.allCases.first { $0.package == collection }
+                }
+            }
+
+            HStack {
+                if let index = selectedGuidePoseIndex {
+                    Text("Pose \(index + 1) of \(availableGuidePoses.count)")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                Spacer()
+                Label("Recommended: \(selectedAngle.title)", systemImage: selectedAngle.symbol)
+                    .font(.caption.bold())
+                    .foregroundStyle(.teal)
+                    .accessibilityLabel("Recommended angle, \(selectedAngle.title)")
+            }
+
+            if let pose = chosenGuidePose {
+                HStack(spacing: 12) {
+                    Button {
+                        selectAdjacentGuidePose(offset: -1)
+                    } label: {
+                        Image(systemName: "chevron.left.circle.fill")
+                            .font(.title2)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.teal)
+                    .accessibilityLabel("Previous pose")
+
+                    HStack(spacing: 10) {
+                        PosePhotoThumbnail(pose: pose)
+                            .frame(width: 82, height: 98)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(pose.title)
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.teal)
+                            Text(pose.cues[0])
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 20)
+                            .onEnded { value in
+                                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                                selectAdjacentGuidePose(offset: value.translation.width < 0 ? 1 : -1)
+                            }
+                    )
+                    .accessibilityElement(children: .combine)
+
+                    Button {
+                        selectAdjacentGuidePose(offset: 1)
+                    } label: {
+                        Image(systemName: "chevron.right.circle.fill")
+                            .font(.title2)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.teal)
+                    .accessibilityLabel("Next pose")
+                }
+                Text("Swipe the pose, or use the arrow buttons.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.62))
+                    .frame(maxWidth: .infinity, alignment: .center)
+            } else if let position = chosenCameraPosition,
+                      let step = position.steps(moveRight: guideMoveRight).first {
+                Label(step.instruction, systemImage: step.action.symbol)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+            } else {
+                Text("Choose a pose to see it here while you take pictures.")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.72))
+            }
+
+            if chosenCameraPosition == .side {
+                Toggle("Move to your right", isOn: $guideMoveRight)
+                    .foregroundStyle(.white)
+                    .tint(.teal)
+            }
+
+            HStack {
+                Button("Use Natural") {
+                    chosenGuidePose = nil
+                    chosenCameraPosition = nil
+                    camera.beginGuidance(pose: nil, position: nil)
+                    showPoseChooser = false
+                }
+                .buttonStyle(.bordered)
+
+                Spacer()
+
+                Button("Start") {
+                    camera.beginGuidance(pose: chosenGuidePose, position: chosenCameraPosition, moveRight: guideMoveRight)
+                    showPoseChooser = false
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(chosenGuidePose == nil && chosenCameraPosition == nil)
+            }
+            .controlSize(.large)
+            .tint(.teal)
         }
+        .padding(10)
+        .background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.teal.opacity(0.65), lineWidth: 1)
+        }
+    }
+
+    private var availableGuidePoses: [GuidedPose] {
+        GuidedPose.allCases.filter { $0.package == guideCollection }
+    }
+
+    private var selectedGuidePoseIndex: Int? {
+        guard let chosenGuidePose else { return nil }
+        return availableGuidePoses.firstIndex(of: chosenGuidePose)
+    }
+
+    private func selectAdjacentGuidePose(offset: Int) {
+        guard !availableGuidePoses.isEmpty else { return }
+        let currentIndex = selectedGuidePoseIndex ?? 0
+        let nextIndex = (currentIndex + offset + availableGuidePoses.count) % availableGuidePoses.count
+        withAnimation(.easeInOut(duration: 0.18)) {
+            selectPosture(availableGuidePoses[nextIndex])
+        }
+    }
+
+    private func selectAdjacentExamplePose(from pose: GuidedPose, offset: Int) {
+        let poses = GuidedPose.allCases.filter { $0.package == pose.package }
+        guard let currentIndex = poses.firstIndex(of: pose), !poses.isEmpty else { return }
+        let nextIndex = (currentIndex + offset + poses.count) % poses.count
+        let nextPose = poses[nextIndex]
+        withAnimation(.easeInOut(duration: 0.18)) {
+            selectPosture(nextPose)
+            examplePose = nextPose
+        }
+    }
+
+    private var activePoseCard: some View {
+        HStack(spacing: 12) {
+            if let pose = camera.guidedSession.pose {
+                PosePhotoThumbnail(pose: pose)
+                    .frame(width: 86, height: 96)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                if let pose = camera.guidedSession.pose {
+                    Text(pose.title)
+                        .font(.caption.bold())
+                        .textCase(.uppercase)
+                        .foregroundStyle(.teal)
+
+                    Text("\(pose.category.title) · \(pose.setting.title)")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white.opacity(0.65))
+
+                    Text(pose.instruction)
+                        .font(.headline.bold())
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    let angle = pose.recommendedCameraAngle
+                    if camera.guidedSession.position == angle.guidedPosition {
+                        Label("Recommended angle: \(angle.title)", systemImage: angle.symbol)
+                            .font(.caption.bold())
+                            .foregroundStyle(.teal)
+                    }
+
+                    Label("Lighting: \(pose.recommendedLighting.title)", systemImage: pose.recommendedLighting.symbol)
+                        .font(.caption.bold())
+                        .foregroundStyle(.yellow)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(10)
+        .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.teal.opacity(0.65), lineWidth: 1)
+        }
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    guard abs(value.translation.width) > abs(value.translation.height),
+                          abs(value.translation.width) > 44 else { return }
+                    selectAdjacentGuidePose(offset: value.translation.width < 0 ? 1 : -1)
+                }
+        )
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                examplePose = camera.guidedSession.pose
+            }
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Posture, \(camera.guidedSession.pose?.title ?? "Natural"). Tap for a photo example. Swipe left or right for another posture.")
+        .accessibilityAction(named: "Show photo example") {
+            examplePose = camera.guidedSession.pose
+        }
+        .accessibilityIdentifier("activePostureCard")
+    }
+
+    private func postureExampleSheet(for pose: GuidedPose) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ZStack(alignment: .bottom) {
+                        Image(pose.exampleAssetName)
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+
+                        Label("Swipe for another posture", systemImage: "arrow.left.and.right")
+                            .font(.caption.bold())
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .foregroundStyle(.white)
+                            .background(.black.opacity(0.68), in: Capsule())
+                            .padding(.bottom, 12)
+                            .accessibilityHidden(true)
+                    }
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 24)
+                            .onEnded { value in
+                                guard abs(value.translation.width) > abs(value.translation.height),
+                                      abs(value.translation.width) > 44 else { return }
+                                selectAdjacentExamplePose(from: pose, offset: value.translation.width < 0 ? 1 : -1)
+                            }
+                    )
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Photo example of \(pose.title). Swipe left or right for another posture.")
+                    .accessibilityAction(named: "Previous posture") {
+                        selectAdjacentExamplePose(from: pose, offset: -1)
+                    }
+                    .accessibilityAction(named: "Next posture") {
+                        selectAdjacentExamplePose(from: pose, offset: 1)
+                    }
+                    .accessibilityIdentifier("postureExamplePhoto")
+
+                    Text(pose.instruction)
+                        .font(.title3.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 14) {
+                        Label(pose.category.title, systemImage: pose.category.symbol)
+                        Label(pose.setting.title, systemImage: pose.setting.symbol)
+                    }
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.white.opacity(0.72))
+
+                    Label("Recommended camera angle: \(pose.recommendedCameraAngle.title)", systemImage: pose.recommendedCameraAngle.symbol)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.teal)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label("Recommended lighting: \(pose.recommendedLighting.title)", systemImage: pose.recommendedLighting.symbol)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.yellow)
+                        Text(pose.recommendedLighting.instruction)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.78))
+                    }
+                }
+                .padding()
+            }
+            .background(Color.black)
+            .foregroundStyle(.white)
+            .navigationTitle(pose.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { examplePose = nil }
+                }
+            }
+            .accessibilityIdentifier("postureExampleSheet")
+        }
+        .presentationDragIndicator(.visible)
     }
 
     private var reviewAnalysisCard: some View {
@@ -1492,8 +2702,22 @@ struct ContentView: View {
 
             Spacer()
 
-            Color.clear
+            Button {
+                showCameraControls = true
+            } label: {
+                VStack(spacing: 2) {
+                    Image(systemName: "camera.aperture")
+                        .font(.system(size: 20, weight: .bold))
+                    Text(cameraControlMode.title)
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .foregroundStyle(cameraControlMode == .auto ? .white : .teal)
                 .frame(width: 52, height: 52)
+                .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Camera controls, \(cameraControlMode.title)")
+            .accessibilityIdentifier("cameraControlButton")
         }
         .font(.headline)
     }
@@ -1636,54 +2860,20 @@ private struct ReviewPhoto: Identifiable {
     let title: String
 }
 
-/// A schematic reference, not a detector overlay or an idealized body shape.
-private struct PoseReferenceView: View {
+private struct PosePhotoThumbnail: View {
     let pose: GuidedPose
 
-    private var joints: [CGPoint] {
-        // Head, neck, hip, left elbow/wrist, right elbow/wrist, left knee/foot, right knee/foot.
-        let coordinates: [(Double, Double)]
-        switch pose {
-        case .relaxedStanding:
-            coordinates = [(50, 18), (50, 34), (50, 78), (30, 55), (28, 79), (70, 55), (72, 79), (39, 103), (33, 128), (61, 103), (67, 128)]
-        case .threeQuarter:
-            coordinates = [(51, 18), (49, 34), (54, 78), (34, 55), (36, 79), (62, 55), (65, 79), (47, 103), (43, 128), (62, 102), (69, 125)]
-        case .handInPocket:
-            coordinates = [(50, 18), (50, 34), (50, 78), (28, 55), (43, 79), (70, 55), (72, 79), (39, 103), (33, 128), (61, 103), (67, 128)]
-        case .seatedLean:
-            coordinates = [(58, 24), (57, 40), (42, 80), (66, 60), (68, 88), (77, 62), (81, 89), (65, 92), (63, 128), (83, 94), (84, 128)]
-        case .walking:
-            coordinates = [(50, 18), (50, 34), (50, 78), (27, 51), (18, 72), (71, 47), (81, 32), (30, 99), (16, 119), (68, 99), (79, 129)]
-        case .weightShift:
-            coordinates = [(50, 18), (49, 34), (57, 78), (28, 55), (31, 80), (70, 55), (75, 79), (36, 104), (47, 128), (59, 103), (60, 128)]
-        case .footForward:
-            coordinates = [(50, 18), (50, 34), (50, 78), (31, 55), (29, 79), (69, 55), (72, 79), (47, 103), (55, 130), (59, 100), (66, 120)]
-        case .handAtWaist:
-            coordinates = [(50, 18), (50, 34), (54, 78), (25, 55), (45, 67), (72, 55), (74, 79), (45, 103), (41, 128), (64, 103), (69, 128)]
-        case .seatedAngle:
-            coordinates = [(46, 20), (46, 36), (45, 78), (27, 56), (57, 85), (67, 56), (68, 86), (71, 92), (77, 128), (82, 90), (89, 126)]
-        case .overShoulder:
-            coordinates = [(58, 18), (48, 34), (49, 78), (31, 54), (32, 80), (62, 54), (59, 80), (41, 103), (37, 128), (56, 103), (60, 128)]
-        }
-        return coordinates.map { CGPoint(x: $0.0, y: $0.1) }
-    }
-
     var body: some View {
-        GeometryReader { proxy in
-            let scale = min(proxy.size.width / 100, proxy.size.height / 140)
-            let originX = (proxy.size.width - 100 * scale) / 2
-            let points = joints.map { CGPoint(x: originX + $0.x * scale, y: $0.y * scale) }
-            Path { path in
-                for chain in [[1, 2], [1, 3, 4], [1, 5, 6], [2, 7, 8], [2, 9, 10]] {
-                    path.move(to: points[chain[0]])
-                    for index in chain.dropFirst() { path.addLine(to: points[index]) }
-                }
-                path.addEllipse(in: CGRect(x: points[0].x - 9 * scale, y: points[0].y - 10 * scale, width: 18 * scale, height: 20 * scale))
+        Image(pose.exampleAssetName)
+            .resizable()
+            .scaledToFill()
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(.white.opacity(0.25), lineWidth: 1)
             }
-            .stroke(.teal, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Pose sketch: \(pose.title)")
+            .accessibilityLabel("Photo example of \(pose.title)")
+            .accessibilityIdentifier("activePostureThumbnail")
     }
 }
 
@@ -1948,42 +3138,6 @@ private let supportedImageExtensions = [
     "heic",
     "heif"
 ]
-
-private enum ShootingMode: String, CaseIterable, Identifiable {
-    case people
-    case landscape
-    case camera
-
-    var id: String {
-        rawValue
-    }
-
-    var title: String {
-        switch self {
-        case .people:
-            return "People Coach"
-        case .landscape:
-            return "Landscape"
-        case .camera:
-            return "Camera"
-        }
-    }
-
-    var shortTitle: String {
-        switch self {
-        case .people:
-            return "People"
-        case .landscape:
-            return "Landscape"
-        case .camera:
-            return "Camera"
-        }
-    }
-
-    var showsGuidance: Bool {
-        self == .people
-    }
-}
 
 private enum ReviewVariant: Hashable {
     case original

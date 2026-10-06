@@ -2,6 +2,126 @@ import CoreGraphics
 import XCTest
 
 final class CoachingEngineTests: XCTestCase {
+    func testVoiceShutterRecognizesOnlyTakePhotoCommands() {
+        XCTAssertTrue(VoiceShutterCommand.matches("Cheese"))
+        XCTAssertTrue(VoiceShutterCommand.matches("Okay, cheese!"))
+        XCTAssertTrue(VoiceShutterCommand.matches("Take photo"))
+        XCTAssertTrue(VoiceShutterCommand.matches("Please take a photo now"))
+        XCTAssertTrue(VoiceShutterCommand.matches("take picture"))
+        XCTAssertTrue(VoiceShutterCommand.matches("Okay, take a picture!"))
+        XCTAssertFalse(VoiceShutterCommand.matches("Take a break"))
+        XCTAssertFalse(VoiceShutterCommand.matches("Beautiful photo"))
+        XCTAssertFalse(VoiceShutterCommand.matches("Cheesecake"))
+    }
+
+    func testCameraControlCapabilitiesClampValuesPerActiveCamera() {
+        var capabilities = CameraControlCapabilities.unavailable
+        capabilities.minimumExposureBias = -2
+        capabilities.maximumExposureBias = 1.5
+        XCTAssertEqual(capabilities.clampedExposureBias(-3), -2)
+        XCTAssertEqual(capabilities.clampedExposureBias(0.7), 0.7)
+        XCTAssertEqual(capabilities.clampedExposureBias(2), 1.5)
+    }
+
+    func testEveryManualSituationProvidesIntegratedAngles() {
+        for situation in PhotographicSituation.allCases where situation != .auto {
+            XCTAssertGreaterThanOrEqual(situation.angleChoices.count, 3, "Missing angles for \(situation.title)")
+            XCTAssertTrue(situation.angleChoices.allSatisfy { !$0.title.isEmpty && !$0.instruction.isEmpty })
+        }
+        XCTAssertEqual(PhotographicSituation.closeUp.angleChoices.first, .overhead)
+        XCTAssertEqual(PhotographicSituation.landscape.angleChoices.first, .low)
+        XCTAssertEqual(CameraAngleChoice.slightlyHigh.guidedPosition, .elevated)
+    }
+
+    func testSituationClassifierRecognizesSupportedAutomaticSituations() {
+        let portrait = DetectionBox(
+            rect: CGRect(x: 0.2, y: 0.08, width: 0.55, height: 0.72),
+            confidence: 0.9,
+            label: "person"
+        )
+        XCTAssertEqual(SituationClassifier.candidate(for: measurements(personBox: portrait)), .portrait)
+
+        let personInScene = DetectionBox(
+            rect: CGRect(x: 0.4, y: 0.25, width: 0.16, height: 0.42),
+            confidence: 0.85,
+            label: "person"
+        )
+        XCTAssertEqual(SituationClassifier.candidate(for: measurements(personBox: personInScene, faceBox: nil)), .personScene)
+
+        let group = GroupAnalysis(
+            peopleCount: 3,
+            faceCount: 3,
+            groupBounds: CGRect(x: 0.1, y: 0.15, width: 0.8, height: 0.7),
+            faceVisibilityRatio: 1,
+            edgeCrowdingScore: 0,
+            spacingScore: 1
+        )
+        XCTAssertEqual(SituationClassifier.candidate(for: measurements(groupAnalysis: group)), .group)
+        XCTAssertEqual(
+            SituationClassifier.candidate(for: measurements(personBox: nil, faceBox: nil, horizonAngleDegrees: 0, horizonConfidence: 0.72)),
+            .landscape
+        )
+
+        XCTAssertEqual(
+            SituationClassifier.candidate(for: measurements(personBox: personInScene, faceBox: nil, subjectMotion: 0.22)),
+            .action
+        )
+
+        let closeObject = DetectionBox(
+            rect: CGRect(x: 0.2, y: 0.2, width: 0.62, height: 0.55),
+            confidence: 0.78,
+            label: "salient_object"
+        )
+        XCTAssertEqual(
+            SituationClassifier.candidate(for: measurements(personBox: nil, faceBox: nil, salientObjectBox: closeObject, skyOrOpenAreaRatio: 0.08)),
+            .closeUp
+        )
+    }
+
+    func testSituationClassifierRequiresStableFramesAndKeepsAmbiguousRecommendation() {
+        var classifier = SituationClassifier(requiredStableFrames: 3)
+        let group = GroupAnalysis(
+            peopleCount: 2,
+            faceCount: 2,
+            groupBounds: CGRect(x: 0.1, y: 0.15, width: 0.8, height: 0.7),
+            faceVisibilityRatio: 1,
+            edgeCrowdingScore: 0,
+            spacingScore: 1
+        )
+        let groupMeasurements = measurements(groupAnalysis: group)
+        XCTAssertEqual(classifier.update(with: groupMeasurements), .personScene)
+        XCTAssertEqual(classifier.update(with: groupMeasurements), .personScene)
+        XCTAssertEqual(classifier.update(with: groupMeasurements), .group)
+
+        var ambiguous = measurements(personBox: nil, faceBox: nil, horizonAngleDegrees: nil, horizonConfidence: 0)
+        ambiguous.skyOrOpenAreaRatio = 0.05
+        XCTAssertEqual(classifier.update(with: ambiguous), .group)
+    }
+
+    func testSituationClassifierDoesNotOverreactToSmallMotionOrObjects() {
+        let person = DetectionBox(
+            rect: CGRect(x: 0.4, y: 0.25, width: 0.16, height: 0.42),
+            confidence: 0.85,
+            label: "person"
+        )
+        XCTAssertEqual(
+            SituationClassifier.candidate(for: measurements(personBox: person, faceBox: nil, subjectMotion: 0.15)),
+            .personScene
+        )
+
+        let smallObject = DetectionBox(
+            rect: CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.2),
+            confidence: 0.9,
+            label: "salient_object"
+        )
+        XCTAssertNil(
+            SituationClassifier.candidate(for: measurements(personBox: nil, faceBox: nil, salientObjectBox: smallObject, skyOrOpenAreaRatio: 0.08))
+        )
+        XCTAssertNil(
+            SituationClassifier.candidate(for: measurements(personBox: nil, faceBox: nil, skyOrOpenAreaRatio: 0.42))
+        )
+    }
+
     func testPreviewGeometryFitsTheWholeFrameInPortraitAndLandscape() {
         let portrait = PreviewGeometry.fittedRect(in: CGSize(width: 390, height: 500), aspectRatio: 3.0 / 4.0)
         XCTAssertEqual(portrait, CGRect(x: 7.5, y: 0, width: 375, height: 500))
@@ -25,18 +145,69 @@ final class CoachingEngineTests: XCTestCase {
         let subject = Advice(type: "face_too_profile", recipient: "Subject", instruction: "Turn left", tone: .warning)
         XCTAssertNotEqual(camera.directionSymbol, subject.directionSymbol)
     }
-    func testGuidanceCatalogHasTenPosesAndFiveCameraPositions() {
-        XCTAssertEqual(Set(GuidedPose.allCases.map(\.id)).count, 10)
-        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .masculine }.count, 5)
-        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .feminine }.count, 5)
+    func testGuidanceCatalogHasFivePackagesFortyPosesAndFiveCameraPositions() {
+        XCTAssertEqual(Set(GuidedPose.allCases.map(\.id)).count, 40)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .masculine }.count, 9)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .feminine }.count, 13)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .couples }.count, 6)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .friendsGroups }.count, 6)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .family }.count, 6)
         XCTAssertEqual(Set(GuidedCameraPosition.allCases.map(\.id)).count, 5)
         for pose in GuidedPose.allCases {
             XCTAssertEqual(pose.steps.count, 2)
-            XCTAssertTrue(pose.steps.allSatisfy { $0.recipient == "Subject" && !$0.instruction.isEmpty })
+            XCTAssertFalse(pose.symbol.isEmpty)
+            XCTAssertFalse(pose.instruction.isEmpty)
+            XCTAssertFalse(pose.exampleAssetName.isEmpty)
+            let expectedRecipient = pose.package == .couples ? "Couple" : (pose.package == .friendsGroups ? "Group" : (pose.package == .family ? "Family" : "Subject"))
+            XCTAssertTrue(pose.steps.allSatisfy { $0.recipient == expectedRecipient && !$0.instruction.isEmpty })
+            XCTAssertFalse(pose.recommendedCameraAngle.title.isEmpty)
+            XCTAssertFalse(pose.recommendedLighting.title.isEmpty)
+            XCTAssertFalse(pose.recommendedLighting.instruction.isEmpty)
         }
+        XCTAssertEqual(Set(GuidedPose.allCases.map(\.category)), Set(PoseCategory.allCases))
+        XCTAssertEqual(GuidedPose.walking.setting, .outdoor)
+        XCTAssertEqual(GuidedPose.wallLeanMasculine.setting, .both)
+        XCTAssertEqual(GuidedPose.hairSweepFeminine.category, .handsHair)
         for position in GuidedCameraPosition.allCases {
             XCTAssertTrue(position.steps(moveRight: false).allSatisfy { $0.recipient == "Photographer" })
         }
+    }
+
+    func testEveryPoseRecommendsCameraAngleAndLighting() {
+        XCTAssertEqual(GuidedPose.relaxedStanding.recommendedCameraAngle, .eyeLevel)
+        XCTAssertEqual(GuidedPose.handInPocket.recommendedCameraAngle, .eyeLevel)
+        XCTAssertEqual(GuidedPose.handAtWaist.recommendedCameraAngle, .eyeLevel)
+        XCTAssertEqual(GuidedPose.walking.recommendedCameraAngle, .low)
+        XCTAssertEqual(GuidedPose.seatedAngle.recommendedCameraAngle, .slightlyHigh)
+        XCTAssertEqual(GuidedPose.overShoulder.recommendedCameraAngle, .side)
+        XCTAssertEqual(GuidedPose.walking.recommendedLighting, .openShade)
+        XCTAssertEqual(GuidedPose.groupShoulderRow.recommendedLighting, .broadEven)
+    }
+
+    func testLandscapeCatalogHasFourCompletePackagesAndTwentyFourRecipes() {
+        let recipes = LandscapeCompositionRecipe.allCases
+        XCTAssertEqual(recipes.count, 24)
+        XCTAssertEqual(Set(recipes.map(\.id)).count, 24)
+        XCTAssertEqual(LandscapeCompositionPackageID.allCases.count, 4)
+        for package in LandscapeCompositionPackageID.allCases {
+            XCTAssertEqual(recipes.filter { $0.package == package }.count, 6)
+        }
+        XCTAssertTrue(recipes.allSatisfy {
+            !$0.title.isEmpty &&
+            $0.cues.count == 2 &&
+            $0.cues.allSatisfy { !$0.isEmpty } &&
+            !$0.exampleAssetName.isEmpty &&
+            !$0.recommendedLight.title.isEmpty &&
+            !$0.recommendedLight.instruction.isEmpty &&
+            !$0.safetyNote.isEmpty
+        })
+        XCTAssertEqual(LandscapeCompositionRecipe.mountainTrail.recommendedCameraAngle, .low)
+        XCTAssertEqual(LandscapeCompositionRecipe.valleyAbove.recommendedCameraAngle, .slightlyHigh)
+        XCTAssertEqual(LandscapeCompositionRecipe.mountainDetail.recommendedCameraAngle, .side)
+        XCTAssertEqual(LandscapeCompositionRecipe.personScale.recommendedLight, .goldenHour)
+        XCTAssertEqual(LandscapeCompositionRecipe.lakeReflection.package, .lakes)
+        XCTAssertEqual(LandscapeCompositionRecipe.plainRepeatingRows.package, .plains)
+        XCTAssertEqual(LandscapeCompositionRecipe.plantPattern.recommendedCameraAngle, .overhead)
     }
 
     func testGuidanceProgressesOnlyWhenExplicitlyAdvanced() {
@@ -392,7 +563,10 @@ final class CoachingEngineTests: XCTestCase {
         cameraStable: Bool = true,
         groupAnalysis: GroupAnalysis? = nil,
         faceAnalysis: FaceAnalysis? = nil,
-        poseAnalysis: PoseAnalysis? = nil
+        poseAnalysis: PoseAnalysis? = nil,
+        salientObjectBox: DetectionBox? = nil,
+        subjectMotion: Double = 0,
+        skyOrOpenAreaRatio: Double = 0.42
     ) -> Measurements {
         Measurements(
             personBox: personBox,
@@ -409,8 +583,10 @@ final class CoachingEngineTests: XCTestCase {
             cameraRollDegrees: 0,
             cameraMotion: cameraMotion,
             cameraStable: cameraStable,
-            skyOrOpenAreaRatio: 0.42,
-            timestamp: Date()
+            skyOrOpenAreaRatio: skyOrOpenAreaRatio,
+            timestamp: Date(),
+            salientObjectBox: salientObjectBox,
+            subjectMotion: subjectMotion
         )
     }
 }

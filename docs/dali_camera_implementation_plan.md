@@ -4,7 +4,11 @@
 **Companion doc:** `docs/dali_camera.md`
 **Purpose:** Define how to build and test the V1 algorithmic coaching functionality.
 
-**Posture extension:** [Phase 5: posture and camera-position suggestions](dali_camera_product_design_improvement_plan.md#phase-5-add-posture-and-camera-position-suggestions) defines 10 posture suggestions (five male/masculine and five female/feminine examples), five camera positions, implementation tasks, and acceptance criteria. An initial native implementation now provides selectable, manually confirmed sequences. The full-frame preview alignment implementation and Dart-core parity are included. See [phone testing](phone_testing.md) for build instructions, automated validation, and the physical-device acceptance checklist.
+**Posture extension:** [Phase 5: posture and camera-position suggestions](dali_camera_product_design_improvement_plan.md#phase-5-add-posture-and-camera-position-suggestions) now defines 40 posture suggestions (nine male/masculine, thirteen female/feminine, six couples, six friends/groups, and six family examples), five camera positions, implementation tasks, and acceptance criteria. The native implementation presents a category-first package chooser, tags each pose's suitable setting, recommends camera angle and lighting for every pose, and provides manually confirmed sequences. The full-frame preview alignment implementation and Dart-core parity are included. See [phone testing](phone_testing.md) for build instructions, automated validation, and the physical-device acceptance checklist.
+
+**Landscape packages:** The Landscape situation now exposes a separate Landscape control and category-first chooser. Mountains, Lakes & Water, Plains & Fields, and Plants & Gardens provide 24 photo-based composition recipes with two cues, automatic camera-angle and light recommendations, and safety guidance. Live horizon coaching remains visible with the selected recipe. See [Landscape composition packages](landscape_packages.md) for status and deferred filter, guided-step, and Auto work.
+
+**Camera control extension:** [Camera Control and Assisted Professional Mode](camera_control.md) defines runtime capability discovery, Auto/Assisted/Manual behavior, device-specific fallbacks, recommendation rules, professional capture formats, and a staged implementation plan. The design intentionally avoids assuming that phones or cameras share the same lenses, ranges, or output capabilities.
 
 ---
 

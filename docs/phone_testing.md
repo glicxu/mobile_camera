@@ -39,7 +39,7 @@ The CI device build is unsigned. Install through Xcode with your own signing tea
 | Enable Debug overlay and move a person near each edge | Person/face boxes follow the visible image, including the margins. |
 | Tap the latest thumbnail | That photo opens directly without searching the library. |
 | Select an enhancement, compare, Save a copy, then Share | The output matches the selected preview and the original is preserved. |
-| Open Poses & angles | Five masculine and five feminine examples and all five camera positions are available. |
+| Open Poses & angles | Nine masculine and thirteen feminine examples are grouped by pose type; all five camera positions remain available. |
 | Start a pose with a camera position | Camera steps precede subject steps; Done / Next or Skip advances one step. |
 | Remove the subject during guidance, then return them | Framing advice interrupts; the same uncompleted creative step resumes. |
 | Choose Natural or a different sequence | The old creative instruction does not persist. |

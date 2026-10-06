@@ -2,6 +2,28 @@ import XCTest
 
 final class PhoneReadinessUITests: XCTestCase {
     @MainActor
+    func testCameraControlPlacementAndBasicModes() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+
+        let cameraControl = app.buttons["cameraControlButton"]
+        XCTAssertTrue(cameraControl.waitForExistence(timeout: 15))
+        XCTAssertEqual(cameraControl.label, "Camera controls, Auto")
+        cameraControl.tap()
+
+        XCTAssertTrue(app.navigationBars["Camera controls"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["voiceShutterToggle"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["voiceShutterStatus"].exists)
+        XCTAssertTrue(app.staticTexts["Camera controls need an iPhone"].exists)
+        app.buttons["Assisted"].tap()
+        app.buttons["Done"].tap()
+        XCTAssertEqual(app.buttons["cameraControlButton"].label, "Camera controls, Assisted")
+    }
+
+    @MainActor
     func testOnboardingIsDismissibleAndHelpCanBeReopened() {
         allowCameraPrompt()
         let app = XCUIApplication()
@@ -19,24 +41,106 @@ final class PhoneReadinessUITests: XCTestCase {
     }
 
     @MainActor
-    func testPoseChooserAndLandscapeControls() {
+    func testCompactCoachingMenusAndGuidance() {
         allowCameraPrompt()
         let app = XCUIApplication()
         app.launchArguments = ["-hasSeenDaliTutor", "YES"]
         app.launch()
         app.tap()
-        XCTAssertTrue(app.buttons["Poses & angles"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["situationMenu"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["cameraControlButton"].exists)
+        XCTAssertFalse(app.buttons["angleMenu"].exists)
+        XCTAssertTrue(app.buttons["postureMenu"].exists)
+        XCTAssertTrue(app.buttons["Turn coaching off"].exists)
+        app.buttons["Turn coaching off"].tap()
+        XCTAssertTrue(app.buttons["Turn coaching on"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["situationMenu"].exists)
+        XCTAssertTrue(app.buttons["Take photo"].exists)
+        app.buttons["Turn coaching on"].tap()
+        XCTAssertTrue(app.buttons["postureMenu"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["angleMenu"].exists)
+
+        app.buttons["postureMenu"].tap()
+        XCTAssertTrue(app.navigationBars["Posture packages"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["naturalPostureOption"].exists)
+        XCTAssertTrue(app.buttons["posturePackage_masculine"].exists)
+        XCTAssertTrue(app.buttons["posturePackage_feminine"].exists)
+        XCTAssertTrue(app.buttons["posturePackage_couples"].exists)
+        XCTAssertFalse(app.buttons["postureOption_M1"].exists)
+        app.buttons["naturalPostureOption"].tap()
+        app.buttons["postureMenu"].tap()
+        app.buttons["posturePackage_feminine"].tap()
+        let handAtWaist = app.buttons["postureOption_F3"]
+        for _ in 0..<12 where !handAtWaist.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(handAtWaist.isHittable)
+        handAtWaist.tap()
+        XCTAssertTrue(app.staticTexts["Hand at waist"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.images["activePostureThumbnail"].exists)
+        XCTAssertTrue(app.staticTexts["Rest one hand lightly at your waist. Relax your other arm."].exists)
+        XCTAssertTrue(app.staticTexts["Recommended angle: Eye level"].exists)
+        XCTAssertTrue(app.staticTexts["Lighting: Soft, even front light"].exists)
+        XCTAssertTrue(app.buttons["Next"].exists)
+        let postureCard = app.descendants(matching: .any).matching(identifier: "activePostureCard").firstMatch
+        XCTAssertTrue(postureCard.exists)
+        postureCard.swipeLeft()
+        XCTAssertTrue(app.staticTexts["Seated angled pose"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Sit with your knees angled slightly to one side. Turn your face toward the camera."].exists)
+        XCTAssertTrue(app.staticTexts["Recommended angle: Slightly high"].exists)
+        XCTAssertEqual(app.buttons["postureMenu"].label, "Posture, Seated angled pose")
+        postureCard.tap()
+        XCTAssertTrue(app.navigationBars["Seated angled pose"].waitForExistence(timeout: 5))
+        let examplePhoto = app.descendants(matching: .any).matching(identifier: "postureExamplePhoto").firstMatch
+        XCTAssertTrue(examplePhoto.exists)
+        XCTAssertTrue(app.staticTexts["Recommended camera angle: Slightly high"].exists)
+        examplePhoto.swipeLeft()
+        XCTAssertTrue(app.navigationBars["Over-shoulder glance"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["postureMenu"].label, "Posture, Over-shoulder glance")
+        app.buttons["Done"].tap()
+        app.buttons["postureMenu"].tap()
+        app.buttons["posturePackage_feminine"].tap()
+        let hairSweep = app.buttons["postureOption_F10"]
+        for _ in 0..<12 where !hairSweep.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(hairSweep.isHittable)
+        hairSweep.tap()
+        XCTAssertTrue(app.staticTexts["Gentle hair sweep"].waitForExistence(timeout: 5))
         attachScreenshot("Camera portrait")
-        app.buttons["Poses & angles"].tap()
-        XCTAssertTrue(app.navigationBars["Poses & angles"].waitForExistence(timeout: 5))
-        app.segmentedControls.buttons["Female / Feminine"].tap()
-        app.descendants(matching: .any).matching(identifier: "guidedPosePicker").firstMatch.tap()
-        app.buttons["Hand at waist"].tap()
-        XCTAssertTrue(app.staticTexts["Rest one hand lightly at your waist."].waitForExistence(timeout: 5))
-        attachScreenshot("Pose chooser")
-        app.buttons["Start"].tap()
-        XCTAssertTrue(app.buttons["Natural"].waitForExistence(timeout: 5))
-        app.buttons["Natural"].tap()
+
+        app.buttons["postureMenu"].tap()
+        app.buttons["posturePackage_couples"].tap()
+        let couplePose = app.buttons["postureOption_CP1"]
+        for _ in 0..<16 where !couplePose.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(couplePose.isHittable)
+        couplePose.tap()
+        XCTAssertTrue(app.staticTexts["Close standing"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Stand close with your shoulders lightly touching. Turn both faces toward the camera and relax your outside arms."].waitForExistence(timeout: 5))
+
+        app.buttons["postureMenu"].tap()
+        app.buttons["naturalPostureOption"].tap()
+        app.buttons["situationMenu"].tap()
+        app.buttons["Landscape"].tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "landscapeGuidanceCard").firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["postureMenu"].exists)
+        XCTAssertTrue(app.buttons["landscapeMenu"].exists)
+
+        app.buttons["situationMenu"].tap()
+        app.buttons["Action"].tap()
+        XCTAssertTrue(app.staticTexts["Find the moving subject"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["postureMenu"].exists)
+
+        app.buttons["situationMenu"].tap()
+        app.buttons["Close-up"].tap()
+        XCTAssertTrue(app.staticTexts["Choose one clear detail"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["postureMenu"].exists)
+
+        app.buttons["situationMenu"].tap()
+        app.buttons["Portrait"].tap()
+        XCTAssertTrue(app.buttons["postureMenu"].waitForExistence(timeout: 5))
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.buttons["Take photo"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Configure"].isHittable)
@@ -45,6 +149,135 @@ final class PhoneReadinessUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Configure"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         XCUIDevice.shared.orientation = .portrait
+    }
+
+    @MainActor
+    func testMountainsLandscapePackageIsSelectable() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["situationMenu"].waitForExistence(timeout: 15))
+        app.buttons["situationMenu"].tap()
+        app.buttons["Landscape"].tap()
+
+        XCTAssertTrue(app.buttons["landscapeMenu"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["postureMenu"].exists)
+        app.buttons["landscapeMenu"].tap()
+        XCTAssertTrue(app.navigationBars["Landscape packages"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["naturalLandscapeOption"].exists)
+        XCTAssertTrue(app.buttons["landscapePackage_mountains"].exists)
+        XCTAssertTrue(app.buttons["landscapePackage_lakes"].exists)
+        XCTAssertTrue(app.buttons["landscapePackage_plains"].exists)
+        XCTAssertTrue(app.buttons["landscapePackage_plants"].exists)
+        XCTAssertFalse(app.buttons["landscapeOption_MT1"].exists)
+
+        app.buttons["landscapePackage_mountains"].tap()
+        XCTAssertTrue(app.navigationBars["Mountains"].waitForExistence(timeout: 5))
+
+        let trailRecipe = app.buttons["landscapeOption_MT1"]
+        XCTAssertTrue(trailRecipe.waitForExistence(timeout: 5))
+        trailRecipe.tap()
+        XCTAssertTrue(app.staticTexts["Foreground trail to peak"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Lower the camera near the trail. Use the trail to lead toward the peak."].exists)
+        XCTAssertTrue(app.staticTexts["Recommended angle: Low angle"].exists)
+        XCTAssertTrue(app.staticTexts["Best light: Sunrise or sunset"].exists)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "activeLandscapeCard").firstMatch.exists)
+
+        app.descendants(matching: .any).matching(identifier: "activeLandscapeCard").firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Foreground trail to peak"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended camera angle: Low angle"].exists)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "landscapeSafetyNote").firstMatch.exists)
+        app.buttons["Done"].tap()
+
+        app.buttons["landscapeMenu"].tap()
+        app.buttons["landscapePackage_lakes"].tap()
+        let lakeRecipe = app.buttons["landscapeOption_LK1"]
+        XCTAssertTrue(lakeRecipe.waitForExistence(timeout: 5))
+        lakeRecipe.tap()
+        XCTAssertTrue(app.staticTexts["Centered reflection"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Center the shoreline horizontally. Keep the reflected peak or trees fully visible."].exists)
+        XCTAssertTrue(app.staticTexts["Best light: Sunrise or sunset"].exists)
+    }
+
+    @MainActor
+    func testCouplesPosturePackageIsSelectable() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["postureMenu"].waitForExistence(timeout: 15))
+        app.buttons["postureMenu"].tap()
+        XCTAssertTrue(app.navigationBars["Posture packages"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["postureOption_CP1"].exists)
+        app.buttons["posturePackage_couples"].tap()
+
+        let couplePose = app.buttons["postureOption_CP1"]
+        for _ in 0..<16 where !couplePose.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(couplePose.isHittable)
+        couplePose.tap()
+        XCTAssertTrue(app.staticTexts["Close standing"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Stand close with your shoulders lightly touching. Turn both faces toward the camera and relax your outside arms."].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testFriendsGroupsPackageShowsAngleAndLighting() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["postureMenu"].waitForExistence(timeout: 15))
+        app.buttons["postureMenu"].tap()
+
+        let groupPackage = app.buttons["posturePackage_friendsGroups"]
+        for _ in 0..<6 where !groupPackage.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(groupPackage.isHittable)
+        groupPackage.tap()
+
+        let groupPose = app.buttons["postureOption_G1"]
+        XCTAssertTrue(groupPose.waitForExistence(timeout: 5))
+        groupPose.tap()
+        XCTAssertTrue(app.staticTexts["Shoulder-to-shoulder row"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended angle: Eye level"].exists)
+        XCTAssertTrue(app.staticTexts["Lighting: Broad, even light across every face"].exists)
+
+        let postureCard = app.descendants(matching: .any).matching(identifier: "activePostureCard").firstMatch
+        postureCard.tap()
+        XCTAssertTrue(app.staticTexts["Recommended camera angle: Eye level"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended lighting: Broad, even light across every face"].exists)
+    }
+
+    @MainActor
+    func testFamilyPackageIsSelectable() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["postureMenu"].waitForExistence(timeout: 15))
+        app.buttons["postureMenu"].tap()
+
+        let familyPackage = app.buttons["posturePackage_family"]
+        for _ in 0..<8 where !familyPackage.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(familyPackage.isHittable)
+        familyPackage.tap()
+
+        let familyPose = app.buttons["postureOption_FA1"]
+        XCTAssertTrue(familyPose.waitForExistence(timeout: 5))
+        familyPose.tap()
+        XCTAssertTrue(app.staticTexts["Family standing row"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended angle: Eye level"].exists)
+        XCTAssertTrue(app.staticTexts["Lighting: Broad, even light across every face"].exists)
+        XCTAssertTrue(app.staticTexts["Stand in one relaxed row with shorter family members near the center. Close the gaps gently and keep every face visible."].exists)
     }
 
     @MainActor
