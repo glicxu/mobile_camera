@@ -10,6 +10,7 @@ The initial catalog is now available in the native iOS app for testing:
 - Selecting the **Landscape** situation reveals a separate **Landscape** button; the people-oriented Posture button remains hidden.
 - The category-first chooser contains **Mountains**, **Lakes & Water**, **Plains & Fields**, and **Plants & Gardens**.
 - Each package contains six selectable composition recipes with photo references, for 24 recipes total.
+- Photo references use JPEG with a 720 px maximum long edge and a 95 KB export target, keeping every image below 100 KB. Run `tools/optimize_package_images.sh` after adding or replacing artwork.
 - Every recipe includes two framing cues, an automatically recommended camera angle, recommended light/time, and a location-specific safety note.
 - Selecting **Natural** turns off the creative composition recipe while retaining the app's live horizon and stability guidance.
 - The active recipe card can be tapped to open the full photo, lighting explanation, and safety note.

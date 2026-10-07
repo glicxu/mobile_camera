@@ -1,6 +1,6 @@
 {
   "images" : [
-    { "filename" : "pose-family-seated-cluster.png", "idiom" : "universal", "scale" : "1x" }
+    { "filename" : "pose-family-seated-cluster.jpg", "idiom" : "universal", "scale" : "1x" }
   ],
   "info" : { "author" : "xcode", "version" : 1 }
 }

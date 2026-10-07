@@ -1,6 +1,6 @@
 {
   "images" : [
-    { "filename" : "pose-family-side-hug.png", "idiom" : "universal", "scale" : "1x" }
+    { "filename" : "pose-family-side-hug.jpg", "idiom" : "universal", "scale" : "1x" }
   ],
   "info" : { "author" : "xcode", "version" : 1 }
 }

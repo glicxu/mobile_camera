@@ -145,20 +145,43 @@ final class CoachingEngineTests: XCTestCase {
         let subject = Advice(type: "face_too_profile", recipient: "Subject", instruction: "Turn left", tone: .warning)
         XCTAssertNotEqual(camera.directionSymbol, subject.directionSymbol)
     }
-    func testGuidanceCatalogHasFivePackagesFortyPosesAndFiveCameraPositions() {
-        XCTAssertEqual(Set(GuidedPose.allCases.map(\.id)).count, 40)
+    func testGuidanceCatalogHasElevenPackagesSeventySixPosesAndFiveCameraPositions() {
+        XCTAssertEqual(GuidedPoseCollectionID.allCases.count, 11)
+        XCTAssertEqual(Set(GuidedPose.allCases.map(\.id)).count, 76)
         XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .masculine }.count, 9)
         XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .feminine }.count, 13)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .professional }.count, 6)
         XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .couples }.count, 6)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .weddingEngagement }.count, 6)
         XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .friendsGroups }.count, 6)
         XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .family }.count, 6)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .graduation }.count, 6)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .maternity }.count, 6)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .kids }.count, 6)
+        XCTAssertEqual(GuidedPose.allCases.filter { $0.package == .newborn }.count, 6)
         XCTAssertEqual(Set(GuidedCameraPosition.allCases.map(\.id)).count, 5)
         for pose in GuidedPose.allCases {
             XCTAssertEqual(pose.steps.count, 2)
             XCTAssertFalse(pose.symbol.isEmpty)
             XCTAssertFalse(pose.instruction.isEmpty)
             XCTAssertFalse(pose.exampleAssetName.isEmpty)
-            let expectedRecipient = pose.package == .couples ? "Couple" : (pose.package == .friendsGroups ? "Group" : (pose.package == .family ? "Family" : "Subject"))
+            let maternityCouplePoses: Set<GuidedPose> = [.maternityHusbandEmbrace, .maternityHusbandWalk, .maternityHusbandFaceToFace]
+            let expectedRecipient: String
+            if pose.package == .couples || pose.package == .weddingEngagement || maternityCouplePoses.contains(pose) {
+                expectedRecipient = "Couple"
+            } else if pose.package == .friendsGroups {
+                expectedRecipient = "Group"
+            } else if pose.package == .family {
+                expectedRecipient = "Family"
+            } else if pose.package == .newborn {
+                expectedRecipient = "Caregiver"
+            } else if pose == .kidsSiblingSideHug {
+                expectedRecipient = "Children"
+            } else if pose.package == .kids {
+                expectedRecipient = "Child"
+            } else {
+                expectedRecipient = "Subject"
+            }
             XCTAssertTrue(pose.steps.allSatisfy { $0.recipient == expectedRecipient && !$0.instruction.isEmpty })
             XCTAssertFalse(pose.recommendedCameraAngle.title.isEmpty)
             XCTAssertFalse(pose.recommendedLighting.title.isEmpty)
@@ -182,6 +205,29 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertEqual(GuidedPose.overShoulder.recommendedCameraAngle, .side)
         XCTAssertEqual(GuidedPose.walking.recommendedLighting, .openShade)
         XCTAssertEqual(GuidedPose.groupShoulderRow.recommendedLighting, .broadEven)
+        XCTAssertEqual(GuidedPose.graduationCapToss.recommendedCameraAngle, .low)
+        XCTAssertEqual(GuidedPose.graduationCapToss.recommendedLighting, .goldenHour)
+        XCTAssertTrue(GuidedPose.graduationCapToss.cues.first?.contains("feet grounded") == true)
+        XCTAssertEqual(GuidedPose.maternitySeatedSupport.recommendedCameraAngle, .slightlyHigh)
+        XCTAssertEqual(GuidedPose.maternitySideProfile.recommendedLighting, .openShade)
+        XCTAssertEqual(GuidedPose.maternityHusbandWalk.recommendedLighting, .goldenHour)
+        XCTAssertTrue(GuidedPose.maternityHusbandWalk.cues.first?.contains("slow step") == true)
+        XCTAssertEqual(GuidedPose.kidsSuperhero.recommendedCameraAngle, .low)
+        XCTAssertTrue(GuidedPose.kidsSuperhero.cues.last?.contains("feet grounded") == true)
+        XCTAssertTrue(GuidedPose.kidsPeekAround.cues.first?.contains("without climbing") == true)
+        XCTAssertEqual(GuidedPose.newbornSafeBack.category, .lying)
+        XCTAssertEqual(GuidedPose.newbornSafeBack.recommendedCameraAngle, .overhead)
+        XCTAssertTrue(GuidedPose.newbornSafeBack.cues.first?.contains("on their back") == true)
+        XCTAssertTrue(GuidedPose.newbornSeatedCradle.cues.first?.contains("head, neck, and body support") == true)
+        XCTAssertEqual(GuidedPose.professionalClassicHeadshot.recommendedCameraAngle, .eyeLevel)
+        XCTAssertEqual(GuidedPose.professionalThreeQuarter.recommendedLighting, .softSide)
+        XCTAssertEqual(GuidedPose.professionalSeatedForward.recommendedCameraAngle, .slightlyHigh)
+        XCTAssertEqual(GuidedPose.professionalEnvironmental.setting, .indoor)
+        XCTAssertEqual(GuidedPose.weddingProposalReaction.recommendedCameraAngle, .side)
+        XCTAssertEqual(GuidedPose.weddingProposalReaction.recommendedLighting, .goldenHour)
+        XCTAssertEqual(GuidedPose.weddingProposalReaction.category, .kneeling)
+        XCTAssertEqual(GuidedPose.weddingCelebrationWalk.recommendedCameraAngle, .low)
+        XCTAssertTrue(GuidedPose.weddingProposalReaction.cues.first?.contains("flat, clear surface") == true)
     }
 
     func testLandscapeCatalogHasFourCompletePackagesAndTwentyFourRecipes() {

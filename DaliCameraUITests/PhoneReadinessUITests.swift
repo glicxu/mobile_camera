@@ -281,6 +281,174 @@ final class PhoneReadinessUITests: XCTestCase {
     }
 
     @MainActor
+    func testGraduationPackageIsSelectableAndKeepsCapTossGrounded() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["postureMenu"].waitForExistence(timeout: 15))
+        app.buttons["postureMenu"].tap()
+
+        let graduationPackage = app.buttons["posturePackage_graduation"]
+        for _ in 0..<10 where !graduationPackage.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(graduationPackage.isHittable)
+        graduationPackage.tap()
+
+        let capToss = app.buttons["postureOption_GR6"]
+        for _ in 0..<10 where !capToss.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(capToss.isHittable)
+        capToss.tap()
+        XCTAssertTrue(app.staticTexts["Cap toss"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended angle: Low angle"].exists)
+        XCTAssertTrue(app.staticTexts["Lighting: Soft golden-hour light"].exists)
+        let safetyCue = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Keep both feet grounded")
+        ).firstMatch
+        XCTAssertTrue(safetyCue.exists)
+    }
+
+    @MainActor
+    func testMaternityPackageIncludesComfortFirstHusbandPose() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["postureMenu"].waitForExistence(timeout: 15))
+        app.buttons["postureMenu"].tap()
+
+        let maternityPackage = app.buttons["posturePackage_maternity"]
+        for _ in 0..<12 where !maternityPackage.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(maternityPackage.isHittable)
+        maternityPackage.tap()
+
+        let husbandWalk = app.buttons["postureOption_MT5"]
+        for _ in 0..<10 where !husbandWalk.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(husbandWalk.isHittable)
+        husbandWalk.tap()
+        XCTAssertTrue(app.staticTexts["Walk with husband"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended angle: Eye level"].exists)
+        XCTAssertTrue(app.staticTexts["Lighting: Soft golden-hour light"].exists)
+        let comfortCue = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Hold hands and take one small, slow step")
+        ).firstMatch
+        XCTAssertTrue(comfortCue.exists)
+    }
+
+    @MainActor
+    func testKidsPackageKeepsSuperheroPoseGrounded() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["postureMenu"].waitForExistence(timeout: 15))
+        app.buttons["postureMenu"].tap()
+
+        let kidsPackage = app.buttons["posturePackage_kids"]
+        for _ in 0..<16 where !kidsPackage.isHittable { app.swipeUp() }
+        XCTAssertTrue(kidsPackage.isHittable)
+        kidsPackage.tap()
+
+        let superhero = app.buttons["postureOption_K5"]
+        for _ in 0..<10 where !superhero.isHittable { app.swipeUp() }
+        XCTAssertTrue(superhero.isHittable)
+        superhero.tap()
+        XCTAssertTrue(app.staticTexts["Superhero stance"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended angle: Low angle"].exists)
+        let stableCue = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Plant both feet comfortably wide")
+        ).firstMatch
+        XCTAssertTrue(stableCue.waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testNewbornPackageUsesSafeBackPoseAndCaregiverCoaching() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["postureMenu"].waitForExistence(timeout: 15))
+        app.buttons["postureMenu"].tap()
+
+        let newbornPackage = app.buttons["posturePackage_newborn"]
+        for _ in 0..<18 where !newbornPackage.isHittable { app.swipeUp() }
+        XCTAssertTrue(newbornPackage.isHittable)
+        newbornPackage.tap()
+
+        let safeBack = app.buttons["postureOption_NB1"]
+        XCTAssertTrue(safeBack.waitForExistence(timeout: 5))
+        safeBack.tap()
+        XCTAssertTrue(app.staticTexts["Safe back pose"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended angle: Overhead"].exists)
+        let safeCue = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Place the baby on their back")
+        ).firstMatch
+        XCTAssertTrue(safeCue.exists)
+    }
+
+    @MainActor
+    func testProfessionalPackageShowsHeadshotGuidance() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["postureMenu"].waitForExistence(timeout: 15))
+        app.buttons["postureMenu"].tap()
+
+        let professionalPackage = app.buttons["posturePackage_professional"]
+        for _ in 0..<6 where !professionalPackage.isHittable { app.swipeUp() }
+        XCTAssertTrue(professionalPackage.isHittable)
+        professionalPackage.tap()
+
+        let classicHeadshot = app.buttons["postureOption_PR1"]
+        XCTAssertTrue(classicHeadshot.waitForExistence(timeout: 5))
+        classicHeadshot.tap()
+        XCTAssertTrue(app.staticTexts["Classic headshot"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended angle: Eye level"].exists)
+        XCTAssertTrue(app.staticTexts["Lighting: Soft, even front light"].exists)
+        XCTAssertTrue(app.staticTexts["Turn your shoulders slightly away from the camera. Bring your face back toward the lens and relax your jaw."].exists)
+    }
+
+    @MainActor
+    func testWeddingPackageShowsStableProposalGuidance() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["postureMenu"].waitForExistence(timeout: 15))
+        app.buttons["postureMenu"].tap()
+
+        let weddingPackage = app.buttons["posturePackage_weddingEngagement"]
+        for _ in 0..<10 where !weddingPackage.isHittable { app.swipeUp() }
+        XCTAssertTrue(weddingPackage.isHittable)
+        weddingPackage.tap()
+
+        let proposal = app.buttons["postureOption_WE3"]
+        XCTAssertTrue(proposal.waitForExistence(timeout: 5))
+        proposal.tap()
+        XCTAssertTrue(app.staticTexts["One-knee proposal"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended angle: From the side"].exists)
+        XCTAssertTrue(app.staticTexts["Lighting: Soft golden-hour light"].exists)
+        let stableProposalCue = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "On a flat, clear surface, lower onto one knee")
+        ).firstMatch
+        XCTAssertTrue(stableProposalCue.exists)
+    }
+
+    @MainActor
     func testLargeTextKeepsShutterAndHelpReachable() {
         allowCameraPrompt()
         let app = XCUIApplication()

@@ -559,9 +559,15 @@ struct ContentView: View {
         switch package {
         case .masculine: return "relaxed and structured solo poses"
         case .feminine: return "soft and expressive solo poses"
+        case .professional: return "headshots, profiles, and workplace portraits"
         case .couples: return "coordinated two-person poses"
+        case .weddingEngagement: return "rings, ceremony moments, dance, and celebration"
         case .friendsGroups: return "natural poses for three or more people"
         case .family: return "warm poses across ages and generations"
+        case .graduation: return "diploma, cap, gown, and celebration poses"
+        case .maternity: return "comfort-first solo and husband poses"
+        case .kids: return "short, playful, grounded child and sibling poses"
+        case .newborn: return "caregiver-supported and safe back-position photos"
         }
     }
 

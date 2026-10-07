@@ -72,25 +72,29 @@ struct GuidedStep: Equatable {
 }
 
 enum PoseCategory: String, CaseIterable, Identifiable {
-    case standing, seated, moving, turned, handsHair
+    case standing, seated, kneeling, moving, turned, handsHair, lying
 
     var id: String { rawValue }
     var title: String {
         switch self {
         case .standing: return "Standing"
         case .seated: return "Seated"
+        case .kneeling: return "Kneeling"
         case .moving: return "Moving"
         case .turned: return "Turned / Looking Away"
-        case .handsHair: return "Hands & Hair"
+        case .handsHair: return "Hands & Details"
+        case .lying: return "Lying Safely"
         }
     }
     var symbol: String {
         switch self {
         case .standing: return "figure.stand"
         case .seated: return "figure.seated.side"
+        case .kneeling: return "figure.strengthtraining.traditional"
         case .moving: return "figure.walk"
         case .turned: return "arrow.uturn.right"
         case .handsHair: return "hand.raised"
+        case .lying: return "bed.double"
         }
     }
 }
@@ -141,16 +145,22 @@ enum PoseLightingRecommendation: String, CaseIterable, Identifiable {
 }
 
 enum GuidedPoseCollectionID: String, CaseIterable, Identifiable {
-    case masculine, feminine, couples, friendsGroups, family
+    case masculine, feminine, professional, couples, weddingEngagement, friendsGroups, family, graduation, maternity, kids, newborn
 
     var id: String { rawValue }
     var title: String {
         switch self {
         case .masculine: return "Male / Masculine"
         case .feminine: return "Female / Feminine"
+        case .professional: return "Professional / Headshot"
         case .couples: return "Couples"
+        case .weddingEngagement: return "Wedding / Engagement"
         case .friendsGroups: return "Friends / Groups"
         case .family: return "Family"
+        case .graduation: return "Graduation"
+        case .maternity: return "Maternity"
+        case .kids: return "Kids"
+        case .newborn: return "Newborn"
         }
     }
 }
@@ -175,12 +185,36 @@ enum GuidedPose: String, CaseIterable, Identifiable {
     case familyStandingRow = "FA1", familySideHug = "FA2"
     case familySeatedCluster = "FA3", familyWalking = "FA4"
     case familyGenerations = "FA5", familySharedLaugh = "FA6"
+    case graduationDiplomaCentered = "GR1", graduationAdjustCap = "GR2"
+    case graduationSeated = "GR3", graduationWalk = "GR4"
+    case graduationOverShoulder = "GR5", graduationCapToss = "GR6"
+    case maternityBellyCradle = "MT1", maternitySideProfile = "MT2"
+    case maternitySeatedSupport = "MT3", maternityHusbandEmbrace = "MT4"
+    case maternityHusbandWalk = "MT5", maternityHusbandFaceToFace = "MT6"
+    case kidsBigSmile = "K1", kidsComfortableSeated = "K2"
+    case kidsSlowWalk = "K3", kidsPeekAround = "K4"
+    case kidsSuperhero = "K5", kidsSiblingSideHug = "K6"
+    case newbornSafeBack = "NB1", newbornCaregiverNearby = "NB2"
+    case newbornSeatedCradle = "NB3", newbornShoulderSupport = "NB4"
+    case newbornParentsSeated = "NB5", newbornHandsFeetDetail = "NB6"
+    case professionalClassicHeadshot = "PR1", professionalThreeQuarter = "PR2"
+    case professionalSeatedForward = "PR3", professionalArmsCrossed = "PR4"
+    case professionalOpenStanding = "PR5", professionalEnvironmental = "PR6"
+    case weddingFormalSideBySide = "WE1", weddingRingReveal = "WE2"
+    case weddingProposalReaction = "WE3", weddingRingExchange = "WE4"
+    case weddingFirstDance = "WE5", weddingCelebrationWalk = "WE6"
 
     var id: String { rawValue }
     var package: GuidedPoseCollectionID {
         if rawValue.hasPrefix("CP") { return .couples }
         if rawValue.hasPrefix("FA") { return .family }
+        if rawValue.hasPrefix("GR") { return .graduation }
+        if rawValue.hasPrefix("MT") { return .maternity }
+        if rawValue.hasPrefix("NB") { return .newborn }
+        if rawValue.hasPrefix("PR") { return .professional }
+        if rawValue.hasPrefix("WE") { return .weddingEngagement }
         if rawValue.hasPrefix("G") { return .friendsGroups }
+        if rawValue.hasPrefix("K") { return .kids }
         return rawValue.hasPrefix("M") ? .masculine : .feminine
     }
     var title: String {
@@ -222,6 +256,42 @@ enum GuidedPose: String, CaseIterable, Identifiable {
         case .familyWalking: return "Walking hand in hand"
         case .familyGenerations: return "Generations together"
         case .familySharedLaugh: return "Shared family laugh"
+        case .graduationDiplomaCentered: return "Diploma centered"
+        case .graduationAdjustCap: return "Adjust the cap"
+        case .graduationSeated: return "Seated with diploma"
+        case .graduationWalk: return "Graduation walk"
+        case .graduationOverShoulder: return "Over-shoulder graduate"
+        case .graduationCapToss: return "Cap toss"
+        case .maternityBellyCradle: return "Belly cradle"
+        case .maternitySideProfile: return "Side profile"
+        case .maternitySeatedSupport: return "Comfortable seated"
+        case .maternityHusbandEmbrace: return "Embrace with husband"
+        case .maternityHusbandWalk: return "Walk with husband"
+        case .maternityHusbandFaceToFace: return "Face-to-face with husband"
+        case .kidsBigSmile: return "Big smile"
+        case .kidsComfortableSeated: return "Comfortable seated"
+        case .kidsSlowWalk: return "Slow walk"
+        case .kidsPeekAround: return "Peek around"
+        case .kidsSuperhero: return "Superhero stance"
+        case .kidsSiblingSideHug: return "Sibling side hug"
+        case .newbornSafeBack: return "Safe back pose"
+        case .newbornCaregiverNearby: return "Caregiver nearby"
+        case .newbornSeatedCradle: return "Seated cradle"
+        case .newbornShoulderSupport: return "Shoulder support"
+        case .newbornParentsSeated: return "Parents seated together"
+        case .newbornHandsFeetDetail: return "Hands and feet detail"
+        case .professionalClassicHeadshot: return "Classic headshot"
+        case .professionalThreeQuarter: return "Three-quarter professional"
+        case .professionalSeatedForward: return "Seated forward"
+        case .professionalArmsCrossed: return "Relaxed arms crossed"
+        case .professionalOpenStanding: return "Open standing"
+        case .professionalEnvironmental: return "Workplace portrait"
+        case .weddingFormalSideBySide: return "Formal side by side"
+        case .weddingRingReveal: return "Ring reveal"
+        case .weddingProposalReaction: return "One-knee proposal"
+        case .weddingRingExchange: return "Exchange rings"
+        case .weddingFirstDance: return "First dance"
+        case .weddingCelebrationWalk: return "Celebration walk"
         }
     }
 
@@ -255,6 +325,31 @@ enum GuidedPose: String, CaseIterable, Identifiable {
         case .familyStandingRow, .familySideHug, .familyGenerations, .familySharedLaugh: return "figure.and.child.holdinghands"
         case .familyWalking: return "figure.walk"
         case .familySeatedCluster: return "figure.seated.side"
+        case .graduationDiplomaCentered, .graduationAdjustCap, .graduationOverShoulder: return "graduationcap.fill"
+        case .graduationSeated: return "figure.seated.side"
+        case .graduationWalk: return "figure.walk"
+        case .graduationCapToss: return "graduationcap.fill"
+        case .maternityBellyCradle, .maternitySideProfile: return "figure.stand"
+        case .maternitySeatedSupport: return "figure.seated.side"
+        case .maternityHusbandEmbrace, .maternityHusbandFaceToFace: return "figure.2"
+        case .maternityHusbandWalk: return "figure.walk"
+        case .kidsBigSmile, .kidsSuperhero: return "figure.stand"
+        case .kidsComfortableSeated: return "figure.seated.side"
+        case .kidsSlowWalk: return "figure.walk"
+        case .kidsPeekAround: return "eyes"
+        case .kidsSiblingSideHug: return "figure.2"
+        case .newbornSafeBack, .newbornCaregiverNearby, .newbornHandsFeetDetail: return "bed.double"
+        case .newbornSeatedCradle, .newbornShoulderSupport: return "figure.seated.side"
+        case .newbornParentsSeated: return "figure.2"
+        case .professionalClassicHeadshot: return "person.crop.square"
+        case .professionalThreeQuarter, .professionalEnvironmental: return "person.crop.rectangle"
+        case .professionalSeatedForward: return "figure.seated.side"
+        case .professionalArmsCrossed: return "figure.arms.open"
+        case .professionalOpenStanding: return "figure.stand"
+        case .weddingFormalSideBySide, .weddingFirstDance: return "figure.2"
+        case .weddingProposalReaction: return "figure.strengthtraining.traditional"
+        case .weddingRingReveal, .weddingRingExchange: return "hands.clap"
+        case .weddingCelebrationWalk: return "figure.walk"
         }
     }
 
@@ -297,6 +392,42 @@ enum GuidedPose: String, CaseIterable, Identifiable {
         case .familyWalking: return ["Hold hands with the youngest family member in the center.", "Take one slow step together and look toward one another."]
         case .familyGenerations: return ["Seat one family member near the center and arrange the others close behind and beside them.", "Angle everyone inward and keep every face unobstructed."]
         case .familySharedLaugh: return ["Stand in a loose cluster and turn gently toward one another.", "Share a small laugh while keeping every face visible."]
+        case .graduationDiplomaCentered: return ["Hold the diploma folder with both hands at mid-torso.", "Stand tall and relax your shoulders."]
+        case .graduationAdjustCap: return ["Turn slightly and touch the edge of your cap with relaxed fingertips.", "Hold the diploma at your side and bring your face back toward the camera."]
+        case .graduationSeated: return ["Sit upright with your body angled slightly.", "Rest the diploma across one thigh and keep both feet comfortably planted."]
+        case .graduationWalk: return ["Hold the diploma at your side and take one slow step.", "Look toward the camera and let the gown move naturally."]
+        case .graduationOverShoulder: return ["Turn partly away with the diploma held low at your side.", "Look back over your shoulder comfortably."]
+        case .graduationCapToss: return ["Keep both feet grounded and gently toss the cap just above your hand.", "Follow the cap with your eyes while holding the diploma at your side."]
+        case .maternityBellyCradle: return ["Stand with both feet comfortably apart and soften your shoulders.", "Rest one hand above and one hand below your belly."]
+        case .maternitySideProfile: return ["Turn to the side with both feet flat and your posture comfortable.", "Cradle your belly lightly and turn your face a little toward the camera."]
+        case .maternitySeatedSupport: return ["Sit near the front of a sturdy seat with both feet planted.", "Angle your body slightly and rest your hands comfortably around your belly."]
+        case .maternityHusbandEmbrace: return ["Have your husband stand just behind and to one side with both of you balanced.", "Rest your hands gently around the belly and turn your faces toward each other."]
+        case .maternityHusbandWalk: return ["Hold hands and take one small, slow step together on level ground.", "Look toward each other and keep the expecting parent's free hand comfortable."]
+        case .maternityHusbandFaceToFace: return ["Stand face-to-face with both feet planted and shoulders relaxed.", "Let your husband rest his hands gently on your upper arms and bring your foreheads close if comfortable."]
+        case .kidsBigSmile: return ["Stand with both feet comfortably apart and place your hands loosely behind your back.", "Look toward the camera and share a smile that feels natural."]
+        case .kidsComfortableSeated: return ["Sit near the front of a sturdy seat with both feet flat.", "Rest your hands loosely together and turn your face toward the camera."]
+        case .kidsSlowWalk: return ["Take one small, slow step toward the camera on clear, level ground.", "Let your arms swing naturally and look toward the camera."]
+        case .kidsPeekAround: return ["Keep both feet on the ground and peek around the side without climbing.", "Touch the surface lightly and keep your whole face visible."]
+        case .kidsSuperhero: return ["Plant both feet comfortably wide and place your hands on your hips.", "Keep both feet grounded, lift your chin slightly, and give a proud smile."]
+        case .kidsSiblingSideHug: return ["Stand side by side with both sets of feet steady.", "Add a gentle side hug if comfortable and keep both faces visible."]
+        case .newbornSafeBack: return ["Place the baby on their back in an empty safety-approved bassinet with a fitted sheet only.", "Keep the face uncovered and photograph from outside the bassinet."]
+        case .newbornCaregiverNearby: return ["Keep the baby on their back on a firm, flat crib mattress with a caregiver within reach.", "Let the baby move naturally without repositioning the head or limbs."]
+        case .newbornSeatedCradle: return ["Sit securely and cradle the baby with continuous head, neck, and body support.", "Keep the face and nose clear while you look gently toward the baby."]
+        case .newbornShoulderSupport: return ["Sit securely and support the upright baby's head and neck with one hand and body with the other.", "Keep the baby's face turned outward enough that the nose and mouth stay clear."]
+        case .newbornParentsSeated: return ["Sit together while one parent cradles the baby with full head and neck support.", "Have the other parent lean in gently while keeping every face visible."]
+        case .newbornHandsFeetDetail: return ["Keep the baby on their back on a firm, flat crib mattress with a caregiver within reach.", "Frame the hands and covered feet without holding or bending the baby's limbs."]
+        case .professionalClassicHeadshot: return ["Turn your shoulders slightly away from the camera.", "Bring your face back toward the lens and relax your jaw."]
+        case .professionalThreeQuarter: return ["Turn your body about one-third away from the camera.", "Bring your face back toward the lens and keep both shoulders relaxed."]
+        case .professionalSeatedForward: return ["Sit near the front of the chair and lean forward slightly.", "Rest your forearms lightly on your thighs and keep your hands relaxed."]
+        case .professionalArmsCrossed: return ["Cross your arms loosely at mid-torso.", "Lower your shoulders and keep your fingers visible and relaxed."]
+        case .professionalOpenStanding: return ["Stand tall with your feet comfortably apart.", "Let both arms rest naturally and keep your shoulders open."]
+        case .professionalEnvironmental: return ["Turn your body slightly toward the workspace.", "Rest one hand lightly on a nearby surface and bring your face back toward the camera."]
+        case .weddingFormalSideBySide: return ["Stand side by side with your shoulders lightly touching.", "Join your inside hands at waist height and turn both faces toward the camera."]
+        case .weddingRingReveal: return ["Angle toward each other and bring the ring hand naturally to mid-torso.", "Keep the ring hand relaxed and both faces visible."]
+        case .weddingProposalReaction: return ["On a flat, clear surface, lower onto one knee with your front foot planted.", "Hold the open ring box at mid-torso and turn both faces enough for the camera to see."]
+        case .weddingRingExchange: return ["Face each other and center your hands comfortably between you.", "Slide the ring on gently while keeping both faces visible."]
+        case .weddingFirstDance: return ["Stand in a comfortable dance hold with both feet grounded.", "Keep your joined hands visible and angle both faces slightly toward the camera."]
+        case .weddingCelebrationWalk: return ["Hold hands and take one slow step together.", "Look toward each other and carry any bouquet low at the outside hip."]
         }
     }
 
@@ -306,23 +437,45 @@ enum GuidedPose: String, CaseIterable, Identifiable {
              .armsCrossedMasculine, .wallLeanMasculine, .armsCrossedFeminine, .wallLeanFeminine,
              .coupleCloseStanding, .coupleArmAroundWaist, .coupleBackToBack, .coupleForeheadTouch,
              .groupShoulderRow, .groupStaggered, .groupCelebration,
-             .familyStandingRow, .familySideHug:
+             .familyStandingRow, .familySideHug, .graduationDiplomaCentered,
+             .maternityBellyCradle, .maternityHusbandEmbrace, .maternityHusbandFaceToFace,
+             .kidsBigSmile, .kidsSuperhero, .kidsSiblingSideHug,
+             .professionalClassicHeadshot, .professionalArmsCrossed, .professionalOpenStanding,
+             .weddingFormalSideBySide, .weddingFirstDance:
             return .standing
+        case .weddingProposalReaction:
+            return .kneeling
         case .seatedLean, .seatedAngle, .seatedSidewaysMasculine, .seatedSidewaysFeminine, .coupleSeated,
-             .groupSeatedCluster, .familySeatedCluster, .familyGenerations:
+             .groupSeatedCluster, .familySeatedCluster, .familyGenerations, .graduationSeated,
+             .maternitySeatedSupport, .kidsComfortableSeated, .newbornSeatedCradle,
+             .newbornShoulderSupport, .newbornParentsSeated, .professionalSeatedForward:
             return .seated
-        case .walking, .walkingTurnFeminine, .coupleWalking, .groupLinkedWalk, .familyWalking:
+        case .walking, .walkingTurnFeminine, .coupleWalking, .groupLinkedWalk, .familyWalking,
+             .graduationWalk, .graduationCapToss, .maternityHusbandWalk, .kidsSlowWalk,
+             .weddingCelebrationWalk:
             return .moving
-        case .threeQuarter, .overShoulder, .lookAwayMasculine, .groupConversation, .familySharedLaugh:
+        case .threeQuarter, .overShoulder, .lookAwayMasculine, .groupConversation, .familySharedLaugh,
+             .graduationOverShoulder, .maternitySideProfile, .kidsPeekAround,
+             .professionalThreeQuarter, .professionalEnvironmental:
             return .turned
-        case .hairSweepFeminine, .handNearCheekFeminine, .armAcrossWaistFeminine, .handsClaspedFeminine:
+        case .hairSweepFeminine, .handNearCheekFeminine, .armAcrossWaistFeminine, .handsClaspedFeminine,
+             .graduationAdjustCap, .weddingRingReveal, .weddingRingExchange:
             return .handsHair
+        case .newbornSafeBack, .newbornCaregiverNearby, .newbornHandsFeetDetail:
+            return .lying
         }
     }
 
     var setting: PoseSetting {
         switch self {
-        case .walking, .walkingTurnFeminine, .coupleWalking, .groupLinkedWalk, .familyWalking: return .outdoor
+        case .walking, .walkingTurnFeminine, .coupleWalking, .groupLinkedWalk, .familyWalking,
+             .graduationWalk, .graduationCapToss, .maternityHusbandWalk, .kidsSlowWalk,
+             .kidsPeekAround, .weddingProposalReaction, .weddingCelebrationWalk: return .outdoor
+        case .newbornSafeBack, .newbornCaregiverNearby, .newbornSeatedCradle,
+             .newbornShoulderSupport, .newbornParentsSeated, .newbornHandsFeetDetail,
+             .professionalClassicHeadshot, .professionalThreeQuarter, .professionalSeatedForward,
+             .professionalArmsCrossed, .professionalOpenStanding, .professionalEnvironmental,
+             .weddingRingReveal, .weddingFirstDance: return .indoor
         default: return .both
         }
     }
@@ -330,37 +483,64 @@ enum GuidedPose: String, CaseIterable, Identifiable {
     /// Every posture asset includes a useful starting viewpoint. The user can still override it.
     var recommendedCameraAngle: CameraAngleChoice {
         switch self {
-        case .walking, .walkingTurnFeminine, .footForward, .coupleWalking, .groupLinkedWalk, .familyWalking: return .low
+        case .walking, .walkingTurnFeminine, .footForward, .coupleWalking, .groupLinkedWalk, .familyWalking,
+             .graduationWalk, .graduationCapToss, .kidsSuperhero, .weddingCelebrationWalk: return .low
         case .seatedAngle, .coupleSeated, .groupStaggered, .groupSeatedCluster, .groupCelebration,
-             .familySeatedCluster, .familyGenerations: return .slightlyHigh
-        case .overShoulder, .lookAwayMasculine: return .side
+             .familySeatedCluster, .familyGenerations, .graduationSeated, .maternitySeatedSupport,
+             .professionalSeatedForward: return .slightlyHigh
+        case .overShoulder, .lookAwayMasculine, .graduationOverShoulder, .maternitySideProfile,
+             .kidsPeekAround, .weddingProposalReaction: return .side
+        case .newbornSafeBack, .newbornCaregiverNearby, .newbornHandsFeetDetail: return .overhead
         case .relaxedStanding, .threeQuarter, .handInPocket, .seatedLean,
              .seatedSidewaysMasculine, .weightShift, .handAtWaist,
              .armsCrossedMasculine, .wallLeanMasculine, .armsCrossedFeminine, .wallLeanFeminine,
              .hairSweepFeminine, .handNearCheekFeminine, .armAcrossWaistFeminine, .handsClaspedFeminine,
              .seatedSidewaysFeminine, .coupleCloseStanding, .coupleArmAroundWaist, .coupleBackToBack,
              .coupleForeheadTouch, .groupShoulderRow, .groupConversation,
-             .familyStandingRow, .familySideHug, .familySharedLaugh:
+             .familyStandingRow, .familySideHug, .familySharedLaugh,
+             .graduationDiplomaCentered, .graduationAdjustCap, .maternityBellyCradle,
+             .maternityHusbandEmbrace, .maternityHusbandWalk, .maternityHusbandFaceToFace,
+             .kidsBigSmile, .kidsComfortableSeated, .kidsSlowWalk, .kidsSiblingSideHug,
+             .newbornSeatedCradle, .newbornShoulderSupport, .newbornParentsSeated,
+             .professionalClassicHeadshot, .professionalThreeQuarter, .professionalArmsCrossed,
+             .professionalOpenStanding, .professionalEnvironmental, .weddingFormalSideBySide,
+             .weddingRingReveal, .weddingRingExchange, .weddingFirstDance:
             return .eyeLevel
         }
     }
 
     var recommendedLighting: PoseLightingRecommendation {
         switch self {
-        case .walking, .walkingTurnFeminine, .coupleWalking, .groupLinkedWalk, .familyWalking:
+        case .walking, .walkingTurnFeminine, .coupleWalking, .groupLinkedWalk, .familyWalking,
+             .kidsSlowWalk, .kidsPeekAround:
             return .openShade
-        case .overShoulder, .lookAwayMasculine, .hairSweepFeminine, .handNearCheekFeminine:
+        case .graduationWalk, .graduationCapToss:
+            return .goldenHour
+        case .maternityHusbandWalk, .weddingProposalReaction, .weddingCelebrationWalk:
+            return .goldenHour
+        case .overShoulder, .lookAwayMasculine, .hairSweepFeminine, .handNearCheekFeminine,
+             .graduationOverShoulder, .maternityHusbandFaceToFace, .newbornHandsFeetDetail,
+             .professionalThreeQuarter, .professionalEnvironmental, .weddingFirstDance:
             return .softSide
         case .coupleCloseStanding, .coupleArmAroundWaist, .coupleBackToBack, .coupleSeated, .coupleForeheadTouch:
             return .softEven
         case .groupShoulderRow, .groupStaggered, .groupSeatedCluster, .groupCelebration, .groupConversation,
-             .familyStandingRow, .familySeatedCluster, .familyGenerations, .familySharedLaugh:
+             .familyStandingRow, .familySeatedCluster, .familyGenerations, .familySharedLaugh,
+             .kidsSiblingSideHug, .newbornParentsSeated:
             return .broadEven
         case .relaxedStanding, .threeQuarter, .handInPocket, .weightShift, .handAtWaist,
              .seatedLean, .footForward, .seatedAngle, .armsCrossedMasculine, .wallLeanMasculine,
              .seatedSidewaysMasculine, .armsCrossedFeminine, .wallLeanFeminine, .seatedSidewaysFeminine,
-             .armAcrossWaistFeminine, .handsClaspedFeminine, .familySideHug:
+             .armAcrossWaistFeminine, .handsClaspedFeminine, .familySideHug,
+             .graduationDiplomaCentered, .graduationAdjustCap, .graduationSeated,
+             .maternityBellyCradle, .maternitySeatedSupport, .maternityHusbandEmbrace,
+             .kidsBigSmile, .kidsComfortableSeated, .kidsSuperhero,
+             .newbornSafeBack, .newbornCaregiverNearby, .newbornSeatedCradle, .newbornShoulderSupport,
+             .professionalClassicHeadshot, .professionalSeatedForward, .professionalArmsCrossed,
+             .professionalOpenStanding, .weddingRingReveal, .weddingRingExchange:
             return .softEven
+        case .maternitySideProfile, .weddingFormalSideBySide:
+            return .openShade
         }
     }
 
@@ -408,22 +588,77 @@ enum GuidedPose: String, CaseIterable, Identifiable {
         case .familyWalking: return "PoseFamilyWalking"
         case .familyGenerations: return "PoseFamilyGenerations"
         case .familySharedLaugh: return "PoseFamilySharedLaugh"
+        case .graduationDiplomaCentered: return "PoseGraduationDiplomaCentered"
+        case .graduationAdjustCap: return "PoseGraduationAdjustCap"
+        case .graduationSeated: return "PoseGraduationSeated"
+        case .graduationWalk: return "PoseGraduationWalk"
+        case .graduationOverShoulder: return "PoseGraduationOverShoulder"
+        case .graduationCapToss: return "PoseGraduationCapToss"
+        case .maternityBellyCradle: return "PoseMaternityBellyCradle"
+        case .maternitySideProfile: return "PoseMaternitySideProfile"
+        case .maternitySeatedSupport: return "PoseMaternitySeatedSupport"
+        case .maternityHusbandEmbrace: return "PoseMaternityHusbandEmbrace"
+        case .maternityHusbandWalk: return "PoseMaternityHusbandWalk"
+        case .maternityHusbandFaceToFace: return "PoseMaternityHusbandFaceToFace"
+        case .kidsBigSmile: return "PoseKidsBigSmile"
+        case .kidsComfortableSeated: return "PoseKidsComfortableSeated"
+        case .kidsSlowWalk: return "PoseKidsSlowWalk"
+        case .kidsPeekAround: return "PoseKidsPeekAround"
+        case .kidsSuperhero: return "PoseKidsSuperhero"
+        case .kidsSiblingSideHug: return "PoseKidsSiblingSideHug"
+        case .newbornSafeBack: return "PoseNewbornSafeBack"
+        case .newbornCaregiverNearby: return "PoseNewbornCaregiverNearby"
+        case .newbornSeatedCradle: return "PoseNewbornSeatedCradle"
+        case .newbornShoulderSupport: return "PoseNewbornShoulderSupport"
+        case .newbornParentsSeated: return "PoseNewbornParentsSeated"
+        case .newbornHandsFeetDetail: return "PoseNewbornHandsFeetDetail"
+        case .professionalClassicHeadshot: return "PoseProfessionalClassicHeadshot"
+        case .professionalThreeQuarter: return "PoseProfessionalThreeQuarter"
+        case .professionalSeatedForward: return "PoseProfessionalSeatedForward"
+        case .professionalArmsCrossed: return "PoseProfessionalArmsCrossed"
+        case .professionalOpenStanding: return "PoseProfessionalOpenStanding"
+        case .professionalEnvironmental: return "PoseProfessionalEnvironmental"
+        case .weddingFormalSideBySide: return "PoseWeddingFormalSideBySide"
+        case .weddingRingReveal: return "PoseWeddingRingReveal"
+        case .weddingProposalReaction: return "PoseWeddingProposalReaction"
+        case .weddingRingExchange: return "PoseWeddingRingExchange"
+        case .weddingFirstDance: return "PoseWeddingFirstDance"
+        case .weddingCelebrationWalk: return "PoseWeddingCelebrationWalk"
         }
     }
 
     var steps: [GuidedStep] {
-        cues.map {
-            GuidedStep(
+        let maternityCouplePoses: Set<GuidedPose> = [
+            .maternityHusbandEmbrace, .maternityHusbandWalk, .maternityHusbandFaceToFace
+        ]
+        let newbornPoses = Set(GuidedPose.allCases.filter { $0.package == .newborn })
+        return cues.map {
+            let recipient: String? = if package == .couples || package == .weddingEngagement || maternityCouplePoses.contains(self) {
+                "Couple"
+            } else if package == .friendsGroups {
+                "Group"
+            } else if package == .family {
+                "Family"
+            } else if newbornPoses.contains(self) {
+                "Caregiver"
+            } else if self == .kidsSiblingSideHug {
+                "Children"
+            } else if package == .kids {
+                "Child"
+            } else {
+                nil
+            }
+            return GuidedStep(
                 instruction: $0,
                 action: .subjectPose,
-                recipientOverride: package == .couples ? "Couple" : (package == .friendsGroups ? "Group" : (package == .family ? "Family" : nil))
+                recipientOverride: recipient
             )
         }
     }
 
     var conflicts: Set<String> {
         var result: Set<String> = ["body_too_square", "body_too_profile", "arms_flat_against_body", "arm_hidden"]
-        if self == .overShoulder || self == .lookAwayMasculine {
+        if self == .overShoulder || self == .lookAwayMasculine || self == .graduationOverShoulder || self == .maternitySideProfile || self == .kidsPeekAround || self == .weddingProposalReaction {
             result.formUnion(["face_missing", "face_too_profile", "face_turned_away"])
         }
         if category == .moving { result.insert("camera_unstable") }
