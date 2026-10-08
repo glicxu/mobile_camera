@@ -1,6 +1,6 @@
-﻿# Dali Camera: Android testing
+# Dali Camera: Android testing
 
-The Flutter application is `apps/dali_camera`, separate from the native Xcode application. Android API 26+ is the provisional minimum; first device validation uses Samsung SM-G975U on Android 12. Flutter 3.44.8 / Dart 3.12.2, JDK 21, AGP 9.0.1, Kotlin 2.3.20 and CameraX 1.5.3 are the initial toolchain.
+The Flutter application is `apps/dali_camera`, separate from the native Xcode application. Android API 26+ is the current minimum; first device validation uses Samsung SM-G975U on Android 12. Flutter 3.44.8 / Dart 3.12.2, JDK 21, AGP 9.0.1, Gradle 9.1.0, compile/target SDK 36, Kotlin 2.3.20 and CameraX 1.5.3 are the initial toolchain.
 
 ## Build and install
 
@@ -16,7 +16,7 @@ App identifier: `com.dalicamera.dali_camera`.
 
 Open Dali Camera, dismiss Welcome and grant camera access. Android 10+ does not require broad gallery-read access to save this app's photos. Android 8/9 asks for storage permission when saving; denied access retains the original for retry. The system photo picker grants access to the selected file only.
 
-For Flutter iOS, run `flutter build ios --debug --no-codesign` on a Mac, then open `apps/dali_camera/ios/Runner.xcworkspace`, select your signing team and iPhone, and Run. An unsigned CI build cannot be installed directly.
+For the physical iPhone comparison, see [Flutter iPhone testing](flutter_iphone_testing.md). For Flutter iOS, run `flutter build ios --debug --no-codesign` on a Mac, then open `apps/dali_camera/ios/Runner.xcworkspace`, select your signing team and iPhone, and Run. An unsigned CI build cannot be installed directly.
 
 ## First pass
 
@@ -47,6 +47,8 @@ flutter test integration_test/bridge_test.dart -d YOUR_DEVICE_ID
 flutter test integration_test/phone_test.dart -d YOUR_DEVICE_ID
 ```
 
-The phone integration test takes two real test photos (original and crop) and leaves them in Pictures/Dali. It expects camera permission already granted. Flutter's test runner may uninstall the test app afterwards; reinstall the normal debug APK for manual use. A Windows helper will prepare permissions and reinstall the normal app after tests.
+The phone integration test takes two real test photos (original and crop) and leaves them in Pictures/Dali. It expects camera permission already granted. Flutter's test runner may uninstall the test app afterwards; reinstall the normal debug APK for manual use. The Windows helper prepares permissions and reinstalls the normal app after tests:
+
+Run the helper from the repo root with `./tools/test_android_camera.ps1 -DeviceId YOUR_DEVICE_ID -SoakSeconds 600` for a ten-minute live-analysis check. Use `-Flutter` to supply the Flutter executable when it is not on PATH. The test also checks supported exposure/lock controls and rejects settings from an old camera configuration.
 
 CI publishes an Android debug APK and validates the Flutter iOS build, native bridge, shared tests, catalogs and Swift/Dart baseline fixtures. See [feature coverage and remaining parity work](cross_platform_parity.md). Report device/OS, lens, orientation, selected reference, exact steps and whether the output or preview is wrong.

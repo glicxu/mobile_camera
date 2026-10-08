@@ -1,0 +1,209 @@
+[
+  {
+    "advice" : {
+      "instruction" : "Frame the person",
+      "recipient" : "Photographer",
+      "type" : "subject_missing"
+    },
+    "face" : null,
+    "issues" : [
+      "subject_missing"
+    ],
+    "name" : "missing",
+    "person" : null,
+    "roll" : 0,
+    "stable" : true
+  },
+  {
+    "advice" : {
+      "instruction" : "Great shot",
+      "recipient" : "Camera",
+      "type" : "ready"
+    },
+    "face" : {
+      "height" : 0.12,
+      "width" : 0.12,
+      "x" : 0.41999999999999998,
+      "y" : 0.16
+    },
+    "issues" : [
+
+    ],
+    "name" : "normal",
+    "person" : {
+      "height" : 0.71999999999999997,
+      "width" : 0.40000000000000002,
+      "x" : 0.29999999999999999,
+      "y" : 0.12
+    },
+    "roll" : 0,
+    "stable" : true
+  },
+  {
+    "advice" : {
+      "instruction" : "Step back",
+      "recipient" : "Photographer",
+      "type" : "subject_too_close"
+    },
+    "face" : null,
+    "issues" : [
+      "subject_too_close",
+      "face_missing"
+    ],
+    "name" : "too_close",
+    "person" : {
+      "height" : 0.94999999999999996,
+      "width" : 0.80000000000000004,
+      "x" : 0.10000000000000001,
+      "y" : 0.050000000000000003
+    },
+    "roll" : 0,
+    "stable" : true
+  },
+  {
+    "advice" : {
+      "instruction" : "Step closer",
+      "recipient" : "Photographer",
+      "type" : "subject_too_far"
+    },
+    "face" : null,
+    "issues" : [
+      "subject_too_far"
+    ],
+    "name" : "too_far",
+    "person" : {
+      "height" : 0.20000000000000001,
+      "width" : 0.080000000000000002,
+      "x" : 0.46000000000000002,
+      "y" : 0.40000000000000002
+    },
+    "roll" : 0,
+    "stable" : true
+  },
+  {
+    "advice" : {
+      "instruction" : "Move right",
+      "recipient" : "Photographer",
+      "type" : "limb_cropped"
+    },
+    "face" : {
+      "height" : 0.12,
+      "width" : 0.12,
+      "x" : 0.10000000000000001,
+      "y" : 0.16
+    },
+    "issues" : [
+      "limb_cropped"
+    ],
+    "name" : "left_edge",
+    "person" : {
+      "height" : 0.71999999999999997,
+      "width" : 0.40000000000000002,
+      "x" : 0,
+      "y" : 0.12
+    },
+    "roll" : 0,
+    "stable" : true
+  },
+  {
+    "advice" : {
+      "instruction" : "Move left",
+      "recipient" : "Photographer",
+      "type" : "limb_cropped"
+    },
+    "face" : {
+      "height" : 0.12,
+      "width" : 0.12,
+      "x" : 0.69999999999999996,
+      "y" : 0.16
+    },
+    "issues" : [
+      "limb_cropped"
+    ],
+    "name" : "right_edge",
+    "person" : {
+      "height" : 0.71999999999999997,
+      "width" : 0.40000000000000002,
+      "x" : 0.59999999999999998,
+      "y" : 0.12
+    },
+    "roll" : 0,
+    "stable" : true
+  },
+  {
+    "advice" : {
+      "instruction" : "Keep feet in frame",
+      "recipient" : "Photographer",
+      "type" : "feet_cropped"
+    },
+    "face" : {
+      "height" : 0.12,
+      "width" : 0.12,
+      "x" : 0.40000000000000002,
+      "y" : 0.29999999999999999
+    },
+    "issues" : [
+      "feet_cropped",
+      "headroom_too_large"
+    ],
+    "name" : "feet",
+    "person" : {
+      "height" : 0.75,
+      "width" : 0.40000000000000002,
+      "x" : 0.29999999999999999,
+      "y" : 0.25
+    },
+    "roll" : 0,
+    "stable" : true
+  },
+  {
+    "advice" : {
+      "instruction" : "Tilt left",
+      "recipient" : "Photographer",
+      "type" : "camera_tilted"
+    },
+    "face" : {
+      "height" : 0.12,
+      "width" : 0.12,
+      "x" : 0.41999999999999998,
+      "y" : 0.16
+    },
+    "issues" : [
+      "camera_tilted"
+    ],
+    "name" : "tilted",
+    "person" : {
+      "height" : 0.71999999999999997,
+      "width" : 0.40000000000000002,
+      "x" : 0.29999999999999999,
+      "y" : 0.12
+    },
+    "roll" : 8,
+    "stable" : true
+  },
+  {
+    "advice" : {
+      "instruction" : "Hold steady",
+      "recipient" : "Photographer",
+      "type" : "camera_unstable"
+    },
+    "face" : {
+      "height" : 0.12,
+      "width" : 0.12,
+      "x" : 0.41999999999999998,
+      "y" : 0.16
+    },
+    "issues" : [
+      "camera_unstable"
+    ],
+    "name" : "unstable",
+    "person" : {
+      "height" : 0.71999999999999997,
+      "width" : 0.40000000000000002,
+      "x" : 0.29999999999999999,
+      "y" : 0.12
+    },
+    "roll" : 0,
+    "stable" : false
+  }
+]

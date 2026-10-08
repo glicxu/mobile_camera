@@ -1,4 +1,4 @@
-﻿# Dali Camera Cross-Platform Implementation Plan
+# Dali Camera Cross-Platform Implementation Plan
 
 Date: October 7, 2026
 Status: Implementation in progress. Shared catalogs, Flutter screens and Android/iOS service adapters are implemented for the first capture/review/export milestone. Remaining parity and validation are tracked in [feature coverage](cross_platform_parity.md); install instructions are in [Android testing](android_testing.md).
@@ -13,7 +13,7 @@ This plan replaces the earlier draft. Planned features in the product documents 
 
 Companion references: [posture packages](posture_packages.md), [landscape packages](landscape_packages.md), [camera controls](camera_control.md), and [current iPhone testing](phone_testing.md).
 
-## Current state
+## Baseline state before implementation
 
 | Area | Existing implementation | Remaining work |
 | --- | --- | --- |
@@ -79,17 +79,17 @@ The native adapter owns camera resources and file I/O. Dart owns capture/review/
 
 ## Ordered implementation milestones
 
-All tasks below are pending unless marked as an existing foundation. Each milestone ends with a usable build or a verified artifact.
+Checked tasks have been implemented and verified at the stated scope. Open tasks include incomplete feature parity and physical-device acceptance; a milestone is not complete merely because its code builds.
 
 ### M0 — Freeze behavior and validate dependencies
 
 Dependencies: none.
 
-- [ ] Inventory implemented Swift features, controls, catalog IDs and assets in `docs/cross_platform_parity.md`; distinguish implemented, planned and unsupported behavior.
+- [x] Inventory implemented Swift features, controls, catalog IDs and assets in `docs/cross_platform_parity.md`; distinguish implemented, planned and unsupported behavior.
 - [ ] Export fixtures from the current Swift engine for issue selection, priority, cooldown, interruption, Natural mode, missing measurements and guidance replacement.
 - [ ] Record current iPhone startup/capture latency and ten-minute session behavior as the performance baseline.
 - [ ] Confirm available Android/iPhone test devices, OS versions and development signing setup. The Samsung SM-G975U named in the old draft is an intended test candidate, not verified hardware availability.
-- [ ] Pin Flutter/Dart, JDK, Gradle, Android SDK and Xcode versions; verify compatibility with the existing Dart SDK constraint.
+- [x] Pin Flutter/Dart, JDK, Gradle, Android SDK and Xcode versions; verify compatibility with the existing Dart SDK constraint.
 - [ ] Spike CameraX preview plus analysis and one capture. Evaluate detector signal coverage, bundled/offline model availability, licensing, startup and speed. Record the selected detector stack and gaps.
 - [ ] Confirm native-preview composition and the typed bridge work on both platforms.
 
@@ -100,10 +100,10 @@ Exit: checked-in parity inventory, fixtures and dependency decisions; camera fea
 Dependencies: M0 contracts and baseline fixtures.
 
 - [ ] Port current Swift coaching changes into Dart, using identical-input fixtures to detect differences.
-- [ ] Migrate all 76 people poses, 11 collections, 24 landscape recipes, angle mappings, light/context/safety metadata and stable IDs.
-- [ ] Preserve current UI semantics: posture selection supplies the recommended angle; do not restore the removed standalone Angle chooser merely because the older Dart catalog has five positions.
-- [ ] Establish one versioned catalog source and asset manifest. Generate or validate Swift/Dart representations during coexistence to prevent drift.
-- [ ] Package the existing reference JPEGs for Flutter, preserving attribution where applicable, dimensions and the existing under-100-KB asset limit.
+- [x] Migrate all 76 people poses, 11 collections, 24 landscape recipes, angle mappings, light/context/safety metadata and stable IDs.
+- [x] Preserve current UI semantics: posture selection supplies the recommended angle; do not restore the removed standalone Angle chooser merely because the older Dart catalog has five positions.
+- [x] Establish one versioned catalog source and asset manifest. Generate or validate Swift/Dart representations during coexistence to prevent drift.
+- [x] Package the existing reference JPEGs for Flutter, preserving attribution where applicable, dimensions and the existing under-100-KB asset limit.
 - [ ] Add capability/configuration models, file-backed recovery contracts and capture/export transition coverage.
 
 Exit: shared fixture advice matches Swift for identical normalized input; catalog IDs/counts/metadata/assets validate; missing signals never produce false success; all shared tests and analysis pass.
@@ -112,8 +112,8 @@ Exit: shared fixture advice matches Swift for identical normalized input; catalo
 
 Dependencies: M1 contracts; can start layout after M0.
 
-- [ ] Scaffold `apps/dali_camera` and the local platform plugin, using separate development identifiers.
-- [ ] Implement welcome, camera screen, fixed shutter, latest-photo review, photo picker, settings and permission recovery UI.
+- [x] Scaffold `apps/dali_camera` and the local platform plugin, using separate development identifiers.
+- [x] Implement welcome, camera screen, fixed shutter, latest-photo review, photo picker, settings and permission recovery UI.
 - [ ] Implement selected-photo review, original comparison, save/share status and retry/discard actions using fake services first.
 - [ ] Build situation/package navigation, catalog cards and optional manually confirmed guidance with Natural/reset behavior.
 - [ ] Implement accessible labels, TalkBack/VoiceOver reading order, scalable text and portrait/landscape layouts.
@@ -127,11 +127,11 @@ Dependencies: M0 camera spike, M1 core, M2 shell.
 
 - [ ] Bind CameraX preview, capture and analysis to lifecycle; handle permissions, background/foreground, interruptions and front/rear switching.
 - [ ] Implement rotation, mirroring and fit transforms, then prove overlay alignment using edge/corner fixtures and physical photos.
-- [ ] Deliver person/face measurements and motion/roll to Dart for basic framing, crop, tilt and stability advice; report unsupported signals explicitly.
+- [x] Deliver person/face measurements and motion/roll to Dart for basic framing, crop, tilt and stability advice; report unsupported signals explicitly.
 - [ ] Capture to durable app storage, restore unsaved captures after process death, and implement MediaStore save, system photo selection and sharing with OS-appropriate permissions.
-- [ ] Connect duplicate-capture guards, retry/error states and direct latest-photo review. Verify exported originals remain intact.
+- [x] Connect duplicate-capture guards, retry/error states and direct latest-photo review. Verify exported originals remain intact.
 - [ ] Export user-initiated diagnostic logs with device/build/session information, avoiding photo payloads by default.
-- [ ] Produce a debug APK and `docs/android_testing.md` with installation, permissions, feature coverage and known limitations.
+- [x] Produce a debug APK and `docs/android_testing.md` with installation, permissions, feature coverage and known limitations.
 
 Exit: APK installs on a physical Android phone; capture → review → save/share works; failed save recovery survives relaunch; lens/orientation changes remain aligned; ten minutes of use does not crash, stall or grow queues without bound. Advanced enhancement and voice parity are not required for this first handoff and must be labeled unavailable.
 
@@ -152,7 +152,7 @@ Exit: Flutter iOS capture/review/export and basic coaching pass device acceptanc
 Dependencies: M3 and M4; prioritize gaps using the parity inventory.
 
 - [ ] Complete landscape and people guidance, group/pose/face measurements, luminance/backlighting and horizon behavior where supported.
-- [ ] Separate true visual-horizon estimates from sensor roll; never substitute one silently for the other.
+- [x] Separate true visual-horizon estimates from sensor roll; never substitute one silently for the other.
 - [ ] Port current reframe, level, compare and beautify behavior behind an image-processing interface. Agree fixture-based visual tolerances; retain original by default and export exactly the selected variant.
 - [ ] Implement capability-driven exposure compensation, focus/exposure lock and return to Auto. Hide or explain unavailable controls and invalidate stale settings after a camera change.
 - [ ] Port voice shutter with opt-in microphone/speech access, cancellation, deduplication and capture-state guards. Declare on-device speech availability; do not silently fall back to remote recognition.
@@ -165,7 +165,7 @@ Exit: every implemented feature in the baseline parity inventory is passed or ex
 Dependencies: M5.
 
 - [ ] Add CI for Dart analysis/tests, Flutter analysis/widget tests, Android native tests/debug APK, Flutter iOS simulator tests and unsigned device build. Keep native iOS checks during migration.
-- [ ] Run changes on PRs and `main`, replacing the current restriction that only runs push validation on the phone-readiness branch pattern.
+- [x] Run changes on PRs and `main`, replacing the current restriction that only runs push validation on the phone-readiness branch pattern.
 - [ ] Run device acceptance on the primary iPhone, primary Android and a second Android vendor/device tier. Use small-screen emulators for layout coverage.
 - [ ] Verify camera denial/re-enable, save failure/storage exhaustion, process death, share cancellation, rapid taps, rotation during capture, repeated lens changes and session interruption.
 - [ ] Validate TalkBack/VoiceOver, large text, comfortable optional pose guidance and ten-minute performance/thermal behavior.

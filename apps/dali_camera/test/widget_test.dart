@@ -91,14 +91,17 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
+      tester.platformDispatcher.textScaleFactorTestValue = 2.5;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       final camera = CameraController(host: FakeHost(), register: false);
-      await tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(textScaler: TextScaler.linear(2.5)),
-          child: DaliApp(controller: camera, onboarding: false),
-        ),
-      );
+      await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
       await tester.pumpAndSettle();
+      expect(
+        MediaQuery.textScalerOf(
+          tester.element(find.byKey(const Key('shutter'))),
+        ).scale(10),
+        25,
+      );
       expect(find.byKey(const Key('shutter')), findsOneWidget);
       await tester.tap(find.byTooltip('Help'));
       await tester.pumpAndSettle();
