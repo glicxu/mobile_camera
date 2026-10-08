@@ -263,6 +263,12 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(camera.original!.unsaved, isFalse);
       expect(camera.styled, isTrue, reason: camera.message);
+      expect(find.byKey(const Key('captureResultPreview')), findsOneWidget);
+      expect(camera.capturePreviewPath, camera.selected!.path);
+      expect(find.text('Photo saved'), findsOneWidget);
+      await tester.tap(find.text('Back to camera'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('captureResultPreview')), findsNothing);
       expect(camera.selected!.id, isNot(camera.original!.id));
       expect(await camera.host.recover(), isNull);
       final newGalleryPhotos = (await camera.host.listPhotoLibrary()).photos

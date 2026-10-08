@@ -1,4 +1,5 @@
 import 'package:dali_camera/capture_feedback.dart';
+import 'package:dali_camera/capture_result_preview.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:dali_camera/main.dart';
@@ -344,6 +345,46 @@ void main() {
       expect(host.savedIds, ['original-1-final']);
       expect(host.retained, isNull);
       camera.dispose();
+    },
+  );
+
+  testWidgets(
+    'Viewport shows original during processing then finished result',
+    (tester) async {
+      final host = DelayedEffectsHost();
+      final camera = CameraController(host: host, register: false);
+      await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+      await tester.pumpAndSettle();
+      camera.filter = 'fresh';
+      camera.beautifier = 'off';
+      camera.watermark = false;
+      final capture = camera.capturePhoto(review: false);
+      await host.renderingStarted.future;
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      var preview = tester.widget<CaptureResultPreview>(
+        find.byKey(const Key('captureResultPreview')),
+      );
+      expect(preview.path, camera.original!.path);
+      expect(preview.complete, isFalse);
+      expect(find.text('Processing photo...'), findsOneWidget);
+      expect(find.text('Back to camera'), findsNothing);
+      expect(camera.canCapture, isFalse);
+      expect(host.savedIds, isEmpty);
+      host.finishRendering.complete();
+      await capture;
+      await tester.pumpAndSettle();
+      preview = tester.widget<CaptureResultPreview>(
+        find.byKey(const Key('captureResultPreview')),
+      );
+      expect(preview.path, camera.selected!.path);
+      expect(preview.path, isNot(camera.original!.path));
+      expect(preview.complete, isTrue);
+      expect(find.text('Photo saved'), findsOneWidget);
+      await tester.tap(find.text('Back to camera'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('captureResultPreview')), findsNothing);
+      expect(camera.canCapture, isTrue);
     },
   );
 

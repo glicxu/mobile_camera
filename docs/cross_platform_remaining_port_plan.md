@@ -15,6 +15,8 @@ Analysis and 31 Flutter tests pass. Galaxy and tablet camera and native renderin
 
 ## Shutter feedback follow-up
 
+Viewport processing follow-up: show the captured original in the camera viewport with Processing photo and an indeterminate progress indicator. Replace it with the processed result while saving, then show Photo saved and Back to camera. No percentage or progressively rendered frames are reported by the backend. The result remains available until dismissed or a new capture begins; burst preserves its live viewport until the sequence ends. Failures use the existing recoverable review flow. Local analysis and 32 Flutter tests pass; physical Android regression is recorded in joint testing.
+
 The user requested immediate visual assurance that a photo was captured. `62eb0b5` removes the shutter spinner tied to the general busy flag, retains capture guards and adds a short viewport flash/Photo taken confirmation after successful camera capture. Saving and processing remain separate statuses. Reduced-motion uses text without flashing; failures do not acknowledge success. Analysis/31 Flutter tests pass; device results are recorded in [joint testing](cross_platform_joint_testing.md).
 
 ## Android capture-speed follow-up

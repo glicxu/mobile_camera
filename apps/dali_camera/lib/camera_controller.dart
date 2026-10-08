@@ -25,6 +25,15 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   PhotoHandle? original;
   PhotoHandle? selected;
   bool busy = false;
+  String? capturePreviewPath;
+  String capturePreviewStatus = '';
+
+  void dismissCapturePreview() {
+    if (busy) return;
+    capturePreviewPath = null;
+    notifyListeners();
+  }
+
   bool takingPhoto = false;
   int capturedPhotoSequence = 0;
   String? _pendingCaptureRecipe;
@@ -424,6 +433,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (fromSequence ? !_captureReady : !canCapture) return;
     busy = true;
     takingPhoto = true;
+    capturePreviewPath = null;
     _pendingCaptureRecipe = _captureRecipe();
     message = 'Taking photo...';
     notifyListeners();
@@ -450,6 +460,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         await _release(prior);
       }
       selected = original;
+      capturePreviewPath = original!.path;
+      capturePreviewStatus = 'Processing photo...';
       styled = false;
       selectedTreatment = 'original';
       photoAnalysis = null;
@@ -473,6 +485,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         message = 'Photo saved to Photos';
       }
     } catch (error) {
+      capturePreviewPath = null;
       if (original?.unsaved == true) {
         message = 'Photo retained privately. Processing or save failed: $error';
         reviewing = true;
@@ -540,10 +553,12 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       );
       styled = true;
       selectedTreatment = 'styled';
+      if (capturePreviewPath != null) capturePreviewPath = selected!.path;
       onStage?.call('effects');
       notifyListeners();
     }
     message = 'Saving photo...';
+    capturePreviewStatus = 'Saving photo...';
     notifyListeners();
     await host.saveCaptured(source, selected!);
     source.unsaved = false;
@@ -553,6 +568,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     onStage?.call('gallery');
     await _persistHistory();
     message = 'Photo saved to Photos';
+    capturePreviewStatus = 'Photo saved';
   }
 
   Future<void> _saveOriginal() async {
@@ -678,6 +694,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   Future<void> returnToCamera() async {
     if (busy) return;
+    capturePreviewPath = null;
     busy = true;
     notifyListeners();
     try {

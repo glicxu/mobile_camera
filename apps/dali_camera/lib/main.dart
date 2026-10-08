@@ -1,4 +1,5 @@
 import 'capture_feedback.dart';
+import 'capture_result_preview.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:dali_camera_core/dali_camera_core.dart';
@@ -319,7 +320,9 @@ class _CameraScreenState extends State<CameraScreen>
           aspectRatio: camera.aspectRatio,
           child: LayoutBuilder(
             builder: (context, previewBounds) => GestureDetector(
-              onTapUp: camera.snapshot?.supportsTap == true
+              onTapUp:
+                  camera.capturePreviewPath == null &&
+                      camera.snapshot?.supportsTap == true
                   ? (details) => camera.meter(
                       details.localPosition.dx / previewBounds.maxWidth,
                       details.localPosition.dy / previewBounds.maxHeight,
@@ -482,6 +485,14 @@ class _CameraScreenState extends State<CameraScreen>
                       camera.countdown == 0 &&
                       !camera.bursting)
                     ManualPreviewControls(camera: camera),
+                  if (camera.capturePreviewPath != null && !camera.bursting)
+                    CaptureResultPreview(
+                      key: const Key('captureResultPreview'),
+                      path: camera.capturePreviewPath!,
+                      status: camera.capturePreviewStatus,
+                      complete: !camera.busy,
+                      onDismiss: camera.dismissCapturePreview,
+                    ),
                   CaptureFeedback(sequence: camera.capturedPhotoSequence),
                 ],
               ),
