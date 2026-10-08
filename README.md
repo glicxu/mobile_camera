@@ -55,3 +55,5 @@ The Flutter and native-adapter migration is tracked in
 ## Notes
 
 This is an iOS prototype. The browser files in the repository are a zero-build desktop fallback and are not the primary phone-testing path.
+
+Recent main changes and the Flutter port are tracked in [cross-platform main sync](docs/cross_platform_main_sync.md).

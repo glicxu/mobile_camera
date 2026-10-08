@@ -49,8 +49,12 @@ flutter test integration_test/bridge_test.dart -d YOUR_DEVICE_ID
 flutter test integration_test/phone_test.dart -d YOUR_DEVICE_ID
 ```
 
-The phone integration test takes two real test photos (original and crop) and leaves them in Pictures/Dali. It expects camera permission already granted. Flutter's test runner may uninstall the test app afterwards; reinstall the normal debug APK for manual use. The Windows helper prepares permissions and reinstalls the normal app after tests:
+The phone integration test takes real photos for timer/style, original/crop and a short burst, leaving the gallery copies in Pictures/Dali. It expects camera permission already granted. Flutter's test runner may uninstall the test app afterwards; reinstall the normal debug APK for manual use. The Windows helper prepares permissions and reinstalls the normal app after tests:
 
 Run the helper from the repo root with `./tools/test_android_camera.ps1 -DeviceId YOUR_DEVICE_ID -SoakSeconds 600` for a ten-minute live-analysis check. Use `-Flutter` to supply the Flutter executable when it is not on PATH. The test also checks supported exposure/lock controls and rejects settings from an old camera configuration.
 
 CI publishes an Android debug APK and validates the Flutter iOS build, native bridge, shared tests, catalogs and Swift/Dart baseline fixtures. See [feature coverage and remaining parity work](cross_platform_parity.md). Report device/OS, lens, orientation, selected reference, exact steps and whether the output or preview is wrong.
+
+## Main sync additions
+
+Food recipes, recent-photo history, timer/burst, filters/watermark and supported tap focus/zoom/manual shutter/ISO are included. Follow [the additional acceptance steps and parity limits](cross_platform_main_sync.md).

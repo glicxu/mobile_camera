@@ -29,6 +29,8 @@ The native app remains the reference for complete behavior. The new app is under
 
 ## Validation and limitations
 
+For current sync validation, use [the main sync inventory](cross_platform_main_sync.md#validation). The preceding milestone evidence below is retained for comparison.
+
 Validated application source: `422c212687e021737c30c8bb0153402b900672cc`, branch `codex/cross-platform-20261007`. [CI run 37741441492](https://github.com/glicxu/mobile_camera/actions/runs/37741441492) passed every job: 24 shared-core tests and analysis, three Flutter tests and analysis, catalog/asset validation, Android APK build, unsigned Flutter iOS device build, 32 native iOS unit tests, iPhone simulator bridge tests, and nine real Swift/Dart coaching fixtures. The retained reference app needed its large SwiftUI modifier expression split into smaller groups to compile reliably with Xcode 16.4; modifier order and behavior remain intact.
 
 | Device | Verified scope | Remaining acceptance |
@@ -39,7 +41,7 @@ Validated application source: `422c212687e021737c30c8bb0153402b900672cc`, branch
 
 The Android bridge test also restores an AtomicFile backup left by an interrupted manifest replacement. The tablet's first test launch lost its debug connection; native bridge and full camera tests passed on retry. The phone's 600-second session observed 570 fresh one-second analysis samples and no test failures. Memory sampling during the session showed roughly 466–488 MiB total PSS and a stable native heap; this is a debug-build check, not a release FPS/thermal benchmark. Both Android devices have the normal app installed after testing.
 
-The local ARM64 debug APK is `apps/dali_camera/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk` (about 110 MiB). SHA-256: `563298db4ebd136603168428ffe31486c6752c9fa29072872585cf10d3bbfb80`. A universal development APK is also available locally and as the CI artifact. Neither is a store release.
+The current sync?s local ARM64 debug APK is `apps/dali_camera/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk` (about 110 MiB). SHA-256: `21a4b2b5f1df6e3f1463aa694633121deaa46fc7a0c3e2815f446e0d80459786`. A universal development APK is also available locally and as the CI artifact. Neither is a store release.
 
 The catalogs are authored in Swift during coexistence. `tools/export_shared_catalog.py` exports the manifest, Dart data and Flutter images; `--check` detects metadata or asset drift. One baseline source reference exceeded the documented 100 KB limit; only the Flutter derivative is optimized, preserving the original native asset. Export requires Pillow; CI checks do not depend on platform JPEG encoder byte equivalence.
 

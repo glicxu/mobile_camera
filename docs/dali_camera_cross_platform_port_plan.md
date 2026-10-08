@@ -2,7 +2,7 @@
 
 Date: October 7, 2026
 Status: Implementation in progress. Shared catalogs, Flutter screens and Android/iOS service adapters are implemented for the first capture/review/export milestone. Remaining parity and validation are tracked in [feature coverage](cross_platform_parity.md); install instructions are in [Android testing](android_testing.md).
-Baseline: `da72a5d` on `main`.
+Original baseline: `da72a5d` on `main`. Remote main `d53a977` is now merged; see [the sync inventory](cross_platform_main_sync.md) for added Flutter features and native-only differences.
 Targets: Android and iOS, using Flutter UI and the existing Dart core with native camera services.
 
 ## Outcome and scope
@@ -100,7 +100,7 @@ Exit: checked-in parity inventory, fixtures and dependency decisions; camera fea
 Dependencies: M0 contracts and baseline fixtures.
 
 - [ ] Port current Swift coaching changes into Dart, using identical-input fixtures to detect differences.
-- [x] Migrate all 76 people poses, 11 collections, 24 landscape recipes, angle mappings, light/context/safety metadata and stable IDs.
+- [x] Migrate all 76 people poses, 11 collections, 24 landscape recipes, six Food recipes, angle mappings, light/context/safety metadata and stable IDs.
 - [x] Preserve current UI semantics: posture selection supplies the recommended angle; do not restore the removed standalone Angle chooser merely because the older Dart catalog has five positions.
 - [x] Establish one versioned catalog source and asset manifest. Generate or validate Swift/Dart representations during coexistence to prevent drift.
 - [x] Package the existing reference JPEGs for Flutter, preserving attribution where applicable, dimensions and the existing under-100-KB asset limit.

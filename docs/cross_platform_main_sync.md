@@ -4,7 +4,7 @@ Source: `origin/main` commit `d53a977`, ?Expand camera controls, effects, and gu
 
 ## Implemented in this sync
 
-- Merge all native iOS changes, new engine sources, six Food images, watermark, tests and documents. Preserve the smaller SwiftUI modifier groups required by the existing Xcode build.
+- Merge all native iOS changes, new engine sources, six Food images, watermark, tests and documents. Preserve the smaller SwiftUI modifier groups required by the existing Xcode build. Keep the thread-safe watermark context compatible with older SDK Swift 6 annotations and use the SDK-compatible Bluetooth HFP option spelling. Compile the new iOS 27 priority-exposure API only with the iOS 27 SDK; older SDK builds omit those unavailable capabilities while retaining manual M.
 - Export six Food recipes and eight named filter definitions directly from Swift, with CI checking metadata and all 106 reference images plus the watermark.
 - Add Food selection, angle/cue progression, reference details, light and safety notes to Flutter. Food guidance does not require a person in frame.
 - Show coaching status and directional icons in Flutter.
@@ -31,7 +31,11 @@ The preceding cross-platform milestone had not ported the full detector/enhancem
 - Android debug build: pass.
 - Extended native bridge tests check style and watermark rendering, original-byte preservation, invalid parameters, private-only cleanup and pending-original protection.
 - Extended phone integration checks Food selection, timer capture, styled-copy export, focus/zoom, and sensor-reported manual shutter/ISO when supported.
-- Physical Android and macOS CI results: pending this candidate run.
+- Samsung SM-G975U (Android 12) and SM-T290 (Android 11): Food/reference selection, timer/style export, capture/crop/save, both lenses, stale-control rejection, tap focus, zoom, sensor-reported shutter/ISO, actual shutter hold/release and recent-history opening pass. Both report manual exposure and 1?8? zoom. This is a short regression check, not a new ten-minute soak or thermal benchmark.
+- Both Android native bridge suites pass, including visible styled pixels, bottom-right watermark signal, an unchanged top-left region, owned-copy cleanup and protection of pending originals. The initial stricter mean-difference threshold underestimated the sparse signature; the corrected threshold still rejects an absent watermark.
+- Normal Android app restored on both devices after the test runner removed its test installation.
+- ARM64 debug APK: `apps/dali_camera/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`, 110.6 MiB, SHA-256 `21a4b2b5f1df6e3f1463aa694633121deaa46fc7a0c3e2815f446e0d80459786`. Universal and other ABI development APKs also built.
+- [CI run 37802721231](https://github.com/glicxu/mobile_camera/actions/runs/37802721231) passed every job for source `8e6997f3cd8d49dd079b7ac9a7ec111014cd9a57`: 27 shared tests, six Flutter tests, analysis, catalog/assets, Android APK, unsigned Flutter iOS device build, nine real Swift/Dart fixtures, 51 native iOS tests and the extended Flutter bridge test on iPhone simulator.
 
 ## Phone test additions
 
