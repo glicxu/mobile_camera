@@ -89,7 +89,10 @@ class _ReferenceChooserState extends State<ReferenceChooser> {
                   builder: (context, bounds) {
                     final scale =
                         MediaQuery.textScalerOf(context).scale(14) / 14;
-                    final width = bounds.maxWidth / (scale > 1.5 ? 1 : 2);
+                    final columns = scale > 1.5
+                        ? 1
+                        : ((bounds.maxWidth + 12) / 157).floor().clamp(1, 6);
+                    final width = bounds.maxWidth / columns;
                     return SingleChildScrollView(
                       child: Wrap(
                         children: [
@@ -108,11 +111,15 @@ class _ReferenceChooserState extends State<ReferenceChooser> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
-                                      Image.asset(
-                                        entry.asset,
-                                        cacheWidth: 512,
-                                        height: 180,
-                                        fit: BoxFit.cover,
+                                      AspectRatio(
+                                        aspectRatio: entry.kind == 'pose'
+                                            ? .82
+                                            : .75,
+                                        child: Image.asset(
+                                          entry.asset,
+                                          cacheWidth: 512,
+                                          fit: BoxFit.cover,
+                                        ),
                                       ),
                                       Padding(
                                         padding: const EdgeInsets.all(10),
@@ -139,6 +146,25 @@ class _ReferenceChooserState extends State<ReferenceChooser> {
                                                 ),
                                               ],
                                             ),
+                                            if (entry.kind == 'pose')
+                                              Text(
+                                                switch (entry
+                                                    .data['category']) {
+                                                  'standing' => 'Standing',
+                                                  'seated' => 'Seated',
+                                                  'kneeling' => 'Kneeling',
+                                                  'moving' => 'Moving',
+                                                  'turned' =>
+                                                    'Turned / Looking Away',
+                                                  'handsHair' =>
+                                                    'Hands & Details',
+                                                  'lying' => 'Lying Safely',
+                                                  _ => '',
+                                                },
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                              ),
                                             Text(
                                               widget.catalog.angleTitle(entry),
                                               style: Theme.of(
