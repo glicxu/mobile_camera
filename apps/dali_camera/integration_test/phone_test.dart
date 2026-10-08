@@ -89,25 +89,60 @@ void main() {
         expect(camera.snapshot!.locked, isFalse);
       }
       final capabilities = camera.snapshot!;
+      debugPrint(
+        'DEVICE_CONTROLS: tap=${capabilities.supportsTap}; manual=${capabilities.minimumISO != null && capabilities.minimumShutter != null}; zoom=${capabilities.minimumZoom}..${capabilities.maximumZoom}',
+      );
       if (capabilities.supportsTap == true) {
-        final result = await camera.host.meter(capabilities.configurationId, .5, .5);
+        final result = await camera.host.meter(
+          capabilities.configurationId,
+          .5,
+          .5,
+        );
         expect(result.ready, isTrue);
       }
-      if (capabilities.maximumZoom != null && capabilities.maximumZoom! > capabilities.minimumZoom!) {
-        await camera.zoom((capabilities.minimumZoom! + .5).clamp(capabilities.minimumZoom!, capabilities.maximumZoom!));
-        expect(camera.snapshot!.currentZoom, greaterThanOrEqualTo(capabilities.minimumZoom!));
+      if (capabilities.maximumZoom != null &&
+          capabilities.maximumZoom! > capabilities.minimumZoom!) {
+        await camera.zoom(
+          (capabilities.minimumZoom! + .5).clamp(
+            capabilities.minimumZoom!,
+            capabilities.maximumZoom!,
+          ),
+        );
+        expect(
+          camera.snapshot!.currentZoom,
+          greaterThanOrEqualTo(capabilities.minimumZoom!),
+        );
         await camera.zoom(1);
       }
-      if (capabilities.minimumISO != null && capabilities.minimumShutter != null) {
-        final seconds = (1/125).clamp(capabilities.minimumShutter!, capabilities.maximumShutter!);
-        final iso = 100.0.clamp(capabilities.minimumISO!, capabilities.maximumISO!);
+      if (capabilities.minimumISO != null &&
+          capabilities.minimumShutter != null) {
+        final seconds = (1 / 125).clamp(
+          capabilities.minimumShutter!,
+          capabilities.maximumShutter!,
+        );
+        final iso = 100.0.clamp(
+          capabilities.minimumISO!,
+          capabilities.maximumISO!,
+        );
         await camera.manual(seconds, iso);
         expect(camera.snapshot!.manualExposure, isTrue, reason: camera.message);
         await Future<void>.delayed(const Duration(milliseconds: 500));
         await tester.pump();
-        final applied = await camera.host.setManualExposure(capabilities.configurationId, seconds, iso);
-        expect(applied.currentShutter, closeTo(seconds, .002), reason: 'Sensor must report the requested shutter time');
-        expect(applied.currentISO, closeTo(iso, 10), reason: 'Sensor must report the requested ISO');
+        final applied = await camera.host.setManualExposure(
+          capabilities.configurationId,
+          seconds,
+          iso,
+        );
+        expect(
+          applied.currentShutter,
+          closeTo(seconds, .002),
+          reason: 'Sensor must report the requested shutter time',
+        );
+        expect(
+          applied.currentISO,
+          closeTo(iso, 10),
+          reason: 'Sensor must report the requested ISO',
+        );
         await camera.returnAuto();
         expect(camera.snapshot!.manualExposure, isFalse);
         expect(camera.snapshot!.currentEV, closeTo(0, .1));
@@ -137,8 +172,11 @@ void main() {
       await camera.saveSelected();
       expect(camera.message, 'Selected copy saved to Photos');
       expect(camera.history, isNotEmpty);
-      camera.filter = 'off'; camera.watermark = false; camera.timerSeconds = 0;
-      camera.food = false; camera.choose(null);
+      camera.filter = 'off';
+      camera.watermark = false;
+      camera.timerSeconds = 0;
+      camera.food = false;
+      camera.choose(null);
       await camera.switchLens();
       await tester.pumpAndSettle();
       expect(camera.snapshot?.front, isTrue);
@@ -160,6 +198,40 @@ void main() {
       await camera.saveSelected();
       await tester.pumpAndSettle();
       expect(camera.message, contains('copy saved'));
+      await camera.returnToCamera();
+      await tester.pumpAndSettle();
+      final beforeBurst = camera.history.length;
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const Key('shutter'))),
+      );
+      await tester.pump(const Duration(milliseconds: 700));
+      for (var i = 0; i < 30 && camera.history.length < beforeBurst + 2; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pump();
+      for (var i = 0; i < 30 && camera.busy; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        await tester.pump();
+      }
+      expect(
+        camera.bursting,
+        isFalse,
+        reason: 'Releasing the actual shutter gesture must stop burst',
+      );
+      expect(camera.history.length, greaterThanOrEqualTo(beforeBurst + 2));
+      final afterBurst = camera.history.length;
+      await Future<void>.delayed(const Duration(seconds: 1));
+      await tester.pump();
+      expect(
+        camera.history.length,
+        afterBurst,
+        reason: 'No extra captures after release',
+      );
+      await camera.openHistory(camera.history.last);
+      await tester.pumpAndSettle();
+      expect(find.text('Photo review'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
     timeout: const Timeout(Duration(minutes: 20)),

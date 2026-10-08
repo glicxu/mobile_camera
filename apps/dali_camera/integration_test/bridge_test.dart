@@ -65,8 +65,17 @@ void main() {
     final originalPixels = await input.toByteData();
     final stylePixels = await styled.toByteData();
     expect(
-      stylePixels!.buffer.asUint8List(),
-      isNot(originalPixels!.buffer.asUint8List()),
+      pixelDifference(
+        originalPixels!,
+        stylePixels!,
+        input.width,
+        0,
+        0,
+        input.width,
+        input.height,
+      ),
+      greaterThan(1),
+      reason: 'Style must visibly change decoded pixels',
     );
     styled.dispose();
     styleCodec.dispose();
@@ -95,6 +104,18 @@ void main() {
         watermarkAsset.lengthInBytes,
       ),
     );
+    final plain = await host.renderStyle(
+      original,
+      PhotoStyle.identity,
+      0,
+      0,
+      null,
+    );
+    final plainCodec = await ui.instantiateImageCodec(
+      await File(plain.path).readAsBytes(),
+    );
+    final plainImage = (await plainCodec.getNextFrame()).image;
+    final plainPixels = (await plainImage.toByteData())!;
     final watermarked = await host.renderStyle(
       original,
       PhotoStyle.identity,
@@ -108,9 +129,34 @@ void main() {
     final markImage = (await markCodec.getNextFrame()).image;
     final markPixels = await markImage.toByteData();
     expect(
-      markPixels!.buffer.asUint8List(),
-      isNot(originalPixels.buffer.asUint8List()),
+      pixelDifference(
+        plainPixels,
+        markPixels!,
+        input.width,
+        (input.width * .65).toInt(),
+        (input.height * .80).toInt(),
+        input.width,
+        input.height,
+      ),
+      greaterThan(1),
+      reason: 'Watermark must appear in the bottom-right region',
     );
+    expect(
+      pixelDifference(
+        plainPixels,
+        markPixels,
+        input.width,
+        0,
+        0,
+        input.width ~/ 2,
+        input.height ~/ 2,
+      ),
+      lessThan(1),
+      reason: 'Watermark must not alter the top-left photo region',
+    );
+    plainImage.dispose();
+    plainCodec.dispose();
+    await host.releasePhoto(plain);
     markImage.dispose();
     markCodec.dispose();
     await host.releasePhoto(watermarked);
@@ -143,4 +189,28 @@ void main() {
     expect(await File(derived.path).exists(), isFalse);
     await file.delete();
   });
+}
+
+// Mean absolute RGB difference in a region; alpha and JPEG byte changes are excluded.
+double pixelDifference(
+  ByteData a,
+  ByteData b,
+  int width,
+  int x1,
+  int y1,
+  int x2,
+  int y2,
+) {
+  var total = 0;
+  var channels = 0;
+  for (var y = y1; y < y2; y++) {
+    for (var x = x1; x < x2; x++) {
+      final index = (y * width + x) * 4;
+      for (var c = 0; c < 3; c++) {
+        total += (a.getUint8(index + c) - b.getUint8(index + c)).abs();
+        channels++;
+      }
+    }
+  }
+  return total / channels;
 }
