@@ -56,7 +56,7 @@ internal object PhotoGeometry {
         val small = Bitmap.createScaledBitmap(image, w, h, true)
         try {
             val luma = DoubleArray(w * h) { i -> val c = small.getPixel(i % w, i / w); .2126 * Color.red(c) + .7152 * Color.green(c) + .0722 * Color.blue(c) }
-            var bestScore = 0.0; var bestAngle = 0; var bestCoverage = 0.0
+            var bestScore = 0.0; var bestAngle = 0; var bestCoverage = 0.0; var bestY = .5
             // Weighted near-horizontal edge voting. Require a long, consistent edge;
             // texture, blank scenes and steep lines return unavailable rather than a correction.
             for (angle in -20..20) {
@@ -76,11 +76,14 @@ internal object PhotoGeometry {
                 for (i in 1 until bins.size - 1) {
                     val support = coverage[i].toDouble() / (w / 2)
                     val score = bins[i - 1] + bins[i] + bins[i + 1]
-                    if (support >= .60 && score > bestScore) { bestScore = score; bestAngle = angle; bestCoverage = support }
+                    if (support >= .60 && score > bestScore) {
+                        bestScore = score; bestAngle = angle; bestCoverage = support
+                        bestY = ((i - w / 2 + slope * w / 2) / h).coerceIn(0.0, 1.0)
+                    }
                 }
             }
             if (bestScore < w * 12 || abs(bestAngle) == 20) return null
-            return JSONObject().put("angleDegrees", bestAngle).put("confidence", min(.95, .55 + bestCoverage * .20))
+            return JSONObject().put("angleDegrees", bestAngle).put("normalizedY", bestY).put("confidence", min(.95, .55 + bestCoverage * .20))
                 .put("method", "imageGradientLineVoting")
         } finally { if (small !== image) small.recycle() }
     }

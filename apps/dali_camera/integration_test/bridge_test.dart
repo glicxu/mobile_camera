@@ -37,6 +37,7 @@ void main() {
     expect(analysis['sourceId'], 'fixture');
     expect(analysis['schemaVersion'], 1);
     expect(analysis['poseKeypoints'], isA<Map>());
+    NativeFrame(analysis.cast<String, dynamic>());
     if (Platform.isAndroid) {
       expect((analysis['faces'] as List), isNotEmpty);
       expect((analysis['people'] as List), isNotEmpty);
@@ -66,6 +67,56 @@ void main() {
       sourceCodec.dispose();
       await host.releasePhoto(copy);
       expect(await File(copy.path).exists(), isFalse);
+    }
+    if (Platform.isAndroid) {
+      // A tilted two-tone scene exercises the actual optical horizon contract
+      // and correction, independently of phone roll and person detection.
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      canvas.drawColor(const ui.Color(0xff80bfff), ui.BlendMode.src);
+      canvas.drawPath(
+        ui.Path()
+          ..moveTo(0, 100)
+          ..lineTo(480, 228)
+          ..lineTo(480, 360)
+          ..lineTo(0, 360)
+          ..close(),
+        ui.Paint()..color = const ui.Color(0xff304020),
+      );
+      final picture = recorder.endRecording();
+      final scene = await picture.toImage(480, 360);
+      final sceneBytes = (await scene.toByteData(
+        format: ui.ImageByteFormat.png,
+      ))!;
+      final sceneFile = File('${Directory.systemTemp.path}/dali-horizon.png');
+      await sceneFile.writeAsBytes(sceneBytes.buffer.asUint8List());
+      final sceneHandle = PhotoHandle(
+        path: sceneFile.path,
+        id: 'horizon',
+        unsaved: false,
+      );
+      final sceneAnalysis =
+          (jsonDecode(await host.analyzePhoto(sceneHandle)) as Map)
+              .cast<String, dynamic>();
+      final parsed = NativeFrame(sceneAnalysis);
+      expect(parsed.frame.horizon.value?.angleDegrees, closeTo(15, 2));
+      expect(
+        parsed.frame.horizon.value?.normalizedY,
+        inInclusiveRange(0.0, 1.0),
+      );
+      final leveled = await host.renderEffects(
+        sceneHandle,
+        jsonEncode({'version': 1, 'treatment': 'level'}),
+      );
+      final corrected = NativeFrame(
+        (jsonDecode(await host.analyzePhoto(leveled)) as Map)
+            .cast<String, dynamic>(),
+      );
+      expect(corrected.frame.horizon.value?.angleDegrees, closeTo(0, 2));
+      await host.releasePhoto(leveled);
+      await sceneFile.delete();
+      scene.dispose();
+      picture.dispose();
     }
     final enhanced = await host.renderEffects(
       original,

@@ -1025,6 +1025,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       final data = jsonDecode(json) as Map<String, dynamic>;
       if (data['configurationId'] != snapshot!.configurationId) return;
       final packet = NativeFrame(data);
+      if (message?.startsWith('Analysis format error:') == true) {
+        message = null;
+      }
       lastFrame = data;
       unawaited(updateDepthPreview());
       aspectRatio = packet.aspectRatio;
