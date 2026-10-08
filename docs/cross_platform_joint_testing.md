@@ -1,6 +1,20 @@
 # Joint phone testing - parity candidate
 
-## Latest shutter feedback - October 8, 2026
+## Latest processed-before-save capture - October 8, 2026
+
+Source: `0a95ca3`, branch `codex/cross-platform-20261007`. The user's requested order supersedes the historical original-first save checkpoints below. Android copies the CameraX JPEG buffer, closes the camera image, applies the shutter-time filter/beautifier/depth/signature recipe from the owned buffer and saves one final photo to Photos. A separate private original is retained for recovery and Before comparison. It is not automatically saved to Photos. Effects-off captures save that original as the final output. See the [CameraX in-memory capture API](https://developer.android.com/reference/androidx/camera/core/ImageCapture) for the capture mechanism.
+
+Processing/save failures keep the original recoverable, block a new capture until retry/discard and retry the frozen recipe even if the current controls change. The shared controller and typed iOS bridge support final-output saving; iOS device/runtime acceptance remains deferred.
+
+Flutter analysis and 31 tests pass. The Galaxy camera flow passed in 56 seconds (58 with teardown); native rendering/recovery passed in 15 seconds (17 with teardown). The camera test verifies exactly one new Photos asset, byte-identical to the selected processed JPEG and different from the private original; the pending manifest is cleared after saving. The rendering suite also verifies immutable originals and 2400x1600 output.
+
+The Galaxy debug sample recorded camera/private recovery preparation at 821 ms, effects at 8017 ms and final gallery save at 198 ms (9036 ms total). This confirms the order, not a speed improvement. The shutter retains its stable appearance and successful-capture flash; it is still disabled while processing/saving. Background capture queuing is not implemented.
+
+The tablet camera flow passed in 121 seconds (123 with teardown); native rendering/recovery passed in 49 seconds (51 with teardown). Its debug effect sample took 18933 ms, with camera/private recovery preparation at 1343 ms and final gallery save at 346 ms (20622 ms total). Both normal apps are updated in place without clearing data. Independently pulled installed APKs match SHA-256 `a7d4fe43f6b2a5177d07d779a6d62461b3255be521c326106302cc96ceaf7485`. Shared checks and Android build CI pass in [run 37859358971](https://github.com/glicxu/mobile_camera/actions/runs/37859358971); iOS runtime acceptance remains deferred.
+
+Retest with a filter or beautifier selected: press the shutter, see the flash/Photo taken acknowledgment, then Preparing photo and Saving photo. Photos should receive one completed result. Turn effects off and repeat. Explicitly exporting Before remains available as a user action.
+
+## Historical shutter feedback - October 8, 2026
 
 Source: `62eb0b5`. The shutter previously replaced its ring with a spinner whenever the shared `busy` flag was true. That flag covers gallery saving, effects, analysis and other operations; the spinner did not indicate that the camera was still exposing a photo.
 
@@ -10,7 +24,7 @@ Flutter analysis and 31 tests pass, covering delayed saving/no spinner, failed c
 
 Retest: tap the shutter and look for one viewport flash/Photo taken confirmation, then the separate Saving original/Preparing effects status. The shutter should remain still, with another capture blocked until processing completes. Test a timer capture and hold/release burst; reduced-motion mode should show text without a white flash.
 
-## Latest Android capture-speed fix - October 8, 2026
+## Historical Android capture-speed fix - October 8, 2026
 
 Source: `6309bb3`, branch `codex/cross-platform-20261007`. Supersedes the production candidate recorded below. A user reported a slow shutter-to-save transition. Galaxy profiling showed the original camera capture/gallery save completed in 1056 ms, followed by 10063 ms preparing a Fresh-filter copy. The UI previously waited for effects and analysis before entering review.
 

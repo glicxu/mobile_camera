@@ -7,6 +7,12 @@ Reference: native iOS app at `d53a977`. Starting Flutter source: `be9c765`.
 
 Current per-action contract: [comprehensive source/action audit](cross_platform_action_audit.md). Its destinations and state transitions supersede the historical aggregate checks below. Current software additions: lazy Photos library, native beautifier dropdown/disclosures, image labels/fullscreen, actual lens metadata and active pose swipes. Final Android tablet and Galaxy camera/rendering validation passes; the same candidate is installed on both. iOS validation is deferred by the current priority.
 
+## Process before saving - October 8, 2026
+
+Implemented in `0a95ca3` at the user's request, superseding the original-first automatic gallery-save order described in the historical speed checkpoint below. Android takes an owned CameraX JPEG buffer, snapshots the selected filter/beautifier/depth/signature recipe at shutter time, renders from that buffer and saves one final photo to Photos. A private original supports recovery and Before comparison; it is not automatically added to Photos. With effects off, the original buffer becomes the final photo. Processing/save failures retain recovery state and retry the frozen recipe without silently exporting an unprocessed original.
+
+Analysis and 31 Flutter tests pass. Galaxy and tablet camera and native rendering/recovery suites pass, including exactly one new gallery asset matching the processed bytes. Both normal apps are installed and independently verified; current build evidence is recorded in [joint testing](cross_platform_joint_testing.md). Shared checks and Android build CI pass. Shutter feedback remains enabled; processing still guards the next capture. Background capture queuing and release performance are not completed by this change.
+
 ## Shutter feedback follow-up
 
 The user requested immediate visual assurance that a photo was captured. `62eb0b5` removes the shutter spinner tied to the general busy flag, retains capture guards and adds a short viewport flash/Photo taken confirmation after successful camera capture. Saving and processing remain separate statuses. Reduced-motion uses text without flashing; failures do not acknowledge success. Analysis/31 Flutter tests pass; device results are recorded in [joint testing](cross_platform_joint_testing.md).
