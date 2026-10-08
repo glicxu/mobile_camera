@@ -14,6 +14,8 @@ The tablet camera flow passed in 121 seconds (123 with teardown); native renderi
 
 Retest with a filter or beautifier selected: press the shutter, see the flash/Photo taken acknowledgment, then Preparing photo and Saving photo. Photos should receive one completed result. Turn effects off and repeat. Explicitly exporting Before remains available as a user action.
 
+User-requested timing rerun at `f2208a3`: Galaxy debug camera suite passed in 55 seconds (57 with teardown). Fresh filter plus watermark took 846 ms for camera/private recovery preparation, 7963 ms for effects and 168 ms for final gallery save: 8977 ms total, excluding the three-second timer. Effects-off captures took 1085, 725 and 919 ms through saving. The first effects-off capture also requested review analysis, adding 690 ms (1775 ms including review analysis). These are individual debug samples, not release benchmarks or an isolated beautifier benchmark. The processed-photo-only gallery assertions passed again.
+
 ## Historical shutter feedback - October 8, 2026
 
 Source: `62eb0b5`. The shutter previously replaced its ring with a spinner whenever the shared `busy` flag was true. That flag covers gallery saving, effects, analysis and other operations; the spinner did not indicate that the camera was still exposing a photo.
