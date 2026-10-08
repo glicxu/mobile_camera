@@ -11,16 +11,46 @@ final class PhoneReadinessUITests: XCTestCase {
 
         let cameraControl = app.buttons["cameraControlButton"]
         XCTAssertTrue(cameraControl.waitForExistence(timeout: 15))
-        XCTAssertEqual(cameraControl.label, "Camera controls, Auto")
+        XCTAssertEqual(cameraControl.label, "Camera controls")
         cameraControl.tap()
 
         XCTAssertTrue(app.navigationBars["Camera controls"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["shutterControlsGroup"].exists)
+        XCTAssertTrue(app.buttons["filterControlsGroup"].exists)
+        XCTAssertTrue(app.buttons["capturePolishGroup"].exists)
+        XCTAssertTrue(app.buttons["focusExposureControlsGroup"].exists)
+        XCTAssertFalse(app.switches["automaticFilterSelection"].exists)
+        app.buttons["focusExposureControlsGroup"].tap()
+        XCTAssertTrue(app.segmentedControls["focusExposureMode"].exists)
+        app.buttons["focusExposureControlsGroup"].tap()
+        XCTAssertFalse(app.segmentedControls["shutterTimerPicker"].exists)
+        app.buttons["shutterControlsGroup"].tap()
+        XCTAssertTrue(app.segmentedControls["shutterTimerPicker"].exists)
+        XCTAssertTrue(app.buttons["Off"].exists)
+        XCTAssertTrue(app.buttons["3s"].exists)
+        XCTAssertTrue(app.buttons["5s"].exists)
+        XCTAssertTrue(app.buttons["10s"].exists)
         XCTAssertTrue(app.switches["voiceShutterToggle"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["voiceShutterStatus"].exists)
-        XCTAssertTrue(app.staticTexts["Camera controls need an iPhone"].exists)
-        app.buttons["Assisted"].tap()
+        XCTAssertTrue(app.buttons["shutterLongPressAction"].exists)
+        XCTAssertFalse(app.segmentedControls["tapMeteringTarget"].exists)
+        app.switches["voiceShutterToggle"].tap()
+        XCTAssertTrue(app.textFields["voiceShutterCustomPhrase"].waitForExistence(timeout: 3))
         app.buttons["Done"].tap()
-        XCTAssertEqual(app.buttons["cameraControlButton"].label, "Camera controls, Assisted")
+        XCTAssertEqual(app.buttons["cameraControlButton"].label, "Camera controls")
+    }
+
+    @MainActor
+    func testCameraBrandUsesDaliCamName() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+
+        let brand = app.staticTexts["cameraBrandName"]
+        XCTAssertTrue(brand.waitForExistence(timeout: 15))
+        XCTAssertEqual(brand.label, "Dali Cam")
     }
 
     @MainActor
@@ -30,14 +60,23 @@ final class PhoneReadinessUITests: XCTestCase {
         app.launchArguments = ["-hasSeenDaliTutor", "NO"]
         app.launch()
         app.tap()
-        XCTAssertTrue(app.buttons["Start taking photos"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["tutorialNextButton"].waitForExistence(timeout: 15))
         attachScreenshot("Welcome")
+        app.buttons["Next"].tap()
+        XCTAssertTrue(app.staticTexts["Choose a posture package"].waitForExistence(timeout: 3))
+        app.buttons["Next"].tap()
+        XCTAssertTrue(app.staticTexts["Choose a landscape package"].waitForExistence(timeout: 3))
+        while app.buttons["Next"].exists {
+            app.buttons["Next"].tap()
+        }
         app.buttons["Start taking photos"].tap()
         app.tap()
-        XCTAssertTrue(app.buttons["Help"].waitForExistence(timeout: 5))
-        app.buttons["Help"].tap()
-        XCTAssertTrue(app.navigationBars["Welcome to Dali"].waitForExistence(timeout: 5))
-        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["appSettingsButton"].waitForExistence(timeout: 5))
+        app.buttons["appSettingsButton"].tap()
+        XCTAssertTrue(app.buttons["cameraTutorialButton"].waitForExistence(timeout: 5))
+        app.buttons["cameraTutorialButton"].tap()
+        XCTAssertTrue(app.navigationBars["Quick Camera Tutorial"].waitForExistence(timeout: 5))
+        app.buttons["Skip"].tap()
     }
 
     @MainActor
@@ -152,6 +191,32 @@ final class PhoneReadinessUITests: XCTestCase {
     }
 
     @MainActor
+    func testQuickEffectsMenuControlsFilterAndBeautifier() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-hasSeenDaliTutor", "YES",
+            "-filterApplicationMode", "off",
+            "-beautifierApplicationMode", "off"
+        ]
+        app.launch()
+        app.tap()
+
+        let effects = app.buttons["effectsMenu"]
+        XCTAssertTrue(effects.waitForExistence(timeout: 15))
+        XCTAssertEqual(effects.label, "Effects, Filters Off, Beautifier Off")
+        effects.tap()
+        XCTAssertTrue(app.buttons["quickEffectsAuto"].waitForExistence(timeout: 3))
+        app.buttons["quickEffectsAuto"].tap()
+        XCTAssertEqual(effects.label, "Effects, Filters Auto, Beautifier Auto")
+
+        effects.tap()
+        XCTAssertTrue(app.buttons["quickBeautifierMode_off"].waitForExistence(timeout: 3))
+        app.buttons["quickBeautifierMode_off"].tap()
+        XCTAssertEqual(effects.label, "Effects, Filters Auto, Beautifier Off")
+    }
+
+    @MainActor
     func testMountainsLandscapePackageIsSelectable() {
         allowCameraPrompt()
         let app = XCUIApplication()
@@ -199,6 +264,38 @@ final class PhoneReadinessUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Centered reflection"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Center the shoreline horizontally. Keep the reflected peak or trees fully visible."].exists)
         XCTAssertTrue(app.staticTexts["Best light: Sunrise or sunset"].exists)
+    }
+
+    @MainActor
+    func testFoodPackageShowsHeroPlateGuidance() {
+        allowCameraPrompt()
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasSeenDaliTutor", "YES"]
+        app.launch()
+        app.tap()
+        XCTAssertTrue(app.buttons["situationMenu"].waitForExistence(timeout: 15))
+        app.buttons["situationMenu"].tap()
+        app.buttons["Food"].tap()
+
+        XCTAssertTrue(app.buttons["foodMenu"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["postureMenu"].exists)
+        XCTAssertFalse(app.buttons["landscapeMenu"].exists)
+        app.buttons["foodMenu"].tap()
+        XCTAssertTrue(app.navigationBars["Food package"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["naturalFoodOption"].exists)
+
+        let heroPlate = app.buttons["foodOption_FD1"]
+        XCTAssertTrue(heroPlate.waitForExistence(timeout: 5))
+        heroPlate.tap()
+        XCTAssertTrue(app.staticTexts["Hero plate"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended angle: 45-degree angle"].exists)
+        XCTAssertTrue(app.staticTexts["Best light: Soft window side light"].exists)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "activeFoodCard").firstMatch.exists)
+
+        app.descendants(matching: .any).matching(identifier: "activeFoodCard").firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Hero plate"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Recommended camera angle: 45-degree angle"].exists)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "foodSafetyNote").firstMatch.exists)
     }
 
     @MainActor
@@ -480,6 +577,13 @@ final class PhoneReadinessUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Save a copy"].waitForExistence(timeout: 20))
         XCTAssertTrue(app.buttons["Share"].exists)
         XCTAssertTrue(app.buttons["Back to camera"].exists)
+        XCTAssertTrue(app.staticTexts["Photo 1 of 3"].exists)
+        let reviewPane = app.images["reviewImagePane"]
+        XCTAssertTrue(reviewPane.exists)
+        reviewPane.swipeLeft()
+        XCTAssertTrue(app.staticTexts["Photo 2 of 3"].waitForExistence(timeout: 10))
+        reviewPane.swipeRight()
+        XCTAssertTrue(app.staticTexts["Photo 1 of 3"].waitForExistence(timeout: 10))
         attachScreenshot("Photo review")
         app.buttons["Open full-screen photo"].tap()
         XCTAssertTrue(app.buttons["Close photo"].waitForExistence(timeout: 5))

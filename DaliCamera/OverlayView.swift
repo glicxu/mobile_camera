@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct OverlayView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let advice: Advice
     let measurements: Measurements
     let issues: [PhotoIssue]
@@ -8,6 +9,7 @@ struct OverlayView: View {
     var reframeSuggestion: ReframeSuggestion? = nil
     var contentAspectRatio: CGFloat? = nil
     var guidedAction: GuidedAction? = nil
+    @State private var directionAnimation = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -37,7 +39,8 @@ struct OverlayView: View {
                     posePoints(in: contentRect)
                 }
 
-                directionHint
+                directionHint(in: contentRect)
+                coachingStatusBadge(in: contentRect)
 
                 if debugEnabled {
                     debugPanel
@@ -48,6 +51,12 @@ struct OverlayView: View {
             }
         }
         .allowsHitTesting(false)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                directionAnimation = true
+            }
+        }
     }
 
     private func ruleOfThirds(in rect: CGRect) -> some View {
@@ -64,20 +73,91 @@ struct OverlayView: View {
         .stroke(.white.opacity(0.18), lineWidth: 1)
     }
 
-    private var directionHint: some View {
-        Group {
-            if let guidedAction {
-                Image(systemName: guidedAction.symbol)
-                    .font(.system(size: 40, weight: .semibold))
-                    .foregroundStyle(.teal)
-                    .shadow(radius: 10)
-                    .accessibilityHidden(true)
-            } else if !advice.type.hasPrefix("guided_"), advice.type != "ready", let symbol = advice.directionSymbol {
-                Image(systemName: symbol)
-                    .font(.system(size: 40, weight: .semibold))
-                    .foregroundStyle(.teal)
-                    .shadow(radius: 10)
-            }
+    @ViewBuilder
+    private func directionHint(in contentRect: CGRect) -> some View {
+        if let direction = advice.visualGuidanceDirection {
+            movementGuide(direction, in: contentRect)
+        } else if let guidedAction {
+            Image(systemName: guidedAction.symbol)
+                .font(.system(size: 40, weight: .semibold))
+                .foregroundStyle(coachingColor)
+                .shadow(radius: 10)
+                .accessibilityHidden(true)
+        } else if !advice.type.hasPrefix("guided_"), advice.type != "ready", let symbol = advice.directionSymbol {
+            Image(systemName: symbol)
+                .font(.system(size: 40, weight: .semibold))
+                .foregroundStyle(coachingColor)
+                .shadow(radius: 10)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func coachingStatusBadge(in contentRect: CGRect) -> some View {
+        ZStack {
+            Circle()
+                .fill(.black.opacity(0.68))
+                .frame(width: 32, height: 32)
+            Circle()
+                .fill(coachingColor)
+                .frame(width: 20, height: 20)
+                .overlay { Circle().stroke(.white.opacity(0.9), lineWidth: 2) }
+                .shadow(color: coachingColor.opacity(0.95), radius: 8)
+        }
+            .position(x: contentRect.midX, y: contentRect.minY + 30)
+            .accessibilityHidden(true)
+    }
+
+    private var coachingColor: Color {
+        switch advice.tone {
+        case .ready: return .green
+        case .warning, .danger: return .orange
+        case .waiting: return .yellow
+        }
+    }
+
+    private func movementGuide(_ direction: VisualGuidanceDirection, in contentRect: CGRect) -> some View {
+        let offset = directionAnimation ? direction.movementOffset : .zero
+
+        return VStack(spacing: 8) {
+            Image(systemName: direction.symbol)
+                .font(.system(size: 52, weight: .bold))
+                .frame(width: 82, height: 82)
+                .foregroundStyle(.white)
+                .background(coachingColor.opacity(0.92), in: Circle())
+                .overlay { Circle().stroke(.white.opacity(0.9), lineWidth: 3) }
+                .shadow(color: .black.opacity(0.65), radius: 10)
+                .offset(offset)
+
+            Text(advice.instruction)
+                .font(.headline.bold())
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: min(200, max(140, contentRect.width * 0.48)))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.black.opacity(0.72), in: Capsule())
+                .overlay { Capsule().stroke(.white.opacity(0.35), lineWidth: 1) }
+        }
+        .position(guidePosition(for: direction, in: contentRect))
+        .accessibilityHidden(true)
+    }
+
+    private func guidePosition(for direction: VisualGuidanceDirection, in rect: CGRect) -> CGPoint {
+        let horizontalInset = min(112, rect.width * 0.27)
+        let verticalInset = min(132, rect.height * 0.25)
+
+        switch direction {
+        case .left:
+            return CGPoint(x: rect.minX + horizontalInset, y: rect.midY)
+        case .right:
+            return CGPoint(x: rect.maxX - horizontalInset, y: rect.midY)
+        case .up:
+            return CGPoint(x: rect.midX, y: rect.minY + verticalInset)
+        case .down:
+            return CGPoint(x: rect.midX, y: rect.maxY - verticalInset)
+        case .closer, .farther, .rotateLeft, .rotateRight:
+            return CGPoint(x: rect.midX, y: rect.midY)
         }
     }
 
@@ -276,4 +356,78 @@ struct OverlayView: View {
         return PreviewGeometry.fittedRect(in: size, aspectRatio: contentAspectRatio)
     }
 
+}
+
+struct DigitalDepthOfFocusOverlay: View {
+    let measurements: Measurements
+    let focusPoint: CGPoint?
+    let level: Int
+    var contentAspectRatio: CGFloat? = nil
+
+    var body: some View {
+        GeometryReader { proxy in
+            let contentRect = contentRect(in: proxy.size)
+            let subjectRect = subjectRect(in: contentRect)
+
+            if let subjectRect {
+                Path { path in
+                    path.addRect(contentRect)
+                    path.addRoundedRect(
+                        in: subjectRect,
+                        cornerSize: CGSize(
+                            width: min(subjectRect.width, subjectRect.height) * 0.28,
+                            height: min(subjectRect.width, subjectRect.height) * 0.28
+                        )
+                    )
+                }
+                .fill(.ultraThinMaterial, style: FillStyle(eoFill: true))
+                .opacity(0.30 + Double(max(0, min(5, level))) * 0.09)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func subjectRect(in contentRect: CGRect) -> CGRect? {
+        let candidates = [measurements.personBox?.rect, measurements.salientObjectBox?.rect, measurements.faceBox?.rect]
+            .compactMap { $0 }
+        let selected = focusPoint.flatMap { point in
+            candidates.first(where: { $0.insetBy(dx: -0.04, dy: -0.04).contains(point) })
+        }
+
+        let normalized: CGRect
+        if let selected {
+            normalized = selected.insetBy(dx: -selected.width * 0.22, dy: -selected.height * 0.18)
+        } else if let person = measurements.personBox?.rect {
+            normalized = person.insetBy(dx: -person.width * 0.16, dy: -person.height * 0.10)
+        } else if let face = measurements.faceBox?.rect {
+            normalized = CGRect(
+                x: face.minX - face.width * 1.1,
+                y: face.minY - face.height * 0.45,
+                width: face.width * 3.2,
+                height: face.height * 4.7
+            )
+        } else if let focusPoint {
+            normalized = CGRect(x: focusPoint.x - 0.18, y: focusPoint.y - 0.24, width: 0.36, height: 0.48)
+        } else {
+            return nil
+        }
+
+        let minX = max(0, normalized.minX)
+        let minY = max(0, normalized.minY)
+        let maxX = min(1, normalized.maxX)
+        let maxY = min(1, normalized.maxY)
+        guard maxX > minX, maxY > minY else { return nil }
+        return CGRect(
+            x: contentRect.minX + minX * contentRect.width,
+            y: contentRect.minY + minY * contentRect.height,
+            width: (maxX - minX) * contentRect.width,
+            height: (maxY - minY) * contentRect.height
+        )
+    }
+
+    private func contentRect(in size: CGSize) -> CGRect {
+        guard let contentAspectRatio else { return CGRect(origin: .zero, size: size) }
+        return PreviewGeometry.fittedRect(in: size, aspectRatio: contentAspectRatio)
+    }
 }

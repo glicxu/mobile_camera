@@ -24,7 +24,7 @@ The CI device build is unsigned. Install through Xcode with your own signing tea
 - The preview shows the complete camera frame, with black margins where needed. Overlay geometry uses that same frame instead of stretching detections over a cropped preview.
 - Portrait, landscape, and front-camera mirroring are coordinated across preview, analysis, and capture. Vision receives already-oriented frames.
 - Camera guidance and shutter controls have separate space. Advice scrolls on smaller screens and at larger text sizes; the shutter stays outside that scroll region.
-- The latest thumbnail opens photo review. Review supports comparison, saving the selected version as a copy, and sharing.
+- The latest thumbnail opens Dali's recent-capture history in photo review. Review supports left/right swipe navigation, comparison, saving the selected version as a copy, and sharing. The history keeps up to 25 review-sized captures on device; the system Photos picker remains available for loading other user-selected photos without blanket library access.
 - Unsaved captured originals have retry, share, Settings, and explicit discard controls, plus local recovery on relaunch.
 - People Coach includes 10 optional poses and five camera positions. Creative steps are confirmed manually; the app does not claim to detect that a pose has been completed.
 - Debug detection boxes and detailed measurements are off by default. Enable **Configure > Debug overlay** only when inspecting alignment.
@@ -37,7 +37,7 @@ The CI device build is unsigned. Install through Xcode with your own signing tea
 | Turn the phone to both landscape orientations | Preview stays upright and controls remain reachable. |
 | Switch to the front camera | Preview, detection boxes, and saved selfie use consistent mirroring. |
 | Enable Debug overlay and move a person near each edge | Person/face boxes follow the visible image, including the margins. |
-| Tap the latest thumbnail | That photo opens directly without searching the library. |
+| Tap the latest thumbnail | The newest Dali capture opens directly; swipe left for older captures and right for newer captures. |
 | Select an enhancement, compare, Save a copy, then Share | The output matches the selected preview and the original is preserved. |
 | Open Poses & angles | Nine masculine and thirteen feminine examples are grouped by pose type; all five camera positions remain available. |
 | Start a pose with a camera position | Camera steps precede subject steps; Done / Next or Skip advances one step. |

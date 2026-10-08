@@ -1,7 +1,7 @@
 # Dali Camera Control and Assisted Professional Mode
 
 Date: October 6, 2026
-Status: First-level placement and basic-control prototype implemented
+Status: First-level placement and camera controls implemented
 
 ## Prototype snapshot
 
@@ -9,16 +9,33 @@ The first native iOS test places a compact **Camera** button beside the shutter.
 
 The initial sheet includes:
 
-- Auto and Assisted modes,
+- an optional Auto Assistance feature that presents one recommendation at a time,
 - the active camera and lens name,
 - live shutter-duration and ISO readouts,
 - capability-bounded exposure compensation,
 - combined focus and exposure lock when both are supported,
 - one-tap return to Auto,
-- an opt-in voice shutter that responds to **“Cheese,”**
+- a persistent opt-in voice shutter with built-in commands and a user-defined word or phrase,
+- a persistent Off, 3-second, 5-second, or 10-second shutter timer shared by button and voice capture,
 - and a short list of controls reported by the active camera.
 
-Voice shutter requests microphone and Speech Recognition access only when the user turns it on. A status row shows when it is listening, and listening pauses automatically during photo review or while the app is in the background. The first prototype uses “Cheese” as the primary command and also accepts “Take photo” and “Take a picture” as compatibility phrases; broader commands and multilingual testing remain future work.
+Voice shutter requests microphone and Speech Recognition access only when the user turns it on, then remembers that choice. It accepts “Cheese,” “Take photo,” “Take a picture,” “Capture photo,” and “Snap a photo,” plus one user-defined shutter word or phrase stored on the device. A status row reports authorization, listening, capture, retry, and paused states. Listening pauses automatically during capture, photo review, menus, imports, and while the app is in the background. Speech and microphone denials are explained separately with a direct Settings action. Recognition sessions restart safely after final results, transient errors, or temporary service unavailability.
+
+The shutter timer offers Off, 3-second, 5-second, and 10-second delays. It applies to both the on-screen shutter and voice commands, displays a large countdown over the live preview, provides haptic ticks, supports cancellation, and cancels safely if the user opens a menu or leaves the live camera.
+
+Camera Controls has four independently expandable groups that start collapsed: **Shutter Controls**, **Filters**, **Beautifier**, and **Focus and Exposure**. Shutter Controls groups the clearly labeled Photo timer, Voice shutter, and Long-press shutter behavior. Focus and Exposure offers Auto or Manual. A Manual button in the top bar can enter Manual directly and calls or hides the compact Focus, Depth, Exposure, and Auto tool rail on the right side of the preview. A control appears only after its tool is selected, and selecting the tool again hides it. Exposure time begins in Auto. Auto-mode preview taps request combined focus and exposure, while Manual taps move only the persistent focus point. Filters has a top-level application choice: Auto selects a named preset for the current scene, Custom exposes the named preset picker and individual settings, and Off applies no filter. Moving an individual slider copies the active preset into Custom before changing that setting.
+
+The former top-bar Configure button was removed. Its normal-user functions were duplicates: capture effects belong in Camera Controls, post-capture Enhance and Polish belong in the photo editor, and pose packages belong in guidance. The developer debug overlay no longer occupies a primary camera button.
+
+The former question-mark button is now an App Settings gear. App Settings provides About and a seven-step Quick Camera Tutorial. The swipeable tutorial illustrates situation selection, posture-package and landscape-package selection, green/amber coaching, Filters and Beautifier, tap/timer/voice/burst capture, photo review, and returning to the camera. It appears once for a new user, remains reopenable from App Settings, and can be skipped at any time. Language choice, display options, Dali Pro purchasing, and purchase restoration are visible as explicit coming-soon placeholders until those systems are implemented.
+
+The compact control beside Situation is **Effects**, not a Filter-only shortcut. Its dropdown shows separate Filters and Beautifier application modes, plus one-tap Both Auto and Both Off choices. The compact value summarizes both states; named presets and individual fine-tuning remain in Camera Controls.
+
+Free captures display and save a transparent champagne-gold **Dali Cam** signature in the lower-right corner. The live viewfinder shows the same mark before capture so it is never a surprise. Capture filters, beautification, depth blur, timers, voice shutter, and bursts all converge on the same finalization path before the watermark is rendered. Watermarking uses source-over compositing and has a regression test proving that the underlying photo remains intact. The Dali Pro entitlement is the future switch for watermark-free capture; its purchase flow remains a coming-soon placeholder.
+
+Photo review exposes both a labeled top-bar Camera control and a prominent **Back to Camera** button below the photo actions. Either clears the current review navigation state and resumes the live camera.
+
+Beautifier adds a second capture-processing layer after the color filter and uses the same Auto, Custom, and Off application model. Auto chooses General Enhance, Portrait Polish, or Landscape Polish for the detected situation and uses a suitable named preset. Custom exposes the beautifier type, presets, and individual settings. Portrait has Natural, Polished, Glam, and Custom presets; Landscape has Natural, Vivid, Dramatic, and Custom presets. Each preset is a saved combination of the separately grouped Portrait or Landscape level and effect switches. Changing an individual setting copies the active preset into Custom. Capture Beautifier settings are independent from the post-processing editor and are baked into the saved capture before its thumbnail and review image appear. Later review treatments remain available as another optional layer. Focus and Exposure does not contain filter or beautifier adjustments.
 
 On the simulator, the same sheet explains that physical-camera controls require an iPhone. The prototype reads the active camera's reported limits at runtime; it does not assume a particular exposure range or lock capability.
 
@@ -384,17 +401,17 @@ The `configurationID` prevents the app from applying a recommendation calculated
 
 ### Phase 2: Assisted Pro MVP
 
-1. Add Auto, Assisted, and Manual state management.
+1. **Implemented:** Focus and Exposure is a peer camera-control group with Auto and Manual modes. Manual contains the M, Tv, and Av exposure programs.
 2. Add lens selection from discovered devices or constituents.
-3. Add exposure compensation with supported limits.
-4. Add tap focus and tap exposure, plus visible lock states.
-5. Display live shutter duration, ISO, focus mode, and white-balance mode.
-6. Implement Motion, Low Light, Bright Sky, Portrait, and Consistent Series recommendations.
-7. Add Apply, Keep Auto, and Return to Auto actions.
+3. **Implemented:** Add exposure compensation with supported limits.
+4. **Implemented:** Tap focus and tap exposure can be combined or selected separately, with distinct AF/AE locks and visible preview indicators.
+5. **Partially implemented:** Display live Tv, Av, and ISO. Focus mode and white-balance mode remain.
+6. **Implemented for the available safe controls:** Motion, Low Light, Bright Sky, Portrait, and Consistent Series recommendations use live preview evidence and recent captures.
+7. **Implemented:** Recommendations provide Apply and Dismiss, and Focus and Exposure provides a complete return-to-Auto action.
 
 ### Phase 3: Manual controls and overlays
 
-1. Add supported shutter-duration and ISO controls.
+1. **Implemented:** Add supported manual shutter-duration and ISO controls, read-only fixed Av, capability-gated Tv/Av priority modes on iOS 27 or newer, a live exposure meter, and Linked ISO with ±EV adjustment.
 2. Add manual focus and white-balance controls.
 3. Add histogram, clipping warnings, zebras, and focus peaking.
 4. Add named presets whose values are resolved against the active capability profile.
