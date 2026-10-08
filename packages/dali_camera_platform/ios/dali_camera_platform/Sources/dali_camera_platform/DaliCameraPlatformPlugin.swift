@@ -176,6 +176,21 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             }
         }
     }
+    func saveCaptured(original: PhotoHandle, processed: PhotoHandle, completion: @escaping (Result<Void, Error>) -> Void) {
+        do {
+            guard try recover()?.id == original.id else { throw failure("Capture recovery identity changed") }
+        } catch { completion(.failure(error)); return }
+        save(photo: processed) { result in
+            switch result {
+            case .success:
+                do {
+                    if try self.recover()?.id == original.id { try FileManager.default.removeItem(at: self.manifest) }
+                    completion(.success(()))
+                } catch { completion(.failure(error)) }
+            case .failure(let error): completion(.failure(error))
+            }
+        }
+    }
     func discard(photo: PhotoHandle) throws {
         if try recover()?.id == photo.id { try FileManager.default.removeItem(at: manifest); try FileManager.default.removeItem(atPath: photo.path) }
     }

@@ -28,7 +28,7 @@ The reference's `proExposureControls`, `exposureMeter`, `assistedRecommendationC
 
 | Native action/state | Flutter implementation | Verification / limit |
 | --- | --- | --- |
-| Shutter tap | White ring shutter, timer count; captures and saves an immutable original before processing | Capture/export/failure tests |
+| Shutter tap | Stable white ring and success flash; capture buffer is processed before a single final Photos save. Immutable original stays private for recovery/review | User-requested override of native original-first behavior; capture/export/failure tests |
 | Countdown | Center large count, Cancel; sequence cannot survive pause or modal controls | Cancellation/duplicate capture tests |
 | Long press Burst/Timer/Disabled | Release/cancel stops burst; visible burst count; pending original blocks next capture | Device and controller tests |
 | Voice standard/custom phrase | Desired preference distinct from actual listening; custom phrase, permission status, lifecycle resume and deduplication | Controller/native checks; physical speech/audio acceptance pending |

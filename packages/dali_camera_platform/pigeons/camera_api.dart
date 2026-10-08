@@ -107,6 +107,8 @@ abstract class CameraHostApi {
   PhotoHandle? recover();
   @async
   void save(PhotoHandle photo);
+  @async
+  void saveCaptured(PhotoHandle original, PhotoHandle processed);
   void discard(PhotoHandle photo);
   @async
   void share(PhotoHandle photo);

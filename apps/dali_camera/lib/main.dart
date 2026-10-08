@@ -762,9 +762,8 @@ class _CameraScreenState extends State<CameraScreen>
                               originalView: compare && !splitComparison,
                             ),
                       child: Text(
-                        camera.original?.unsaved == true &&
-                                camera.selected?.id == camera.original?.id
-                            ? 'Retry save original'
+                        camera.original?.unsaved == true
+                            ? 'Retry processing and save'
                             : 'Save a copy',
                       ),
                     ),
@@ -1172,7 +1171,7 @@ class _CameraScreenState extends State<CameraScreen>
       title: const Text('Take a photo with Dali'),
       content: const SingleChildScrollView(
         child: Text(
-          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Next confirms a posture step; Dali does not verify the pose.\n\nTap the shutter for one photo; hold for a paced burst. Timer and custom voice phrase are in Camera controls. Voice runs on device where your phone supports it.\n\nEffects has separate Filter and Beautifier Auto, Custom, and Off choices. Depth of focus softens the background around the detected subject or your focus point. The original saves first; save the prepared copy separately.\n\nReview offers Original, Reframe, Level, General Enhance, Portrait Polish, and Landscape Polish when measurements are available. Before exports the original; After and Split export the selected version. Tap the photo to zoom and move the comparison split.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed original saves remain available for retry.',
+          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Next confirms a posture step; Dali does not verify the pose.\n\nTap the shutter for one photo; hold for a paced burst. Timer and custom voice phrase are in Camera controls. Voice runs on device where your phone supports it.\n\nEffects has separate Filter and Beautifier Auto, Custom, and Off choices. Depth of focus softens the background around the detected subject or your focus point. Selected effects and the signature are applied before the final photo saves to Photos. A private original is retained for review and recovery.\n\nReview offers Original, Reframe, Level, General Enhance, Portrait Polish, and Landscape Polish when measurements are available. Before exports the original; After and Split export the selected version. Tap the photo to zoom and move the comparison split.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed processing or saves retain the private capture for retry.',
         ),
       ),
       actions: [

@@ -27,6 +27,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   bool busy = false;
   bool takingPhoto = false;
   int capturedPhotoSequence = 0;
+  String? _pendingCaptureRecipe;
+  String? _pendingCaptureId;
   bool reviewing = false;
   bool starting = false;
   bool foreground = true;
@@ -346,6 +348,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (livePreviewEnabled) await _loadPreferences();
     try {
       original = await host.recover();
+      if (_pendingCaptureId != original?.id) _pendingCaptureRecipe = null;
+      _pendingCaptureId = original?.id;
       selected = original;
       reviewing = original != null;
       if (original != null) {
@@ -420,7 +424,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (fromSequence ? !_captureReady : !canCapture) return;
     busy = true;
     takingPhoto = true;
-    message = 'Taking photo…';
+    _pendingCaptureRecipe = _captureRecipe();
+    message = 'Taking photo...';
     notifyListeners();
     final captureTimer = Stopwatch()..start();
     var previousStage = 0;
@@ -440,9 +445,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       recordStage('camera');
       takingPhoto = false;
       capturedPhotoSequence++;
-      if (prior != null &&
-          prior.id != history.firstOrNull?.id &&
-          !history.any((p) => p.id == prior.id)) {
+      _pendingCaptureId = original!.id;
+      if (prior != null && !history.any((p) => p.id == prior.id)) {
         await _release(prior);
       }
       selected = original;
@@ -450,54 +454,105 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       selectedTreatment = 'original';
       photoAnalysis = null;
       analysisError = null;
-      message = 'Saving original…';
-      notifyListeners();
-      await _saveOriginal();
-      recordStage('gallery');
       history.removeWhere((photo) => photo.id == original!.id);
       history.insert(0, original!);
+      message = 'Photo taken. Preparing photo...';
+      notifyListeners();
       await _persistHistory();
-      recordStage('history');
-      reviewing = review || original?.unsaved == true;
+      reviewing = review;
       if (reviewing) {
         notifyListeners();
         await pause();
       }
-      if ((style.active ||
-              watermark ||
-              beautifier != 'off' ||
-              effectiveDepth > 0) &&
-          original?.unsaved != true) {
-        try {
-          message = 'Original saved. Preparing effects...';
-          notifyListeners();
-          selected = await _renderStyle(original!);
-          styled = true;
-          selectedTreatment = 'styled';
-          recordStage('effects');
-          message = 'Photo ready. Original saved to Photos';
-          notifyListeners();
-        } catch (e) {
-          message = 'Original saved. Style could not be prepared: $e';
-        }
-      }
+      await _saveCapturedPhoto(onStage: recordStage);
       if (reviewing) {
-        final completionMessage = message;
-        if (original?.unsaved != true) {
-          message = 'Original saved. Analyzing photo...';
-          notifyListeners();
-        }
+        message = 'Photo saved. Analyzing photo...';
+        notifyListeners();
         await _analyzeStill();
         recordStage('review-analysis');
-        message = completionMessage;
+        message = 'Photo saved to Photos';
       }
-    } catch (e) {
-      message = 'Photo could not be completed: $e';
+    } catch (error) {
+      if (original?.unsaved == true) {
+        message = 'Photo retained privately. Processing or save failed: $error';
+        reviewing = true;
+        notifyListeners();
+        await pause();
+      } else {
+        message = 'Photo could not be completed: $error';
+      }
     } finally {
       takingPhoto = false;
       busy = false;
       notifyListeners();
     }
+  }
+
+  String _captureRecipe() {
+    final treatment = beautifier == 'off' ? 'original' : captureTreatment;
+    final settings = captureTreatments[treatment];
+    final captureStyle = style;
+    return jsonEncode({
+      'version': 1,
+      'treatment': treatment,
+      'strength': settings?['strength'] ?? 0,
+      'flags': settings?['flags'] ?? {},
+      'filter': PhotoStyle.fields
+          .map((field) => captureStyle.value(field).toDouble())
+          .toList(),
+      'depth': effectiveDepth,
+      if (focusX != null && focusY != null) 'focus': {'x': focusX, 'y': focusY},
+      'watermark': watermark,
+    });
+  }
+
+  Future<void> _saveCapturedPhoto({void Function(String)? onStage}) async {
+    final source = original!;
+    _pendingCaptureId = source.id;
+    _pendingCaptureRecipe ??= _captureRecipe();
+    final request = jsonDecode(_pendingCaptureRecipe!) as Map<String, dynamic>;
+    final mark = request.remove('watermark') == true;
+    final needsEffects =
+        mark ||
+        request['treatment'] != 'original' ||
+        (request['depth'] as num) > 0 ||
+        (request['filter'] as List).any((value) => value != 0);
+    if (selected?.id == source.id && needsEffects) {
+      message = 'Photo taken. Preparing effects...';
+      notifyListeners();
+      if (mark) {
+        final bytes = await rootBundle.load(
+          'assets/branding/dali-cam-watermark.png',
+        );
+        final file = File('${Directory.systemTemp.path}/dali-watermark.png');
+        await file.writeAsBytes(
+          bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
+          flush: true,
+        );
+        request['watermarkPath'] = file.path;
+      }
+      final result = await host.renderEffects(source, jsonEncode(request));
+      selected = PhotoHandle(
+        path: result.path,
+        id: '${source.id}-final',
+        unsaved: true,
+        mimeType: result.mimeType,
+      );
+      styled = true;
+      selectedTreatment = 'styled';
+      onStage?.call('effects');
+      notifyListeners();
+    }
+    message = 'Saving photo...';
+    notifyListeners();
+    await host.saveCaptured(source, selected!);
+    source.unsaved = false;
+    selected!.unsaved = false;
+    _pendingCaptureRecipe = null;
+    _pendingCaptureId = null;
+    onStage?.call('gallery');
+    await _persistHistory();
+    message = 'Photo saved to Photos';
   }
 
   Future<void> _saveOriginal() async {
@@ -520,7 +575,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     busy = true;
     notifyListeners();
     try {
-      if (originalView || selected?.id == original?.id) {
+      if (original?.unsaved == true) {
+        await _saveCapturedPhoto();
+      } else if (originalView || selected?.id == original?.id) {
         await _saveOriginal();
       } else {
         await host.save(selected!);
@@ -552,7 +609,10 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   Future<void> discard() async {
     if (busy || original == null) return;
     try {
+      await _releaseVariant();
       await host.discard(original!);
+      _pendingCaptureRecipe = null;
+      _pendingCaptureId = null;
       history.removeWhere((photo) => photo.id == original!.id);
       await _persistHistory();
       original = null;
@@ -976,6 +1036,10 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       timerSeconds = [0, 3, 5, 10].contains(prefs.getInt('timerSeconds'))
           ? prefs.getInt('timerSeconds')!
           : 0;
+      final pendingRecipe =
+          jsonDecode(prefs.getString('pendingCaptureRecipe') ?? '{}') as Map;
+      _pendingCaptureId = pendingRecipe['id'] as String?;
+      _pendingCaptureRecipe = pendingRecipe['recipe'] as String?;
       longPress = prefs.getString('longPress') ?? 'burst';
       voicePhrase = prefs.getString('voicePhrase') ?? '';
       voicePreferred = prefs.getBool('voicePreferred') ?? false;
@@ -1094,6 +1158,13 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (livePreviewEnabled) {
       try {
         final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          'pendingCaptureRecipe',
+          jsonEncode({
+            'id': _pendingCaptureId,
+            'recipe': _pendingCaptureRecipe,
+          }),
+        );
         final saved = await prefs.setString(
           'history',
           jsonEncode(

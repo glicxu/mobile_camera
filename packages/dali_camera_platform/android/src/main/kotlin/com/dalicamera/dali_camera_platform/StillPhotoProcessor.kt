@@ -18,17 +18,24 @@ internal class StillPhotoProcessor : AutoCloseable {
     private val contours = FaceDetection.getClient(FaceDetectorOptions.Builder().setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
         .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL).setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL).build())
     private val poses = PoseDetection.getClient(PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.SINGLE_IMAGE_MODE).build())
-    override fun close() { faces.close(); contours.close(); poses.close() }
+    private data class CaptureBuffer(val path: String, val bytes: ByteArray)
+    @Volatile private var capturedBuffer: CaptureBuffer? = null
+    fun retainCaptureBuffer(path: String, bytes: ByteArray) { capturedBuffer = CaptureBuffer(path, bytes) }
+    fun releaseCaptureBuffer(path: String) { if (capturedBuffer?.path == path) capturedBuffer = null }
+    override fun close() { capturedBuffer = null; faces.close(); contours.close(); poses.close() }
     fun load(path: String, bounded: Boolean = false): Bitmap {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }; BitmapFactory.decodeFile(path, bounds)
+        val buffer = capturedBuffer?.takeIf { it.path == path }?.bytes
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        if (buffer != null) BitmapFactory.decodeByteArray(buffer, 0, buffer.size, bounds) else BitmapFactory.decodeFile(path, bounds)
         check(bounds.outWidth > 0 && bounds.outHeight > 0) { "Cannot decode photo" }
         val options = BitmapFactory.Options().apply {
             inSampleSize = 1
             if (bounded) while (max(bounds.outWidth, bounds.outHeight) / inSampleSize > 1400) inSampleSize *= 2
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }
-        if (!bounded) check(bounds.outWidth.toLong() * bounds.outHeight * 12 < Runtime.getRuntime().maxMemory() * 0.65) { "Photo exceeds this phone's full-resolution processing budget. Original retained." }
-        val source = BitmapFactory.decodeFile(path, options) ?: error("Cannot decode photo")
+        if (!bounded) check(bounds.outWidth.toLong() * bounds.outHeight * 12 + (buffer?.size ?: 0) < Runtime.getRuntime().maxMemory() * 0.65) { "Photo exceeds this phone's full-resolution processing budget. Original retained." }
+        val source = (if (buffer != null) BitmapFactory.decodeByteArray(buffer, 0, buffer.size, options)
+            else BitmapFactory.decodeFile(path, options)) ?: error("Cannot decode photo")
         val transform = Matrix()
         when (ExifInterface(path).getAttributeInt(ExifInterface.TAG_ORIENTATION, 1)) {
             2 -> transform.setScale(-1f, 1f); 3 -> transform.setRotate(180f); 4 -> transform.setScale(1f, -1f)

@@ -373,6 +373,7 @@ interface CameraHostApi {
   fun capture(callback: (Result<PhotoHandle>) -> Unit)
   fun recover(): PhotoHandle?
   fun save(photo: PhotoHandle, callback: (Result<Unit>) -> Unit)
+  fun saveCaptured(original: PhotoHandle, processed: PhotoHandle, callback: (Result<Unit>) -> Unit)
   fun discard(photo: PhotoHandle)
   fun share(photo: PhotoHandle, callback: (Result<Unit>) -> Unit)
   fun pickPhoto(callback: (Result<PhotoHandle?>) -> Unit)
@@ -480,6 +481,26 @@ interface CameraHostApi {
             val args = message as List<Any?>
             val photoArg = args[0] as PhotoHandle
             api.save(photoArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(CameraApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.saveCaptured$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val originalArg = args[0] as PhotoHandle
+            val processedArg = args[1] as PhotoHandle
+            api.saveCaptured(originalArg, processedArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))

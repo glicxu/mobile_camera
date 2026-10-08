@@ -396,19 +396,55 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         if (capturing || recover() != null) return callback(Result.failure(IllegalStateException("Save or discard the previous original first")))
         val capture = captureUseCase ?: return callback(Result.failure(IllegalStateException("Camera not ready")))
         capturing = true; val file = photoFile()
-        val metadata = ImageCapture.Metadata().apply { isReversedHorizontal = front }
-        capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).setMetadata(metadata).build(), ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
-            override fun onImageSaved(result: ImageCapture.OutputFileResults) {
-                capturing = false
+        val capturedFront = front
+        capture.takePicture(ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageCapturedCallback() {
+            override fun onCaptureSuccess(image: ImageProxy) {
+                val bytes: ByteArray
+                val rotation = image.imageInfo.rotationDegrees
                 try {
-                    val photo = PhotoHandle(file.absolutePath, file.nameWithoutExtension, true)
-                    try { retain(photo) } catch (e: Exception) { events.error("recovery", "Original captured but relaunch recovery unavailable: ${e.message}") {} }
-                    callback(Result.success(photo))
+                    check(image.format == ImageFormat.JPEG) { "Unsupported camera capture buffer" }
+                    val buffer = image.planes[0].buffer
+                    bytes = ByteArray(buffer.remaining()).also { buffer.get(it) }
+                } catch (error: Exception) {
+                    capturing = false; callback(Result.failure(error)); return
+                } finally { image.close() }
+                executor.execute {
+                    try {
+                        // Private recovery only. Effects decode this captured buffer, not a gallery JPEG.
+                        file.writeBytes(bytes)
+                        val orientation = when (rotation) {
+                            90 -> if (capturedFront) 5 else 6
+                            180 -> if (capturedFront) 4 else 3
+                            270 -> if (capturedFront) 7 else 8
+                            else -> if (capturedFront) 2 else 1
+                        }
+                        ExifInterface(file).apply { setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString()); saveAttributes() }
+                        stillProcessor.retainCaptureBuffer(file.path, bytes)
+                        val photo = PhotoHandle(file.absolutePath, file.nameWithoutExtension, true)
+                        retain(photo)
+                        main.post { capturing = false; callback(Result.success(photo)) }
+                    } catch (error: Exception) {
+                        stillProcessor.releaseCaptureBuffer(file.path)
+                        main.post { capturing = false; callback(Result.failure(error)) }
+                    }
                 }
-                catch (e: Exception) { callback(Result.failure(e)) }
             }
             override fun onError(e: ImageCaptureException) { capturing = false; callback(Result.failure(e)) }
         })
+    }
+    override fun saveCaptured(original: PhotoHandle, processed: PhotoHandle, callback: (Result<Unit>) -> Unit) {
+        if (recover()?.id != original.id) {
+            callback(Result.failure(IllegalStateException("Capture recovery identity changed"))); return
+        }
+        save(processed) { result ->
+            result.fold(onSuccess = {
+                try {
+                    if (recover()?.id == original.id) check(pendingFile.delete()) { "Saved, but recovery cleanup failed" }
+                    stillProcessor.releaseCaptureBuffer(original.path)
+                    callback(Result.success(Unit))
+                } catch (error: Exception) { callback(Result.failure(error)) }
+            }, onFailure = { callback(Result.failure(it)) })
+        }
     }
     override fun save(photo: PhotoHandle, callback: (Result<Unit>) -> Unit) {
         if (Build.VERSION.SDK_INT < 29 && ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
@@ -436,6 +472,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         }
     }
     override fun discard(photo: PhotoHandle) {
+        stillProcessor.releaseCaptureBuffer(photo.path)
         if (recover()?.id == photo.id) { check(pendingFile.delete()) { "Cannot remove recovery manifest" }; File(photo.path).delete() }
     }
     override fun share(photo: PhotoHandle, callback: (Result<Unit>) -> Unit) {

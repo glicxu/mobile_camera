@@ -563,6 +563,31 @@ class CameraHostApi {
     }
   }
 
+  Future<void> saveCaptured(PhotoHandle original, PhotoHandle processed) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.saveCaptured$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[original, processed],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
   Future<void> discard(PhotoHandle photo) async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.discard$pigeonVar_messageChannelSuffix';

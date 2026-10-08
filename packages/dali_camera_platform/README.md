@@ -5,7 +5,7 @@ Local Flutter plugin for one native camera session per platform. Commands and ev
 - Android: CameraX 1.5.3, bundled ML Kit face/pose models, sensor roll, MediaStore saves, document picker, file sharing and capability-based controls.
 - iOS: AVFoundation, Vision, CoreMotion, Photos, PHPicker and Core Image file rendering.
 - Voice shutter uses on-device speech only where reported available. Manual capture remains usable otherwise.
-- Captures are stored privately before gallery export. Recovery metadata is atomic; retry and explicit discard reference the same original.
+- Android receives a CameraX JPEG buffer, releases its ImageProxy promptly and processes the retained buffer in memory. Only the final filtered/beautified/watermarked JPEG is automatically saved to MediaStore. A private source copy and atomic recovery metadata remain until the final save succeeds; `saveCaptured` acknowledges that source without exporting it. Explicit Before export can still save an unprocessed copy.
 
 Run `flutter pub get`, then `dart run tool/generate.dart` from this directory after editing the bridge schema. Keep generated Dart/Kotlin/Swift files committed together. The main app's integration tests exercise this plugin.
 

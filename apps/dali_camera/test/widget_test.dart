@@ -96,6 +96,11 @@ class FakeHost extends CameraHostApi {
   }
 
   @override
+  Future<void> saveCaptured(PhotoHandle original, PhotoHandle processed) async {
+    await save(processed);
+  }
+
+  @override
   Future<void> discard(PhotoHandle photo) async {
     retained = null;
   }
@@ -139,6 +144,10 @@ class FakeHost extends CameraHostApi {
   Future<PhotoHandle> renderEffects(PhotoHandle original, String recipe) async {
     if (failRender) throw StateError('Renderer unavailable');
     effectsRecipe = jsonDecode(recipe) as Map<String, dynamic>;
+    filterParameters = (effectsRecipe!['filter'] as List?)
+        ?.cast<num>()
+        .map((v) => v.toDouble())
+        .toList();
     return PhotoHandle(
       path: 'effects.jpg',
       id: 'effects-${original.id}',
@@ -196,15 +205,10 @@ class DelayedEffectsHost extends FakeHost {
   final renderingStarted = Completer<void>();
   final finishRendering = Completer<void>();
   @override
-  Future<PhotoHandle> renderFilter(
-    PhotoHandle original,
-    List<double> matrix,
-    List<double> parameters,
-    String? watermarkPath,
-  ) async {
+  Future<PhotoHandle> renderEffects(PhotoHandle original, String recipe) async {
     renderingStarted.complete();
     await finishRendering.future;
-    return super.renderFilter(original, matrix, parameters, watermarkPath);
+    return super.renderEffects(original, recipe);
   }
 }
 
@@ -314,7 +318,7 @@ void main() {
   });
 
   test(
-    'Captured original is visible while effects finish and capture stays guarded',
+    'Capture is processed before its only gallery save and controls stay guarded',
     () async {
       final host = DelayedEffectsHost();
       final camera = CameraController(host: host, register: false);
@@ -325,16 +329,20 @@ void main() {
       final capture = camera.capturePhoto();
       await host.renderingStarted.future;
       expect(camera.reviewing, isTrue);
-      expect(camera.original!.unsaved, isFalse);
+      expect(camera.original!.unsaved, isTrue);
       expect(camera.selected!.id, camera.original!.id);
       expect(camera.busy, isTrue);
       expect(camera.canCapture, isFalse);
-      expect(camera.message, 'Original saved. Preparing effects...');
+      expect(camera.message, 'Photo taken. Preparing effects...');
+      expect(host.savedIds, isEmpty);
+      expect(camera.original!.unsaved, isTrue);
       host.finishRendering.complete();
       await capture;
       expect(camera.busy, isFalse);
       expect(camera.selected!.id, isNot(camera.original!.id));
       expect(camera.original!.unsaved, isFalse);
+      expect(host.savedIds, ['original-1-final']);
+      expect(host.retained, isNull);
       camera.dispose();
     },
   );
@@ -959,10 +967,22 @@ void main() {
       host.failRender = true;
       await camera.capturePhoto(review: false);
       expect(camera.original!.id, 'original-2');
-      expect(camera.original!.unsaved, isFalse);
+      expect(camera.original!.unsaved, isTrue);
+      expect(host.savedIds, ['original-1-final']);
       expect(camera.selected, same(camera.original));
       expect(camera.styled, isFalse);
-      expect(camera.canCapture, isTrue);
+      expect(camera.canCapture, isFalse);
+      host.failRender = false;
+      camera.filter = 'off'; // Retry keeps the frozen capture effects.
+      await camera.saveSelected();
+      expect(host.savedIds, ['original-1-final', 'original-2-final']);
+      expect(
+        host.filterParameters,
+        PhotoStyle.fields
+            .map((field) => expected.value(field).toDouble())
+            .toList(),
+      );
+      expect(camera.original!.unsaved, isFalse);
       camera.dispose();
     },
   );

@@ -251,6 +251,9 @@ void main() {
       camera.filter = 'fresh';
       camera.watermark = true;
       final priorCaptureSequence = camera.capturedPhotoSequence;
+      final galleryBeforeCapture = (await camera.host.listPhotoLibrary()).photos
+          .map((photo) => photo.id)
+          .toSet();
       camera.timerSeconds = 3;
       await camera.requestShutter();
       expect(camera.reviewing, isFalse);
@@ -261,6 +264,33 @@ void main() {
       expect(camera.original!.unsaved, isFalse);
       expect(camera.styled, isTrue, reason: camera.message);
       expect(camera.selected!.id, isNot(camera.original!.id));
+      expect(await camera.host.recover(), isNull);
+      final newGalleryPhotos = (await camera.host.listPhotoLibrary()).photos
+          .where((photo) => !galleryBeforeCapture.contains(photo.id))
+          .toList();
+      expect(
+        newGalleryPhotos.length,
+        1,
+        reason: 'One shutter capture must publish only its processed photo',
+      );
+      final savedCapture = await camera.host.loadLibraryPhoto(
+        newGalleryPhotos.single.id,
+      );
+      try {
+        final galleryBytes = await File(savedCapture.path).readAsBytes();
+        expect(
+          galleryBytes,
+          await File(camera.selected!.path).readAsBytes(),
+          reason: 'Photos receives the processed JPEG',
+        );
+        expect(
+          galleryBytes,
+          isNot(equals(await File(camera.original!.path).readAsBytes())),
+          reason: 'Unfiltered original stays private',
+        );
+      } finally {
+        await camera.host.releasePhoto(savedCapture);
+      }
       await camera.saveSelected();
       expect(camera.message, 'Selected copy saved to Photos');
       expect(camera.history, isNotEmpty);
