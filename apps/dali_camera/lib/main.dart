@@ -922,7 +922,7 @@ class _CameraScreenState extends State<CameraScreen>
     final opened = await camera.openPhotoLibrary();
     if (!mounted) return;
     setState(() {
-      compare = false;
+      compare = true;
       splitComparison = false;
     });
     if (!opened) await choosePhotos();
@@ -968,7 +968,7 @@ class _CameraScreenState extends State<CameraScreen>
     );
     if (folder == null || !mounted) return;
     await camera.pick(folder: folder);
-    if (mounted) setState(() => compare = false);
+    if (mounted) setState(() => compare = true);
   }
 
   Future<void> chooser() async {

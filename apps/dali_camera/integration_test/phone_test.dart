@@ -1,4 +1,5 @@
 import 'package:dali_camera/main.dart';
+import 'package:dali_camera/review_comparison.dart';
 import 'dart:io';
 import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:dali_camera/camera_controller.dart';
@@ -286,9 +287,19 @@ void main() {
       expect(camera.message, contains('copy saved'));
       await camera.returnToCamera();
       await tester.pumpAndSettle();
-      expect(await camera.openPhotoLibrary(), isTrue, reason: camera.message);
+      await tester.tap(find.byTooltip('Open photo library'));
       await tester.pumpAndSettle();
+      for (var i = 0; i < 120 && !camera.reviewingLibrary; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        await tester.pump();
+      }
       expect(camera.reviewingLibrary, isTrue, reason: camera.message);
+      expect(
+        tester
+            .widget<ReviewModeControls>(find.byType(ReviewModeControls))
+            .value,
+        'before',
+      );
       expect(camera.reviewCount, greaterThan(0));
       expect(File(camera.original!.path).existsSync(), isTrue);
       if (camera.reviewCount > 1) {
