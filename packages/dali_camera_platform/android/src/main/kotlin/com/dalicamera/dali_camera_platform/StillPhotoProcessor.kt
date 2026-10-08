@@ -178,10 +178,18 @@ internal class StillPhotoProcessor : AutoCloseable {
     private fun spatial(image: Bitmap, radius: Double, amount: Double, sharpen: Boolean = false, mask: ((Int, Int) -> Double)? = null) {
         val blurred = blur(image, radius)
         val row = IntArray(image.width)
+        val blurredRow = IntArray(blurred.width)
+        val columns = IntArray(image.width) { it * blurred.width / image.width }
+        var previousBlurredY = -1
         for (y in 0 until image.height) {
             image.getPixels(row, 0, image.width, 0, y, image.width, 1)
+            val blurredY = y * blurred.height / image.height
+            if (blurredY != previousBlurredY) {
+                blurred.getPixels(blurredRow, 0, blurred.width, 0, blurredY, blurred.width, 1)
+                previousBlurredY = blurredY
+            }
             for (x in row.indices) {
-                val c = row[x]; val b = blurred.getPixel(x * blurred.width / image.width, y * blurred.height / image.height)
+                val c = row[x]; val b = blurredRow[columns[x]]
                 val weight = amount * (mask?.invoke(x, y) ?: 1.0)
                 fun channel(v: Int, s: Int) = (v + (if (sharpen) v - s else s - v) * weight).roundToInt().coerceIn(0, 255)
                 row[x] = Color.argb(Color.alpha(c), channel(Color.red(c), Color.red(b)), channel(Color.green(c), Color.green(b)), channel(Color.blue(c), Color.blue(b)))
@@ -235,7 +243,8 @@ internal class StillPhotoProcessor : AutoCloseable {
         try {
             if (p[4] > 0) spatial(image, 1.5 + 3 * p[4], .16 + .28 * p[4])
             if (p[0] != 0.0) tonePass(image, max(0.0, .22 * p[0]), 1 - max(0.0, .10 * p[0]))
-            colorPass(image, .055 * p[0], 1 + .30 * p[2], 1 + .13 * p[3] - .04 * p[4])
+            if (p[0] != 0.0 || p[2] != 0.0 || p[3] != 0.0 || p[4] != 0.0)
+                colorPass(image, .055 * p[0], 1 + .30 * p[2], 1 + .13 * p[3] - .04 * p[4])
             if (p[2] > 0) colorPass(image, vibrance = .36 * p[2])
             if (p[1] != 0.0) colorPass(image, warmth = p[1])
             if (p[6] > 0) channelPass(image, 1 - .05 * p[6], 1 + .02 * p[6], 1 + .18 * p[6], .018 * p[6])

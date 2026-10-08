@@ -419,9 +419,22 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     busy = true;
     message = 'Taking photo…';
     notifyListeners();
+    final captureTimer = Stopwatch()..start();
+    var previousStage = 0;
+    void recordStage(String stage) {
+      final elapsed = captureTimer.elapsedMilliseconds;
+      if (kDebugMode) {
+        debugPrint(
+          'CAPTURE_TIMING: $stage=${elapsed - previousStage}ms total=${elapsed}ms',
+        );
+      }
+      previousStage = elapsed;
+    }
+
     try {
       final prior = selected;
       original = await host.capture();
+      recordStage('camera');
       if (prior != null &&
           prior.id != history.firstOrNull?.id &&
           !history.any((p) => p.id == prior.id)) {
@@ -435,26 +448,43 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       message = 'Saving original…';
       notifyListeners();
       await _saveOriginal();
+      recordStage('gallery');
       history.removeWhere((photo) => photo.id == original!.id);
       history.insert(0, original!);
       await _persistHistory();
+      recordStage('history');
+      reviewing = review || original?.unsaved == true;
+      if (reviewing) {
+        notifyListeners();
+        await pause();
+      }
       if ((style.active ||
               watermark ||
               beautifier != 'off' ||
               effectiveDepth > 0) &&
           original?.unsaved != true) {
         try {
+          message = 'Original saved. Preparing effects...';
+          notifyListeners();
           selected = await _renderStyle(original!);
           styled = true;
           selectedTreatment = 'styled';
+          recordStage('effects');
+          message = 'Photo ready. Original saved to Photos';
+          notifyListeners();
         } catch (e) {
           message = 'Original saved. Style could not be prepared: $e';
         }
       }
-      reviewing = review || original?.unsaved == true;
       if (reviewing) {
-        await pause();
+        final completionMessage = message;
+        if (original?.unsaved != true) {
+          message = 'Original saved. Analyzing photo...';
+          notifyListeners();
+        }
         await _analyzeStill();
+        recordStage('review-analysis');
+        message = completionMessage;
       }
     } catch (e) {
       message = 'Photo could not be completed: $e';

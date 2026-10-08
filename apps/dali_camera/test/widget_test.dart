@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dali_camera/main.dart';
 import 'package:dali_camera/camera_controller.dart';
@@ -176,6 +177,22 @@ class FakeHost extends CameraHostApi {
   }
 }
 
+class DelayedEffectsHost extends FakeHost {
+  final renderingStarted = Completer<void>();
+  final finishRendering = Completer<void>();
+  @override
+  Future<PhotoHandle> renderFilter(
+    PhotoHandle original,
+    List<double> matrix,
+    List<double> parameters,
+    String? watermarkPath,
+  ) async {
+    renderingStarted.complete();
+    await finishRendering.future;
+    return super.renderFilter(original, matrix, parameters, watermarkPath);
+  }
+}
+
 class ManualHost extends FakeHost {
   @override
   Future<CameraSnapshot> start(bool front) async => (await super.start(front))
@@ -202,6 +219,32 @@ class ManualHost extends FakeHost {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'Captured original is visible while effects finish and capture stays guarded',
+    () async {
+      final host = DelayedEffectsHost();
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      camera.watermark = false;
+      camera.filter = 'fresh';
+      camera.beautifier = 'off';
+      final capture = camera.capturePhoto();
+      await host.renderingStarted.future;
+      expect(camera.reviewing, isTrue);
+      expect(camera.original!.unsaved, isFalse);
+      expect(camera.selected!.id, camera.original!.id);
+      expect(camera.busy, isTrue);
+      expect(camera.canCapture, isFalse);
+      expect(camera.message, 'Original saved. Preparing effects...');
+      host.finishRendering.complete();
+      await capture;
+      expect(camera.busy, isFalse);
+      expect(camera.selected!.id, isNot(camera.original!.id));
+      expect(camera.original!.unsaved, isFalse);
+      camera.dispose();
+    },
+  );
+
   setUp(
     () => PackageInfo.setMockInitialValues(
       appName: 'Dali Camera',
