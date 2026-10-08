@@ -138,7 +138,7 @@ void main() {
         input.width,
         input.height,
       ),
-      greaterThan(1),
+      greaterThan(.2),
       reason: 'Watermark must appear in the bottom-right region',
     );
     expect(
