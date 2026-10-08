@@ -8,3 +8,6 @@ build/
 .kotlin/
 *.xcresult/
 packages/dali_camera_platform/example/
+
+__pycache__/
+*.pyc
