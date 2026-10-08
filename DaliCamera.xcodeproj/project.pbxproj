@@ -72,9 +72,14 @@
 		A10000000000000000000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* Assets.xcassets */; };
 		A1000000000000000000000A /* BeautifyEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* BeautifyEngine.swift */; };
 		A1000000000000000000000B /* VoiceShutterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* VoiceShutterController.swift */; };
+		A1000000000000000000000C /* EnhanceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* EnhanceEngine.swift */; };
+		A1000000000000000000000D /* WatermarkRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001E /* WatermarkRenderer.swift */; };
 		A20000000000000000000001 /* CoachingEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* CoachingEngineTests.swift */; };
 		A20000000000000000000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* Models.swift */; };
 		A20000000000000000000003 /* CoachingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* CoachingEngine.swift */; };
+		A20000000000000000000004 /* BeautifyEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* BeautifyEngine.swift */; };
+		A20000000000000000000005 /* EnhanceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* EnhanceEngine.swift */; };
+		A20000000000000000000006 /* WatermarkRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001E /* WatermarkRenderer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -91,6 +96,8 @@
 		A1000000000000000000001A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1000000000000000000001B /* BeautifyEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeautifyEngine.swift; sourceTree = "<group>"; };
 		A1000000000000000000001C /* VoiceShutterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceShutterController.swift; sourceTree = "<group>"; };
+		A1000000000000000000001D /* EnhanceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnhanceEngine.swift; sourceTree = "<group>"; };
+		A1000000000000000000001E /* WatermarkRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatermarkRenderer.swift; sourceTree = "<group>"; };
 		A20000000000000000000010 /* DaliCameraTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DaliCameraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000011 /* CoachingEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingEngineTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -135,6 +142,8 @@
 				A10000000000000000000014 /* CameraModel.swift */,
 				A10000000000000000000015 /* CameraPreview.swift */,
 				A10000000000000000000013 /* CoachingEngine.swift */,
+				A1000000000000000000001D /* EnhanceEngine.swift */,
+				A1000000000000000000001E /* WatermarkRenderer.swift */,
 				A1000000000000000000001B /* BeautifyEngine.swift */,
 				A10000000000000000000019 /* SessionLogger.swift */,
 				A1000000000000000000001C /* VoiceShutterController.swift */,
@@ -269,6 +278,8 @@
 				A10000000000000000000004 /* CameraModel.swift in Sources */,
 				A10000000000000000000005 /* CameraPreview.swift in Sources */,
 				A10000000000000000000003 /* CoachingEngine.swift in Sources */,
+				A1000000000000000000000C /* EnhanceEngine.swift in Sources */,
+				A1000000000000000000000D /* WatermarkRenderer.swift in Sources */,
 				A1000000000000000000000A /* BeautifyEngine.swift in Sources */,
 				A10000000000000000000008 /* SessionLogger.swift in Sources */,
 				A1000000000000000000000B /* VoiceShutterController.swift in Sources */,
@@ -283,6 +294,9 @@
 				A20000000000000000000001 /* CoachingEngineTests.swift in Sources */,
 				A20000000000000000000002 /* Models.swift in Sources */,
 				A20000000000000000000003 /* CoachingEngine.swift in Sources */,
+				A20000000000000000000004 /* BeautifyEngine.swift in Sources */,
+				A20000000000000000000005 /* EnhanceEngine.swift in Sources */,
+				A20000000000000000000006 /* WatermarkRenderer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

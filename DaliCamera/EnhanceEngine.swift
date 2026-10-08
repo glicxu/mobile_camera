@@ -1,0 +1,213 @@
+import CoreImage
+import CoreImage.CIFilterBuiltins
+import UIKit
+
+struct EnhanceEngine {
+    private let context = CIContext(options: [.useSoftwareRenderer: false])
+
+    func apply(
+        to image: UIImage,
+        measurements: Measurements,
+        settings: EnhanceSettings
+    ) -> (image: UIImage, result: EnhanceResult) {
+        let strength = settings.normalizedStrength
+        let result = EnhanceResult(
+            settings: settings,
+            debugValues: debugValues(for: measurements, settings: settings)
+        )
+
+        guard strength > 0, let input = CIImage(image: image) else {
+            return (image, result)
+        }
+
+        var output = input
+
+        if settings.noiseReductionEnabled {
+            let noiseReduction = CIFilter.noiseReduction()
+            noiseReduction.inputImage = output
+            noiseReduction.noiseLevel = Float(0.008 + 0.025 * strength)
+            noiseReduction.sharpness = Float(0.42 - 0.08 * strength)
+            output = noiseReduction.outputImage?.cropped(to: input.extent) ?? output
+        }
+
+        if settings.autoToneEnabled {
+            let highlights = CIFilter.highlightShadowAdjust()
+            highlights.inputImage = output
+            highlights.shadowAmount = Float(0.08 + 0.20 * strength)
+            highlights.highlightAmount = Float(1 - 0.16 * strength)
+            output = highlights.outputImage ?? output
+
+            let controls = CIFilter.colorControls()
+            controls.inputImage = output
+            controls.brightness = Float(exposureLift(for: measurements) * strength)
+            controls.contrast = Float(1 + 0.065 * strength)
+            controls.saturation = Float(1 + (settings.vibranceEnabled ? 0.025 * strength : 0))
+            output = controls.outputImage ?? output
+        }
+
+        if settings.vibranceEnabled {
+            let vibrance = CIFilter.vibrance()
+            vibrance.inputImage = output
+            vibrance.amount = Float(0.22 * strength)
+            output = vibrance.outputImage ?? output
+        }
+
+        if settings.warmthEnabled {
+            let temperature = CIFilter.temperatureAndTint()
+            temperature.inputImage = output
+            temperature.neutral = CIVector(x: 6500, y: 0)
+            temperature.targetNeutral = CIVector(x: 6500 - 260 * CGFloat(strength), y: 0)
+            output = temperature.outputImage ?? output
+        }
+
+        if settings.clarityEnabled {
+            let sharpness = CIFilter.unsharpMask()
+            sharpness.inputImage = output
+            sharpness.radius = Float(1.2 + 1.8 * strength)
+            sharpness.intensity = Float(0.12 + 0.30 * strength)
+            output = sharpness.outputImage?.cropped(to: input.extent) ?? output
+        }
+
+        if settings.subjectEmphasisEnabled {
+            let vignette = CIFilter.vignette()
+            vignette.inputImage = output
+            vignette.intensity = Float(0.14 * strength)
+            vignette.radius = Float(1.55 + 0.30 * strength)
+            output = vignette.outputImage ?? output
+        }
+
+        guard let cgImage = context.createCGImage(output.cropped(to: input.extent), from: input.extent) else {
+            return (image, result)
+        }
+
+        return (UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation), result)
+    }
+
+    private func exposureLift(for measurements: Measurements) -> Double {
+        guard let luminance = measurements.backgroundLuminance else { return 0 }
+        let normalized = luminance / 255
+        return min(0.055, max(-0.045, (0.50 - normalized) * 0.16))
+    }
+
+    private func debugValues(for measurements: Measurements, settings: EnhanceSettings) -> [String: Double] {
+        let strength = settings.normalizedStrength
+        return [
+            "level": Double(settings.strength),
+            "strength": strength,
+            "exposure_lift": settings.autoToneEnabled ? exposureLift(for: measurements) * strength : 0,
+            "contrast": settings.autoToneEnabled ? 0.065 * strength : 0,
+            "vibrance": settings.vibranceEnabled ? 0.22 * strength : 0,
+            "warmth": settings.warmthEnabled ? 260 * strength : 0,
+            "clarity": settings.clarityEnabled ? 0.30 * strength : 0,
+            "noise_reduction": settings.noiseReductionEnabled ? 0.025 * strength : 0,
+            "subject_emphasis": settings.subjectEmphasisEnabled ? 0.14 * strength : 0
+        ]
+    }
+}
+
+struct PhotoFilterEngine {
+    private let context = CIContext(options: [.useSoftwareRenderer: false])
+
+    func apply(to image: UIImage, preset: PhotoFilterChoice, strength: Int) -> UIImage {
+        apply(to: image, settings: preset.defaultSettings.scaled(by: strength))
+    }
+
+    func apply(to image: UIImage, settings: PhotoFilterSettings) -> UIImage {
+        guard settings.isActive, let input = CIImage(image: image) else {
+            return image
+        }
+
+        var output = input
+
+        let exposure = Double(max(-5, min(5, settings.exposure))) / 5
+        let warmth = Double(max(-5, min(5, settings.warmth))) / 5
+        let color = Double(max(0, min(5, settings.color))) / 5
+        let contrast = Double(max(-5, min(5, settings.contrast))) / 5
+        let softness = Double(max(0, min(5, settings.softness))) / 5
+        let detail = Double(max(0, min(5, settings.detail))) / 5
+        let blueSky = Double(max(0, min(5, settings.blueSky))) / 5
+
+        if softness > 0 {
+            let noiseReduction = CIFilter.noiseReduction()
+            noiseReduction.inputImage = output
+            noiseReduction.noiseLevel = Float(0.012 + 0.055 * softness)
+            noiseReduction.sharpness = Float(0.38 - 0.16 * softness)
+            output = noiseReduction.outputImage?.cropped(to: input.extent) ?? output
+        }
+
+        if exposure != 0 {
+            let highlights = CIFilter.highlightShadowAdjust()
+            highlights.inputImage = output
+            highlights.shadowAmount = Float(max(0, 0.22 * exposure))
+            highlights.highlightAmount = Float(1 - max(0, 0.10 * exposure))
+            output = highlights.outputImage ?? output
+        }
+
+        output = colorControls(
+            output,
+            brightness: 0.055 * exposure,
+            saturation: 1 + 0.30 * color,
+            contrast: 1 + 0.13 * contrast - 0.04 * softness
+        )
+
+        if color > 0 {
+            output = vibrance(output, amount: 0.36 * color)
+        }
+
+        if warmth != 0 {
+            output = temperature(output, kelvinShift: -820 * warmth)
+        }
+
+        if blueSky > 0 {
+            let blue = CIFilter.colorMatrix()
+            blue.inputImage = output
+            blue.rVector = CIVector(x: 1 - 0.05 * blueSky, y: 0, z: 0, w: 0)
+            blue.gVector = CIVector(x: 0, y: 1 + 0.02 * blueSky, z: 0, w: 0)
+            blue.bVector = CIVector(x: 0, y: 0, z: 1 + 0.18 * blueSky, w: 0)
+            blue.biasVector = CIVector(x: 0, y: 0, z: 0.018 * blueSky, w: 0)
+            output = blue.outputImage ?? output
+        }
+
+        if detail > 0 {
+            let sharpness = CIFilter.unsharpMask()
+            sharpness.inputImage = output
+            sharpness.radius = Float(1.1 + 1.9 * detail)
+            sharpness.intensity = Float(0.10 + 0.34 * detail)
+            output = sharpness.outputImage?.cropped(to: input.extent) ?? output
+        }
+
+        guard let cgImage = context.createCGImage(output.cropped(to: input.extent), from: input.extent) else {
+            return image
+        }
+        return UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
+    }
+
+    private func colorControls(
+        _ image: CIImage,
+        brightness: Double = 0,
+        saturation: Double = 1,
+        contrast: Double = 1
+    ) -> CIImage {
+        let filter = CIFilter.colorControls()
+        filter.inputImage = image
+        filter.brightness = Float(brightness)
+        filter.saturation = Float(saturation)
+        filter.contrast = Float(contrast)
+        return filter.outputImage ?? image
+    }
+
+    private func vibrance(_ image: CIImage, amount: Double) -> CIImage {
+        let filter = CIFilter.vibrance()
+        filter.inputImage = image
+        filter.amount = Float(amount)
+        return filter.outputImage ?? image
+    }
+
+    private func temperature(_ image: CIImage, kelvinShift: Double) -> CIImage {
+        let filter = CIFilter.temperatureAndTint()
+        filter.inputImage = image
+        filter.neutral = CIVector(x: 6500, y: 0)
+        filter.targetNeutral = CIVector(x: 6500 + kelvinShift, y: 0)
+        return filter.outputImage ?? image
+    }
+}

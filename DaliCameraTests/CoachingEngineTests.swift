@@ -1,7 +1,164 @@
 import CoreGraphics
+import UIKit
 import XCTest
 
 final class CoachingEngineTests: XCTestCase {
+    func testWatermarkPreservesTheUnderlyingPhoto() throws {
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 240, height: 160)).image { context in
+            UIColor(red: 0.82, green: 0.12, blue: 0.18, alpha: 1).setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 240, height: 160))
+        }
+        let signature = UIGraphicsImageRenderer(size: CGSize(width: 90, height: 30)).image { context in
+            UIColor.clear.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 90, height: 30))
+            UIColor.white.setFill()
+            context.fill(CGRect(x: 8, y: 10, width: 74, height: 8))
+        }
+
+        let output = DaliWatermarkRenderer.apply(to: photo, signature: signature)
+        let bytes = try XCTUnwrap(rgbaBytes(output))
+        let cgImage = try XCTUnwrap(output.cgImage)
+        let sourceCGImage = try XCTUnwrap(photo.cgImage)
+        let centerOffset = ((cgImage.height / 2) * cgImage.width + cgImage.width / 2) * 4
+
+        XCTAssertGreaterThan(bytes[centerOffset], 180)
+        XCTAssertLessThan(bytes[centerOffset + 1], 60)
+        XCTAssertLessThan(bytes[centerOffset + 2], 70)
+        XCTAssertEqual(cgImage.width, sourceCGImage.width)
+        XCTAssertEqual(cgImage.height, sourceCGImage.height)
+        XCTAssertEqual(output.size, photo.size)
+    }
+
+    func testCoachingToneStatusLabelsAreExplicit() {
+        XCTAssertEqual(AdviceTone.ready.coachingStatusTitle, "Looks good")
+        XCTAssertEqual(AdviceTone.ready.coachingStatusSymbol, "checkmark.circle.fill")
+        XCTAssertEqual(AdviceTone.warning.coachingStatusTitle, "Needs attention")
+        XCTAssertEqual(AdviceTone.danger.coachingStatusTitle, "Needs attention")
+        XCTAssertEqual(AdviceTone.waiting.coachingStatusTitle, "Checking")
+    }
+
+    func testBeautifyLevelsHaveStableNamesAndClampTheirStrength() {
+        let expectedNames = ["Original", "Natural", "Fresh", "Polished", "Glam", "Max"]
+        for (level, name) in expectedNames.enumerated() {
+            let settings = BeautifySettings(strength: level)
+            XCTAssertEqual(settings.levelName, name)
+            XCTAssertEqual(settings.normalizedStrength, Double(level) / 5, accuracy: 0.0001)
+        }
+
+        XCTAssertEqual(BeautifySettings(strength: -2).normalizedStrength, 0)
+        XCTAssertEqual(BeautifySettings(strength: 8).normalizedStrength, 1)
+        XCTAssertEqual(BeautifySettings(strength: 8).levelName, "Max")
+        XCTAssertTrue(BeautifySettings().landscapeSkyEnabled)
+        XCTAssertTrue(BeautifySettings().landscapeColorEnabled)
+    }
+
+    func testEnhanceLevelsHaveStableNamesAndClampTheirStrength() {
+        let expectedNames = ["Original", "Natural", "Balanced", "Vivid", "Dramatic", "Max"]
+        for (level, name) in expectedNames.enumerated() {
+            let settings = EnhanceSettings(strength: level)
+            XCTAssertEqual(settings.levelName, name)
+            XCTAssertEqual(settings.normalizedStrength, Double(level) / 5, accuracy: 0.0001)
+        }
+
+        XCTAssertEqual(EnhanceSettings(strength: -1).normalizedStrength, 0)
+        XCTAssertEqual(EnhanceSettings(strength: 9).normalizedStrength, 1)
+        XCTAssertEqual(EnhanceSettings(strength: 9).levelName, "Max")
+    }
+
+    func testLandscapeBeautifyChangesRenderedPixels() {
+        let size = CGSize(width: 120, height: 160)
+        let original = UIGraphicsImageRenderer(size: size).image { context in
+            UIColor(red: 0.34, green: 0.58, blue: 0.74, alpha: 1).setFill()
+            context.fill(CGRect(x: 0, y: 0, width: size.width, height: 100))
+            UIColor(white: 0.92, alpha: 1).setFill()
+            context.cgContext.fillEllipse(in: CGRect(x: 18, y: 28, width: 48, height: 20))
+            context.cgContext.fillEllipse(in: CGRect(x: 55, y: 18, width: 42, height: 24))
+            UIColor(red: 0.34, green: 0.48, blue: 0.29, alpha: 1).setFill()
+            context.fill(CGRect(x: 0, y: 100, width: size.width, height: 60))
+        }
+
+        let normalOutput = BeautifyEngine().apply(
+            to: original,
+            measurements: measurements(personBox: nil, faceBox: nil, skyOrOpenAreaRatio: 0.65),
+            settings: BeautifySettings(strength: 3)
+        )
+        let output = BeautifyEngine().apply(
+            to: original,
+            measurements: measurements(personBox: nil, faceBox: nil, skyOrOpenAreaRatio: 0.65),
+            settings: BeautifySettings(strength: 5)
+        )
+
+        XCTAssertTrue(output.result.landscapeApplied)
+        XCTAssertTrue(output.result.landscapeColorApplied)
+        XCTAssertTrue(output.result.skyApplied)
+        XCTAssertGreaterThan(meanRGBDifference(original, normalOutput.image), 4.0)
+        XCTAssertGreaterThan(meanRGBDifference(original, output.image), 4.0)
+        XCTAssertGreaterThan(meanRGBDifference(normalOutput.image, output.image), 2.0)
+    }
+
+    func testAutoPhotoFiltersFollowTheDetectedSituation() {
+        XCTAssertEqual(
+            PhotoFilterChoice.namedPresets.map(\.title),
+            ["Natural", "Soft", "Bright", "Vivid", "Blue Sky", "Golden", "Fresh", "Night Clear"]
+        )
+        XCTAssertEqual(PhotoFilterChoice.auto.resolved(for: .portrait), .natural)
+        XCTAssertEqual(PhotoFilterChoice.auto.resolved(for: .group), .natural)
+        XCTAssertEqual(PhotoFilterChoice.auto.resolved(for: .personScene), .natural)
+        XCTAssertEqual(PhotoFilterChoice.auto.resolved(for: .landscape), .blueSky)
+        XCTAssertEqual(PhotoFilterChoice.auto.resolved(for: .action), .vivid)
+        XCTAssertEqual(PhotoFilterChoice.auto.resolved(for: .closeUp), .bright)
+        XCTAssertEqual(PhotoFilterChoice.auto.resolved(for: .food), .fresh)
+        XCTAssertEqual(PhotoFilterChoice.golden.resolved(for: .landscape), .golden)
+    }
+
+    func testCapturePolishReusesReviewTreatmentsAtFiveLevels() {
+        XCTAssertEqual(
+            CapturePolishChoice.allCases.map(\.title),
+            ["Off", "General Enhance", "Portrait Polish", "Landscape Polish"]
+        )
+        XCTAssertEqual((1...5).map(CapturePolishChoice.levelName), ["Light", "Natural", "Polished", "Strong", "Max"])
+    }
+
+    func testBeautifierPresetsKeepPortraitAndLandscapeSettingsSeparate() {
+        XCTAssertEqual(EffectApplicationMode.allCases.map(\.title), ["Auto", "Custom", "Off"])
+        XCTAssertEqual(FocusExposureMode.allCases.map(\.title), ["Auto", "Manual"])
+        let naturalPortrait = PortraitBeautifierPreset.natural.defaultSettings
+        XCTAssertEqual(naturalPortrait.strength, 2)
+        XCTAssertTrue(naturalPortrait.skinSmoothingEnabled)
+        XCTAssertFalse(naturalPortrait.eyeEnlargementEnabled)
+        XCTAssertFalse(naturalPortrait.landscapeColorEnabled)
+
+        let glamPortrait = PortraitBeautifierPreset.glam.defaultSettings
+        XCTAssertEqual(glamPortrait.strength, 4)
+        XCTAssertTrue(glamPortrait.eyeEnlargementEnabled)
+        XCTAssertTrue(glamPortrait.lipPlumpingEnabled)
+
+        let naturalLandscape = LandscapeBeautifierPreset.natural.defaultSettings
+        XCTAssertEqual(naturalLandscape.strength, 2)
+        XCTAssertTrue(naturalLandscape.landscapeColorEnabled)
+        XCTAssertFalse(naturalLandscape.landscapeSkyEnabled)
+        XCTAssertFalse(naturalLandscape.skinSmoothingEnabled)
+
+        let dramaticLandscape = LandscapeBeautifierPreset.dramatic.defaultSettings
+        XCTAssertEqual(dramaticLandscape.strength, 4)
+        XCTAssertTrue(dramaticLandscape.landscapeSkyEnabled)
+        XCTAssertTrue(dramaticLandscape.landscapeColorEnabled)
+    }
+
+    func testPhotoFilterStrengthChangesRenderedPixels() {
+        let size = CGSize(width: 80, height: 80)
+        let original = UIGraphicsImageRenderer(size: size).image { context in
+            UIColor(red: 0.30, green: 0.52, blue: 0.68, alpha: 1).setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+        }
+        let engine = PhotoFilterEngine()
+        let none = engine.apply(to: original, preset: .none, strength: 5)
+        let vivid = engine.apply(to: original, preset: .vivid, strength: 3)
+
+        XCTAssertEqual(meanRGBDifference(original, none), 0, accuracy: 0.01)
+        XCTAssertGreaterThan(meanRGBDifference(original, vivid), 2)
+    }
+
     func testVoiceShutterRecognizesOnlyTakePhotoCommands() {
         XCTAssertTrue(VoiceShutterCommand.matches("Cheese"))
         XCTAssertTrue(VoiceShutterCommand.matches("Okay, cheese!"))
@@ -9,18 +166,160 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertTrue(VoiceShutterCommand.matches("Please take a photo now"))
         XCTAssertTrue(VoiceShutterCommand.matches("take picture"))
         XCTAssertTrue(VoiceShutterCommand.matches("Okay, take a picture!"))
+        XCTAssertTrue(VoiceShutterCommand.matches("Hey Dali, capture a photo please"))
+        XCTAssertTrue(VoiceShutterCommand.matches("Could you snap a picture now?"))
+        XCTAssertTrue(VoiceShutterCommand.matches("Say cheese now"))
         XCTAssertFalse(VoiceShutterCommand.matches("Take a break"))
         XCTAssertFalse(VoiceShutterCommand.matches("Beautiful photo"))
         XCTAssertFalse(VoiceShutterCommand.matches("Cheesecake"))
+        XCTAssertFalse(VoiceShutterCommand.matches("Capture the moment"))
+        XCTAssertEqual(VoiceShutterCommand.spokenExamples.count, 5)
+    }
+
+    func testVoiceShutterRecognizesUserPhraseAsWholeWords() {
+        XCTAssertTrue(VoiceShutterCommand.matches("Okay, smile now!", customPhrase: "smile now"))
+        XCTAssertTrue(VoiceShutterCommand.matches("DALI GO", customPhrase: "Dali go"))
+        XCTAssertFalse(VoiceShutterCommand.matches("smiley now", customPhrase: "smile"))
+        XCTAssertFalse(VoiceShutterCommand.matches("anything", customPhrase: ""))
+    }
+
+    func testShutterTimerOffersStandardDelays() {
+        XCTAssertEqual(ShutterTimerDelay.allCases.map(\.rawValue), [0, 3, 5, 10])
+        XCTAssertEqual(ShutterTimerDelay.allCases.map(\.title), ["Off", "3s", "5s", "10s"])
+    }
+
+    func testLongPressShutterOffersBurstByDefault() {
+        XCTAssertEqual(ShutterLongPressAction.burst.rawValue, "burst")
+        XCTAssertEqual(
+            ShutterLongPressAction.allCases.map(\.title),
+            ["Burst", "Timer", "Disabled"]
+        )
+        XCTAssertTrue(ShutterLongPressAction.burst.description.contains("release to stop"))
     }
 
     func testCameraControlCapabilitiesClampValuesPerActiveCamera() {
         var capabilities = CameraControlCapabilities.unavailable
         capabilities.minimumExposureBias = -2
         capabilities.maximumExposureBias = 1.5
+        capabilities.minimumISO = 32
+        capabilities.maximumISO = 1_600
+        capabilities.minimumExposureDurationSeconds = 1.0 / 8_000.0
+        capabilities.maximumExposureDurationSeconds = 1
+        capabilities.minimumLensAperture = 1.4
+        capabilities.maximumLensAperture = 4
         XCTAssertEqual(capabilities.clampedExposureBias(-3), -2)
         XCTAssertEqual(capabilities.clampedExposureBias(0.7), 0.7)
         XCTAssertEqual(capabilities.clampedExposureBias(2), 1.5)
+        XCTAssertEqual(capabilities.clampedISO(20), 32)
+        XCTAssertEqual(capabilities.clampedISO(3_200), 1_600)
+        XCTAssertEqual(capabilities.clampedExposureDuration(1.0 / 10_000.0), 1.0 / 8_000.0)
+        XCTAssertEqual(capabilities.clampedExposureDuration(2), 1)
+        XCTAssertEqual(capabilities.clampedLensAperture(1), 1.4)
+        XCTAssertEqual(capabilities.clampedLensAperture(8), 4)
+        XCTAssertEqual(
+            capabilities.linkedISO(baseExposureProduct: 1, shutterSeconds: 1.0 / 250.0, adjustmentEV: 0),
+            250,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            capabilities.linkedISO(baseExposureProduct: 1, shutterSeconds: 1.0 / 250.0, adjustmentEV: 1),
+            500,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            capabilities.linkedISO(baseExposureProduct: 1, shutterSeconds: 1.0 / 2_000.0, adjustmentEV: 1),
+            1_600,
+            accuracy: 0.001
+        )
+    }
+
+    func testAdvancedControlsIncludeProExposurePrograms() {
+        XCTAssertEqual(ProExposureProgram.allCases.map(\.title), ["Manual", "Tv", "Av"])
+        XCTAssertEqual(TapMeteringTarget.allCases.map(\.title), ["AF + AE", "Focus", "Exposure"])
+        XCTAssertTrue(TapMeteringTarget.focusAndExposure.includesFocus)
+        XCTAssertTrue(TapMeteringTarget.focusAndExposure.includesExposure)
+        XCTAssertTrue(TapMeteringTarget.focus.includesFocus)
+        XCTAssertFalse(TapMeteringTarget.focus.includesExposure)
+        XCTAssertFalse(TapMeteringTarget.exposure.includesFocus)
+        XCTAssertTrue(TapMeteringTarget.exposure.includesExposure)
+    }
+
+    func testReviewTreatmentsAreSeparateAndUserSelectable() {
+        XCTAssertEqual(
+            ReviewTreatment.allCases.map(\.title),
+            ["Portrait Polish", "Landscape Polish", "General Enhance"]
+        )
+        XCTAssertEqual(ReviewTreatment.allCases.map(\.shortTitle), ["Portrait", "Landscape", "Enhance"])
+    }
+
+    func testAssistedRecommendationsPrioritizeMotionAndApplyAvailableControls() {
+        let engine = AssistedRecommendationEngine()
+        let capabilities = cameraCapabilities(exposureBias: 0, duration: 1.0 / 20.0, iso: 1000)
+        let moving = measurements(subjectMotion: 0.3)
+
+        XCTAssertEqual(
+            engine.recommendation(
+                measurements: moving,
+                capabilities: capabilities,
+                shutterTimerSeconds: 5,
+                recentCaptureCount: 0
+            )?.action,
+            .setShutterTimer(0)
+        )
+        XCTAssertEqual(
+            engine.recommendation(
+                measurements: measurements(cameraMotion: 0.35, cameraStable: false),
+                capabilities: cameraCapabilities(),
+                shutterTimerSeconds: 0,
+                recentCaptureCount: 0
+            )?.action,
+            .setShutterTimer(3)
+        )
+    }
+
+    func testAssistedRecommendationsCoverExposureAndConsistentSeries() {
+        let engine = AssistedRecommendationEngine()
+        let brightSky = measurements(
+            personBox: nil,
+            faceBox: nil,
+            faceLuminance: nil,
+            backgroundLuminance: 205,
+            skyOrOpenAreaRatio: 0.5
+        )
+        XCTAssertEqual(
+            engine.recommendation(
+                measurements: brightSky,
+                capabilities: cameraCapabilities(),
+                shutterTimerSeconds: 0,
+                recentCaptureCount: 0
+            )?.kind,
+            .brightSky
+        )
+
+        let darkFace = measurements(faceLuminance: 75, backgroundLuminance: 135, skyOrOpenAreaRatio: 0.05)
+        XCTAssertEqual(
+            engine.recommendation(
+                measurements: darkFace,
+                capabilities: cameraCapabilities(),
+                shutterTimerSeconds: 0,
+                recentCaptureCount: 0
+            )?.action,
+            .setExposureBias(0.3)
+        )
+
+        let consistent = engine.recommendation(
+            measurements: measurements(
+                personBox: nil,
+                faceBox: nil,
+                faceLuminance: nil,
+                backgroundLuminance: 120,
+                skyOrOpenAreaRatio: 0.05
+            ),
+            capabilities: cameraCapabilities(),
+            shutterTimerSeconds: 0,
+            recentCaptureCount: 2
+        )
+        XCTAssertEqual(consistent?.action, .lockFocusAndExposure)
     }
 
     func testEveryManualSituationProvidesIntegratedAngles() {
@@ -30,6 +329,7 @@ final class CoachingEngineTests: XCTestCase {
         }
         XCTAssertEqual(PhotographicSituation.closeUp.angleChoices.first, .overhead)
         XCTAssertEqual(PhotographicSituation.landscape.angleChoices.first, .low)
+        XCTAssertEqual(PhotographicSituation.food.angleChoices.first, .fortyFive)
         XCTAssertEqual(CameraAngleChoice.slightlyHigh.guidedPosition, .elevated)
     }
 
@@ -145,6 +445,18 @@ final class CoachingEngineTests: XCTestCase {
         let subject = Advice(type: "face_too_profile", recipient: "Subject", instruction: "Turn left", tone: .warning)
         XCTAssertNotEqual(camera.directionSymbol, subject.directionSymbol)
     }
+
+    func testAdviceProducesSpecificVisualMovementGuidance() {
+        XCTAssertEqual(advice("Move left").visualGuidanceDirection, .left)
+        XCTAssertEqual(advice("Move a little to your right around the subject.").visualGuidanceDirection, .right)
+        XCTAssertEqual(advice("Raise camera").visualGuidanceDirection, .up)
+        XCTAssertEqual(advice("Lower the camera to their chest level.").visualGuidanceDirection, .down)
+        XCTAssertEqual(advice("Step closer").visualGuidanceDirection, .closer)
+        XCTAssertEqual(advice("Step back").visualGuidanceDirection, .farther)
+        XCTAssertEqual(advice("Tilt left").visualGuidanceDirection, .rotateLeft)
+        XCTAssertEqual(advice("Tilt right").visualGuidanceDirection, .rotateRight)
+        XCTAssertNil(advice("Hold steady").visualGuidanceDirection)
+    }
     func testGuidanceCatalogHasElevenPackagesSeventySixPosesAndFiveCameraPositions() {
         XCTAssertEqual(GuidedPoseCollectionID.allCases.count, 11)
         XCTAssertEqual(Set(GuidedPose.allCases.map(\.id)).count, 76)
@@ -256,6 +568,24 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertEqual(LandscapeCompositionRecipe.plantPattern.recommendedCameraAngle, .overhead)
     }
 
+    func testFoodCatalogHasSixCompleteRecipes() {
+        let recipes = FoodCompositionRecipe.allCases
+        XCTAssertEqual(recipes.count, 6)
+        XCTAssertEqual(Set(recipes.map(\.id)).count, 6)
+        XCTAssertEqual(Set(recipes.map(\.recommendedCameraAngle)), Set([.overhead, .fortyFive, .side]))
+        XCTAssertEqual(Set(recipes.map(\.recommendedLight)), Set(FoodLightRecommendation.allCases))
+        for recipe in recipes {
+            XCTAssertEqual(recipe.cues.count, 2)
+            XCTAssertFalse(recipe.instruction.isEmpty)
+            XCTAssertFalse(recipe.exampleAssetName.isEmpty)
+            XCTAssertFalse(recipe.safetyNote.isEmpty)
+            XCTAssertFalse(recipe.recommendedLight.instruction.isEmpty)
+        }
+        XCTAssertEqual(FoodCompositionRecipe.heroPlate.recommendedCameraAngle, .fortyFive)
+        XCTAssertEqual(FoodCompositionRecipe.overheadFlatLay.recommendedCameraAngle, .overhead)
+        XCTAssertTrue(FoodCompositionRecipe.pourAction.safetyNote.contains("hot liquid"))
+    }
+
     func testGuidanceProgressesOnlyWhenExplicitlyAdvanced() {
         var session = GuidedSession(pose: .handInPocket, position: .elevated)
         XCTAssertEqual(session.steps.count, 4)
@@ -349,6 +679,22 @@ final class CoachingEngineTests: XCTestCase {
         let store = PendingCaptureStore(url: missingDirectory.appendingPathComponent("capture.photo"))
         XCTAssertThrowsError(try store.retain(Data([1, 2, 3])))
         XCTAssertNil(try store.load())
+    }
+
+    func testCaptureHistoryLoadsNewestFirstAndPrunesOldPhotos() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = CaptureHistoryStore(directoryURL: directory, maximumCount: 2)
+
+        let first = try store.retain(Data([1]), capturedAt: Date(timeIntervalSince1970: 1), id: UUID())
+        let second = try store.retain(Data([2]), capturedAt: Date(timeIntervalSince1970: 2), id: UUID())
+        let third = try store.retain(Data([3]), capturedAt: Date(timeIntervalSince1970: 3), id: UUID())
+
+        XCTAssertEqual(try store.loadAll().map(\.data), [third.data, second.data])
+        XCTAssertFalse(try store.loadAll().contains(where: { $0.id == first.id }))
+
+        try store.remove(id: third.id)
+        XCTAssertEqual(try store.loadAll().map(\.data), [second.data])
     }
 
     func testSubjectMissingProducesHighestPriorityDangerIssue() {
@@ -588,6 +934,68 @@ final class CoachingEngineTests: XCTestCase {
 
         XCTAssertEqual(issues.first { $0.type == "group_faces_missing" }?.instruction, "Make every face visible")
         XCTAssertEqual(issues.first { $0.type == "group_edge_crowded" }?.instruction, "Leave space at the edges")
+    }
+
+    private func cameraCapabilities(
+        exposureBias: Double = 0,
+        duration: Double = 1.0 / 125.0,
+        iso: Double = 100
+    ) -> CameraControlCapabilities {
+        CameraControlCapabilities(
+            isAvailable: true,
+            cameraName: "Test Camera",
+            lensName: "Wide",
+            supportsExposureBias: true,
+            minimumExposureBias: -2,
+            maximumExposureBias: 2,
+            currentExposureBias: exposureBias,
+            supportsFocusLock: true,
+            supportsExposureLock: true,
+            isFocusExposureLocked: false,
+            currentISO: iso,
+            currentExposureDurationSeconds: duration
+        )
+    }
+
+    private func advice(_ instruction: String) -> Advice {
+        Advice(type: "test", recipient: "Photographer", instruction: instruction, tone: .warning)
+    }
+
+    private func meanRGBDifference(_ lhs: UIImage, _ rhs: UIImage) -> Double {
+        guard let left = rgbaBytes(lhs), let right = rgbaBytes(rhs), left.count == right.count else {
+            return 0
+        }
+        var total = 0.0
+        var componentCount = 0
+        for pixel in stride(from: 0, to: left.count, by: 4) {
+            for component in 0..<3 {
+                total += Double(abs(Int(left[pixel + component]) - Int(right[pixel + component])))
+                componentCount += 1
+            }
+        }
+        return componentCount == 0 ? 0 : total / Double(componentCount)
+    }
+
+    private func rgbaBytes(_ image: UIImage) -> [UInt8]? {
+        guard let cgImage = image.cgImage else { return nil }
+        let width = cgImage.width
+        let height = cgImage.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let rendered = bytes.withUnsafeMutableBytes { storage -> Bool in
+            guard let baseAddress = storage.baseAddress,
+                  let context = CGContext(
+                    data: baseAddress,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: width * 4,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                  ) else { return false }
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return rendered ? bytes : nil
     }
 
     private func measurements(

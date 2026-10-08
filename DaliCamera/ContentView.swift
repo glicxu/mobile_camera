@@ -1,6 +1,112 @@
+@preconcurrency import Photos
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
+
+private enum ManualPreviewTool: String, CaseIterable, Identifiable {
+    case focus
+    case depth
+    case exposure
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .focus: return "Focus"
+        case .depth: return "Depth"
+        case .exposure: return "Exposure"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .focus: return "scope"
+        case .depth: return "camera.aperture"
+        case .exposure: return "timer"
+        }
+    }
+}
+
+private enum CameraTutorialStep: Int, CaseIterable, Identifiable {
+    case choose
+    case posture
+    case landscape
+    case coach
+    case style
+    case capture
+    case review
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .choose: return "Choose your shot"
+        case .posture: return "Choose a posture package"
+        case .landscape: return "Choose a landscape package"
+        case .coach: return "Follow the coaching light"
+        case .style: return "Style before capture"
+        case .capture: return "Take the photo"
+        case .review: return "Review and return"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .choose:
+            return "Leave Situation on Auto for everyday photos, or choose Portrait, Landscape, Food, Group, Action, or Close-up when you want specific guidance."
+        case .posture:
+            return "For Portrait, People, or Group photos, tap Posture. Choose a package, then select a reference pose. Dali shows its recommended camera angle, lighting, and live coaching cues."
+        case .landscape:
+            return "Choose the Landscape situation, then tap Landscape. Pick a scene package and a composition. Dali guides the angle, light, horizon, and placement while you frame the photo."
+        case .coach:
+            return "Dali gives one visual instruction at a time. Green means the framing looks good; amber means a small adjustment needs your attention."
+        case .style:
+            return "Open Controls to choose a named Filter or Beautifier. Auto chooses for the scene, Custom exposes fine-tuning, and Off keeps the natural camera image."
+        case .capture:
+            return "Tap the shutter for one photo. Shutter Controls also provides a timer and your voice phrase. Hold the shutter for a burst by default."
+        case .review:
+            return "Tap the lower-left thumbnail to review. Swipe through photos, compare Before and After, then tap Back to Camera when you are ready to shoot again."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .choose: return "viewfinder"
+        case .posture: return "figure.stand"
+        case .landscape: return "mountain.2"
+        case .coach: return "arrow.up.and.down.and.arrow.left.and.right"
+        case .style: return "camera.filters"
+        case .capture: return "camera.fill"
+        case .review: return "photo.on.rectangle.angled"
+        }
+    }
+
+    var accent: Color {
+        switch self {
+        case .choose, .posture, .style, .review: return .teal
+        case .landscape: return .blue
+        case .coach: return .orange
+        case .capture: return .yellow
+        }
+    }
+
+    var tips: [String] {
+        switch self {
+        case .choose:
+            return ["Auto recognizes the scene", "Choose a situation for specialized guidance"]
+        case .posture:
+            return ["11 posture packages", "Tap a photo to select the pose"]
+        case .landscape:
+            return ["4 landscape packages", "Choose among 24 compositions"]
+        case .coach:
+            return ["Green: ready", "Amber: adjust framing"]
+        case .style:
+            return ["Filters control color", "Beautifier controls people or scenery"]
+        case .capture:
+            return ["Tap: one photo", "Hold: burst"]
+        case .review:
+            return ["Swipe for previous photos", "Back to Camera resumes shooting"]
+        }
+    }
+}
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -8,21 +114,92 @@ struct ContentView: View {
     @StateObject private var camera = CameraModel()
     @StateObject private var voiceShutter = VoiceShutterController()
     @AppStorage("hasSeenDaliTutor") private var hasSeenDaliTutor = false
+    @AppStorage("voiceShutterEnabled") private var storedVoiceShutterEnabled = false
+    @AppStorage("voiceShutterCustomPhrase") private var storedVoiceShutterCustomPhrase = ""
+    @AppStorage("shutterTimerSeconds") private var storedShutterTimerSeconds = 0
+    @AppStorage("shutterLongPressAction") private var storedShutterLongPressAction = ShutterLongPressAction.burst.rawValue
     @AppStorage("beautifyStrength") private var storedBeautifyStrength = 0
+    @AppStorage("landscapePolishStrength") private var storedLandscapePolishStrength = 0
+    @AppStorage("reviewTreatment") private var storedReviewTreatment = ReviewTreatment.generalEnhance.rawValue
+    @AppStorage("beautifyLevelVersion") private var storedBeautifyLevelVersion = 0
+    @AppStorage("beautifyLandscapeSkyEnabled") private var storedBeautifyLandscapeSkyEnabled = true
+    @AppStorage("beautifyLandscapeColorEnabled") private var storedBeautifyLandscapeColorEnabled = true
     @AppStorage("beautifyFaceBrightnessEnabled") private var storedBeautifyFaceBrightnessEnabled = true
     @AppStorage("beautifySkinSmoothingEnabled") private var storedBeautifySkinSmoothingEnabled = true
-    @AppStorage("beautifyWarmthEnabled") private var storedBeautifyWarmthEnabled = true
-    @AppStorage("beautifyClarityEnabled") private var storedBeautifyClarityEnabled = true
-    @AppStorage("beautifySubjectEmphasisEnabled") private var storedBeautifySubjectEmphasisEnabled = true
+    @AppStorage("beautifyBlemishReductionEnabled") private var storedBeautifyBlemishReductionEnabled = true
+    @AppStorage("beautifyEyeEnlargementEnabled") private var storedBeautifyEyeEnlargementEnabled = true
+    @AppStorage("beautifyLipPlumpingEnabled") private var storedBeautifyLipPlumpingEnabled = true
+    @AppStorage("enhanceStrength") private var storedEnhanceStrength = 0
+    @AppStorage("enhanceAutoToneEnabled") private var storedEnhanceAutoToneEnabled = true
+    @AppStorage("beautifyWarmthEnabled") private var storedEnhanceWarmthEnabled = true
+    @AppStorage("enhanceVibranceEnabled") private var storedEnhanceVibranceEnabled = true
+    @AppStorage("beautifyClarityEnabled") private var storedEnhanceClarityEnabled = true
+    @AppStorage("enhanceNoiseReductionEnabled") private var storedEnhanceNoiseReductionEnabled = true
+    @AppStorage("beautifySubjectEmphasisEnabled") private var storedEnhanceSubjectEmphasisEnabled = true
+    @AppStorage("photoFilterChoice") private var storedPhotoFilterChoice = PhotoFilterChoice.auto.rawValue
+    @AppStorage("filterApplicationMode") private var storedFilterApplicationMode = EffectApplicationMode.auto.rawValue
+    @AppStorage("photoFilterExposure") private var storedPhotoFilterExposure = 0
+    @AppStorage("photoFilterWarmth") private var storedPhotoFilterWarmth = 0
+    @AppStorage("photoFilterColor") private var storedPhotoFilterColor = 0
+    @AppStorage("photoFilterContrast") private var storedPhotoFilterContrast = 0
+    @AppStorage("photoFilterSoftness") private var storedPhotoFilterSoftness = 0
+    @AppStorage("photoFilterDetail") private var storedPhotoFilterDetail = 0
+    @AppStorage("photoFilterBlueSky") private var storedPhotoFilterBlueSky = 0
+    @AppStorage("capturePolishChoice") private var storedCapturePolishChoice = CapturePolishChoice.off.rawValue
+    @AppStorage("beautifierApplicationMode") private var storedBeautifierApplicationMode = EffectApplicationMode.off.rawValue
+    @AppStorage("capturePolishStrength") private var storedCapturePolishStrength = 3
+    @AppStorage("portraitBeautifierPreset") private var storedPortraitBeautifierPreset = PortraitBeautifierPreset.polished.rawValue
+    @AppStorage("portraitBeautifierStrength") private var storedPortraitBeautifierStrength = 3
+    @AppStorage("portraitBeautifierBrightness") private var storedPortraitBeautifierBrightness = true
+    @AppStorage("portraitBeautifierSmoothing") private var storedPortraitBeautifierSmoothing = true
+    @AppStorage("portraitBeautifierBlemishes") private var storedPortraitBeautifierBlemishes = true
+    @AppStorage("portraitBeautifierEyes") private var storedPortraitBeautifierEyes = true
+    @AppStorage("portraitBeautifierLips") private var storedPortraitBeautifierLips = false
+    @AppStorage("landscapeBeautifierPreset") private var storedLandscapeBeautifierPreset = LandscapeBeautifierPreset.vivid.rawValue
+    @AppStorage("landscapeBeautifierStrength") private var storedLandscapeBeautifierStrength = 3
+    @AppStorage("landscapeBeautifierSky") private var storedLandscapeBeautifierSky = true
+    @AppStorage("landscapeBeautifierColor") private var storedLandscapeBeautifierColor = true
     @State private var showTutor = false
+    @State private var tutorialPage = 0
+    @State private var showAppSettings = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var showingFolderImporter = false
-    @State private var showConfiguration = false
     @State private var showCameraControls = false
-    @State private var cameraControlMode: CameraControlMode = .auto
+    @State private var shutterControlsExpanded = false
+    @State private var filterControlsExpanded = false
+    @State private var customFilterSettingsExpanded = false
+    @State private var capturePolishExpanded = false
+    @State private var customBeautifierSettingsExpanded = false
+    @State private var advancedControlsExpanded = false
+    @State private var autoAssistanceEnabled = false
+    @State private var proExposureEnabled = false
+    @State private var focusExposureMode: FocusExposureMode = .auto
+    @State private var dismissedAssistedRecommendation: AssistedRecommendationKind?
+    @State private var proExposureProgram: ProExposureProgram = .manual
+    @State private var manualShutterSeconds = 1.0 / 125.0
+    @State private var manualShutterAuto = true
+    @State private var manualISO = 100.0
+    @State private var manualAperture = 1.8
+    @State private var linkedISOEnabled = false
+    @State private var linkedExposureBaseProduct = 100.0 / 125.0
+    @State private var proExposureAdjustment = 0.0
+    @State private var meteringIndicatorPoint: CGPoint?
+    @State private var digitalDepthOfFocus = 0
+    @State private var selectedManualPreviewTool: ManualPreviewTool?
+    @State private var manualControlsVisible = false
+    @State private var meteringIndicatorTarget: TapMeteringTarget = .focusAndExposure
+    @State private var meteringIndicatorTask: Task<Void, Never>?
+    @State private var shutterCountdownTask: Task<Void, Never>?
+    @State private var shutterCountdownRemaining: Int?
+    @State private var burstCaptureTask: Task<Void, Never>?
+    @State private var burstPhotoCount = 0
+    @State private var suppressNextShutterTap = false
     @State private var reviewPhotos: [ReviewPhoto] = []
     @State private var reviewPhotoIndex = 0
+    @State private var reviewPhotoLoadID = UUID()
+    @State private var isLoadingPhotoLibrary = false
     @State private var reviewVariant: ReviewVariant = .original
+    @State private var reviewComparisonMode: ReviewComparisonMode = .before
     @State private var showFullScreenReviewImage = false
     @State private var startReviewComparison = false
     @State private var shootingMode: PhotographicSituation = .auto
@@ -34,6 +211,7 @@ struct ContentView: View {
     @State private var showDiscardConfirmation = false
     @State private var showPoseChooser = false
     @State private var showLandscapeChooser = false
+    @State private var showFoodChooser = false
     @State private var guideCollection: GuidedPoseCollectionID = .masculine
     @State private var selectedPosePackage: GuidedPoseCollectionID?
     @State private var chosenGuidePose: GuidedPose?
@@ -41,6 +219,8 @@ struct ContentView: View {
     @State private var chosenLandscapeRecipe: LandscapeCompositionRecipe?
     @State private var landscapeExampleRecipe: LandscapeCompositionRecipe?
     @State private var selectedLandscapePackage: LandscapeCompositionPackageID?
+    @State private var chosenFoodRecipe: FoodCompositionRecipe?
+    @State private var foodExampleRecipe: FoodCompositionRecipe?
     @State private var chosenCameraPosition: GuidedCameraPosition?
     @State private var guideMoveRight = false
 
@@ -65,8 +245,14 @@ struct ContentView: View {
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         .task {
-            voiceShutter.onTakePhoto = { camera.capturePhoto() }
+            voiceShutter.onTakePhoto = { requestPhotoCapture() }
+            voiceShutter.setCustomPhrase(storedVoiceShutterCustomPhrase)
+            syncVoiceShutterState()
+            if storedVoiceShutterEnabled { voiceShutter.setEnabled(true) }
+            loadStoredEnhanceSettings()
             loadStoredBeautifySettings()
+            syncPhotoFilter()
+            syncCapturePolish()
             if !hasSeenDaliTutor {
                 showTutor = true
                 hasSeenDaliTutor = true
@@ -84,18 +270,24 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && !showTutor {
                 camera.start()
-                if camera.reviewImage == nil { voiceShutter.resumeIfEnabled() }
             } else if phase == .background {
                 camera.stop()
-                voiceShutter.pauseListening()
             }
         }
-        .onChange(of: camera.reviewImage) { _, image in
-            if image == nil && scenePhase == .active && !showTutor {
-                voiceShutter.resumeIfEnabled()
-            } else {
-                voiceShutter.pauseListening()
+        .onChange(of: shutterCountdownBlocked) { _, blocked in
+            if blocked {
+                cancelShutterCountdown()
+                stopBurstCapture()
             }
+        }
+        .onChange(of: voiceShutterCanListen) { _, _ in
+            syncVoiceShutterState()
+        }
+        .onChange(of: voiceShutter.isEnabled) { _, enabled in
+            storedVoiceShutterEnabled = enabled
+        }
+        .onChange(of: storedVoiceShutterCustomPhrase) { _, phrase in
+            voiceShutter.setCustomPhrase(phrase)
         }
         .sheet(item: $sharedPhoto) { photo in
             PhotoShareSheet(image: photo.image)
@@ -106,41 +298,61 @@ struct ContentView: View {
         .sheet(isPresented: $showLandscapeChooser) {
             landscapeCompositionChooser
         }
+        .sheet(isPresented: $showFoodChooser) {
+            foodCompositionChooser
+        }
         .sheet(item: $examplePose) { pose in
             postureExampleSheet(for: pose)
         }
         .sheet(item: $landscapeExampleRecipe) { recipe in
             landscapeCompositionExampleSheet(for: recipe)
         }
-        .sheet(isPresented: $showTutor) { tutorCard }
+        .sheet(item: $foodExampleRecipe) { recipe in
+            foodCompositionExampleSheet(for: recipe)
+        }
+        .sheet(isPresented: $showTutor) {
+            tutorCard
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
         .onChange(of: showTutor) { _, showing in
             if showing {
+                tutorialPage = 0
                 camera.stop()
-                voiceShutter.pauseListening()
             } else {
                 camera.start()
-                if camera.reviewImage == nil { voiceShutter.resumeIfEnabled() }
             }
         }
         .onChange(of: shootingMode) { _, _ in
             showPoseChooser = false
             showLandscapeChooser = false
+            showFoodChooser = false
             if !activeSituation.supportsPoseGuidance { camera.beginGuidance(pose: nil, position: nil) }
         }
         .onChange(of: activeSituation) { _, situation in
+            syncPhotoFilter()
+            syncCapturePolish()
             guard let firstAngle = situation.angleChoices.first else { return }
             selectedAngle = firstAngle
             chosenGuidePose = nil
             chosenCameraPosition = nil
             showPoseChooser = false
             showLandscapeChooser = false
+            showFoodChooser = false
             if situation != .landscape { chosenLandscapeRecipe = nil }
+            if situation != .food { chosenFoodRecipe = nil }
             camera.beginGuidance(pose: nil, position: nil)
         }
         .onChange(of: camera.measurements.timestamp) { _, _ in
             guard coachingEnabled, shootingMode == .auto,
                   !camera.isCapturing, !camera.guidedSession.isActive else { return }
             automaticSituation = situationClassifier.update(with: camera.measurements)
+        }
+        .onChange(of: assistedRecommendationCandidate) { _, candidate in
+            if let dismissedAssistedRecommendation,
+               candidate?.kind != dismissedAssistedRecommendation {
+                self.dismissedAssistedRecommendation = nil
+            }
         }
         .confirmationDialog("Discard the unsaved original?", isPresented: $showDiscardConfirmation, titleVisibility: .visible) {
             Button("Discard photo", role: .destructive) {
@@ -154,7 +366,8 @@ struct ContentView: View {
         .onChange(of: camera.advice) { _, advice in
             guard UIAccessibility.isVoiceOverRunning, camera.reviewImage == nil,
                   activeSituation.showsPersonOverlay, coachingEnabled,
-                  !showTutor, !showPoseChooser, !showLandscapeChooser, !showConfiguration else { return }
+                  !showTutor, !showPoseChooser, !showLandscapeChooser, !showFoodChooser,
+                  !showAppSettings else { return }
             UIAccessibility.post(notification: .announcement, argument: "\(advice.recipient). \(advice.instruction)")
         }
         .onChange(of: camera.exportStatus) { _, status in
@@ -165,12 +378,52 @@ struct ContentView: View {
         .onChange(of: camera.selectedPosePackage) { _, _ in
             camera.refreshStillPhotoAdvice()
         }
-        .onChange(of: camera.beautifySettings) { _, _ in
+        .onChange(of: camera.beautifySettings) { oldSettings, newSettings in
             persistBeautifySettings()
-            camera.refreshBeautify()
+            if oldSettings.strength == newSettings.strength {
+                camera.refreshBeautify()
+            }
+        }
+        .onChange(of: camera.enhanceSettings) { oldSettings, newSettings in
+            persistEnhanceSettings()
+            if oldSettings.strength == newSettings.strength {
+                camera.refreshEnhance()
+            }
+        }
+        .onChange(of: camera.landscapePolishStrength) { _, strength in
+            storedLandscapePolishStrength = strength
+        }
+        .onChange(of: camera.reviewTreatment) { _, treatment in
+            storedReviewTreatment = treatment.rawValue
+        }
+        .onChange(of: storedPhotoFilterChoice) { _, choice in
+            if choice == PhotoFilterChoice.custom.rawValue {
+                customFilterSettingsExpanded = true
+            }
+            syncPhotoFilter()
+        }
+        .onChange(of: storedFilterApplicationMode) { _, _ in
+            syncPhotoFilter()
+        }
+        .onChange(of: storedCapturePolishChoice) { _, choice in
+            if choice != CapturePolishChoice.off.rawValue, storedCapturePolishStrength < 1 {
+                storedCapturePolishStrength = 3
+            }
+            syncCapturePolish()
+        }
+        .onChange(of: storedBeautifierApplicationMode) { _, _ in
+            syncCapturePolish()
+        }
+        .onChange(of: storedCapturePolishStrength) { _, _ in
+            syncCapturePolish()
         }
         .onChange(of: availableReviewVariants) { _, variants in
-            if !variants.contains(reviewVariant) { reviewVariant = .original }
+            let processedVariant = activeProcessedReviewVariant
+            if processedVariant != .original, variants.contains(processedVariant) {
+                reviewVariant = processedVariant
+            } else if !variants.contains(reviewVariant) {
+                reviewVariant = .original
+            }
         }
         .fileImporter(
             isPresented: $showingFolderImporter,
@@ -188,25 +441,30 @@ struct ContentView: View {
             }
         }
         .onDisappear {
+            cancelShutterCountdown()
+            stopBurstCapture()
+            meteringIndicatorTask?.cancel()
             camera.stop()
-            voiceShutter.pauseListening()
-        }
-        .sheet(isPresented: $showConfiguration) {
-            configurationSheet
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+            voiceShutter.pauseListening(reason: "Paused while Dali is not visible")
         }
         .sheet(isPresented: $showCameraControls) {
             cameraControlSheet
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showAppSettings) {
+            appSettingsSheet
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .fullScreenCover(isPresented: $showFullScreenReviewImage, onDismiss: { startReviewComparison = false }) {
             if let reviewImage = camera.reviewImage {
                 ZoomableReviewImageView(
-                    image: currentReviewDisplayImage(original: reviewImage),
+                    image: reviewComparisonMode == .before
+                        ? reviewImage
+                        : currentReviewDisplayImage(original: reviewImage),
                     originalImage: reviewImage,
-                    title: reviewVariant.title,
+                    title: reviewVariantTitle,
                     subtitle: reviewImageSubtitle,
                     startComparing: startReviewComparison,
                     isPresented: $showFullScreenReviewImage
@@ -243,13 +501,23 @@ struct ContentView: View {
         #if DEBUG
         guard ProcessInfo.processInfo.environment["DALI_UI_REVIEW"] == "1" else { return false }
         // A deterministic review fixture keeps UI tests independent of camera hardware.
-        let image = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 800)).image { context in
-            UIColor.systemTeal.setFill()
-            context.fill(CGRect(x: 0, y: 0, width: 600, height: 800))
-            UIColor.systemOrange.setFill()
-            context.fill(CGRect(x: 180, y: 180, width: 240, height: 440))
+        let colors: [(UIColor, UIColor)] = [
+            (.systemTeal, .systemOrange),
+            (.systemIndigo, .systemYellow),
+            (.systemGreen, .systemPink)
+        ]
+        reviewPhotos = colors.enumerated().compactMap { index, colors in
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 800)).image { context in
+                colors.0.setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 600, height: 800))
+                colors.1.setFill()
+                context.fill(CGRect(x: 180, y: 180, width: 240, height: 440))
+            }
+            guard let data = image.pngData() else { return nil }
+            return ReviewPhoto(data: data, title: "Captured fixture \(index + 1)")
         }
-        guard let data = image.pngData() else { return false }
+        guard let first = reviewPhotos.first, let data = first.data else { return false }
+        reviewPhotoIndex = 0
         camera.analyzeStillPhoto(data: data)
         return true
         #else
@@ -259,7 +527,20 @@ struct ContentView: View {
 
     private var viewfinder: some View {
         ZStack {
-            CameraPreview(session: camera.session, mirrored: camera.isFrontCamera, onRotationChange: camera.updatePreviewRotation)
+            CameraPreview(
+                session: camera.session,
+                mirrored: camera.isFrontCamera,
+                onRotationChange: camera.updatePreviewRotation,
+                onTap: handlePreviewTap
+            )
+            if focusExposureMode == .manual, digitalDepthOfFocus > 0 {
+                DigitalDepthOfFocusOverlay(
+                    measurements: camera.measurements,
+                    focusPoint: camera.digitalDepthFocusPoint,
+                    level: digitalDepthOfFocus,
+                    contentAspectRatio: camera.previewAspectRatio
+                )
+            }
             if coachingEnabled && activeSituation.showsPersonOverlay {
                 OverlayView(
                     advice: camera.advice,
@@ -271,10 +552,263 @@ struct ContentView: View {
                 )
                 .accessibilityHidden(true)
             }
+            if let meteringIndicatorPoint {
+                meteringIndicator(at: meteringIndicatorPoint, target: meteringIndicatorTarget)
+            }
+            if !camera.isDaliProUnlocked {
+                Image("DaliCamWatermark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 150)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(14)
+                    .opacity(0.86)
+                    .allowsHitTesting(false)
+                    .accessibilityLabel("Dali Cam watermark preview")
+            }
+            if let remaining = shutterCountdownRemaining {
+                VStack(spacing: 14) {
+                    Image(systemName: "timer")
+                        .font(.title.bold())
+                    Text("\(remaining)")
+                        .font(.system(size: 88, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                    Button("Cancel timer") { cancelShutterCountdown() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.red)
+                        .accessibilityIdentifier("cancelShutterTimer")
+                }
+                .padding(28)
+                .foregroundStyle(.white)
+                .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 24))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("shutterCountdown")
+            }
+            if isBurstCapturing {
+                VStack(spacing: 6) {
+                    Label("BURST", systemImage: "square.stack.3d.up.fill")
+                        .font(.headline.bold())
+                    Text("\(burstPhotoCount)")
+                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                }
+                .padding(.horizontal, 22)
+                .padding(.vertical, 14)
+                .foregroundStyle(.white)
+                .background(.red.opacity(0.82), in: Capsule())
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Burst capture, \(burstPhotoCount) photos")
+                    .accessibilityIdentifier("burstCaptureIndicator")
+            }
+            if focusExposureMode == .manual,
+               manualControlsVisible,
+               shutterCountdownRemaining == nil,
+               !isBurstCapturing {
+                manualPreviewControls
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
         .accessibilityLabel("Camera preview")
+        .accessibilityHint(focusExposureMode == .manual ? "Tap to choose the manual focus point" : "Tap to focus and set exposure")
+        .overlay(alignment: .topTrailing) {
+            meteringLockIndicators
+                .padding(10)
+        }
+    }
+
+    private var manualPreviewControls: some View {
+        ZStack {
+            if selectedManualPreviewTool != nil {
+                manualPreviewEditor
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(.trailing, 78)
+                    .padding(.bottom, 10)
+            }
+
+            manualPreviewToolRail
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                .padding(.trailing, 8)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("manualPreviewControls")
+    }
+
+    private var manualPreviewToolRail: some View {
+        VStack(spacing: 7) {
+            Text("M")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 24)
+                .background(.red.opacity(0.82), in: Capsule())
+
+            ForEach(ManualPreviewTool.allCases) { tool in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        selectedManualPreviewTool = selectedManualPreviewTool == tool ? nil : tool
+                    }
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: tool.symbol)
+                            .font(.system(size: 19, weight: .semibold))
+                        Text(tool.title)
+                            .font(.system(size: 9, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 58, height: 50)
+                    .background(
+                        selectedManualPreviewTool == tool ? Color.teal.opacity(0.90) : Color.black.opacity(0.72),
+                        in: RoundedRectangle(cornerRadius: 12)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(.white.opacity(selectedManualPreviewTool == tool ? 0.75 : 0.25))
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tool.title)
+                .accessibilityValue(selectedManualPreviewTool == tool ? "Open" : "Closed")
+                .accessibilityIdentifier("manualTool\(tool.rawValue.capitalized)")
+            }
+
+            Button {
+                selectedManualPreviewTool = nil
+                focusExposureMode = .auto
+            } label: {
+                VStack(spacing: 3) {
+                    Image(systemName: "a.circle.fill")
+                        .font(.system(size: 19, weight: .semibold))
+                    Text("Auto")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(width: 58, height: 50)
+                .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
+                .overlay { RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.25)) }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("returnToAutoFromPreview")
+        }
+    }
+
+    @ViewBuilder
+    private var manualPreviewEditor: some View {
+        let capabilities = camera.cameraControlCapabilities
+        if let selectedManualPreviewTool {
+            Group {
+                switch selectedManualPreviewTool {
+                case .focus:
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Focus point", systemImage: "scope")
+                            .font(.headline)
+                        Text(camera.digitalDepthFocusPoint == nil
+                             ? "Tap a point in the preview to focus there."
+                             : "Focus point selected. Tap elsewhere to move it.")
+                            .foregroundStyle(camera.digitalDepthFocusPoint == nil ? .yellow : .green)
+                            .accessibilityIdentifier("manualFocusPrompt")
+                    }
+
+                case .depth:
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Label("Background blur", systemImage: "camera.aperture")
+                                .font(.headline)
+                            Spacer()
+                            Text(digitalDepthOfFocus == 0 ? "Off" : "\(digitalDepthOfFocus)")
+                                .font(.headline.monospacedDigit())
+                        }
+                        Slider(value: digitalDepthOfFocusBinding, in: 0...5, step: 1)
+                            .accessibilityLabel("Depth of focus")
+                            .accessibilityIdentifier("digitalDepthOfFocus")
+                        Text("Tap the subject first for the best separation.")
+                            .foregroundStyle(.secondary)
+                    }
+
+                case .exposure:
+                    VStack(alignment: .leading, spacing: 7) {
+                        Label("Exposure", systemImage: "timer")
+                            .font(.headline)
+
+                        if capabilities.supportsCustomExposure,
+                           capabilities.minimumExposureDurationSeconds > 0,
+                           capabilities.maximumExposureDurationSeconds > capabilities.minimumExposureDurationSeconds {
+                            if availableProExposurePrograms(capabilities).count > 1 {
+                                Picker("Exposure mode", selection: $proExposureProgram) {
+                                    ForEach(availableProExposurePrograms(capabilities)) { program in
+                                        Text(program.title).tag(program)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                                .onChange(of: proExposureProgram) { _, program in
+                                    handlePreviewExposureProgramChange(program)
+                                }
+                                .accessibilityIdentifier("previewExposureProgram")
+                            }
+
+                            if proExposureProgram == .aperturePriority {
+                                LabeledContent("Exposure time", value: "Auto")
+                                if let minimum = capabilities.minimumLensAperture,
+                                   let maximum = capabilities.maximumLensAperture,
+                                   maximum > minimum {
+                                    HStack {
+                                        Text("Av")
+                                        Slider(value: $manualAperture, in: minimum...maximum)
+                                            .onChange(of: manualAperture) { _, _ in applyProExposure() }
+                                        Text(String(format: "f/%.1f", manualAperture))
+                                            .monospacedDigit()
+                                    }
+                                }
+                            } else {
+                                Toggle("Exposure time · Auto", isOn: manualShutterAutoBinding)
+                                    .accessibilityIdentifier("manualShutterAuto")
+
+                                if !manualShutterAuto {
+                                    HStack(spacing: 8) {
+                                        Text("Tv")
+                                        Slider(value: manualShutterStopBinding, in: shutterStopRange, step: 1.0 / 3.0)
+                                            .accessibilityIdentifier("previewShutterSlider")
+                                        Text(shutterDurationLabel(manualShutterSeconds))
+                                            .font(.subheadline.bold().monospacedDigit())
+                                            .frame(minWidth: 54, alignment: .trailing)
+                                    }
+
+                                    if proExposureProgram == .manual,
+                                       capabilities.maximumISO > capabilities.minimumISO,
+                                       capabilities.minimumISO > 0 {
+                                        HStack(spacing: 8) {
+                                            Text("ISO")
+                                            Slider(value: manualISOStopBinding, in: isoStopRange, step: 0.1)
+                                                .accessibilityIdentifier("previewISOSlider")
+                                            Text("\(Int(manualISO.rounded()))")
+                                                .font(.subheadline.bold().monospacedDigit())
+                                                .frame(minWidth: 44, alignment: .trailing)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Label("Unavailable on this lens", systemImage: "minus.circle")
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if capabilities.maximumExposureBias > capabilities.minimumExposureBias {
+                            Divider()
+                            exposureAdjustmentControl(capabilities)
+                            Text("The camera preview changes live while you drag. No Apply step is needed.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.white)
+            .padding(11)
+            .frame(maxWidth: 340)
+            .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 14))
+            .overlay { RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.28)) }
+        }
     }
 
     private var liveAdvicePanel: some View {
@@ -298,6 +832,11 @@ struct ContentView: View {
                         guidedControls
                     }
                 case .closeUp:
+                    situationGuidanceCard
+                case .food:
+                    if chosenFoodRecipe != nil {
+                        activeFoodCompositionCard
+                    }
                     situationGuidanceCard
                 case .landscape:
                     if chosenLandscapeRecipe != nil {
@@ -349,6 +888,66 @@ struct ContentView: View {
             .accessibilityLabel("Situation, \(shootingMode == .auto ? "Auto" : shootingMode.title)")
             .accessibilityIdentifier("situationMenu")
 
+            Menu {
+                Section("Quick choice") {
+                    Button {
+                        setBothCaptureEffects(to: .auto)
+                    } label: {
+                        Label("Both Auto", systemImage: "wand.and.stars")
+                    }
+                    .accessibilityIdentifier("quickEffectsAuto")
+
+                    Button {
+                        setBothCaptureEffects(to: .off)
+                    } label: {
+                        Label("Both Off", systemImage: "circle.slash")
+                    }
+                    .accessibilityIdentifier("quickEffectsOff")
+                }
+
+                Section("Filters") {
+                    ForEach(EffectApplicationMode.allCases) { mode in
+                        Button {
+                            storedFilterApplicationMode = mode.rawValue
+                        } label: {
+                            HStack {
+                                Text(mode.title)
+                                if selectedFilterApplicationMode == mode {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("quickFilterMode_\(mode.rawValue)")
+                    }
+                }
+
+                Section("Beautifier") {
+                    ForEach(EffectApplicationMode.allCases) { mode in
+                        Button {
+                            storedBeautifierApplicationMode = mode.rawValue
+                        } label: {
+                            HStack {
+                                Text(mode.title)
+                                if selectedBeautifierApplicationMode == mode {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("quickBeautifierMode_\(mode.rawValue)")
+                    }
+                }
+            } label: {
+                selectionControlLabel(
+                    title: "Effects",
+                    value: captureEffectsDisplayValue,
+                    symbol: "wand.and.stars"
+                )
+            }
+            .accessibilityLabel("Effects, Filters \(selectedFilterApplicationMode.title), Beautifier \(selectedBeautifierApplicationMode.title)")
+            .accessibilityIdentifier("effectsMenu")
+
             if activeSituation.showsPersonOverlay {
                 Button {
                     selectedPosePackage = nil
@@ -380,6 +979,21 @@ struct ContentView: View {
                 .accessibilityLabel("Landscape, \(chosenLandscapeRecipe?.title ?? "Natural")")
                 .accessibilityIdentifier("landscapeMenu")
             }
+
+            if activeSituation == .food {
+                Button {
+                    showFoodChooser = true
+                } label: {
+                    selectionControlLabel(
+                        title: "Food",
+                        value: chosenFoodRecipe?.title ?? "Natural",
+                        symbol: "fork.knife"
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Food, \(chosenFoodRecipe?.title ?? "Natural")")
+                .accessibilityIdentifier("foodMenu")
+            }
         }
     }
 
@@ -406,6 +1020,342 @@ struct ContentView: View {
 
     private var activeSituation: PhotographicSituation {
         shootingMode == .auto ? automaticSituation : shootingMode
+    }
+
+    private var selectedShutterLongPressAction: ShutterLongPressAction {
+        ShutterLongPressAction(rawValue: storedShutterLongPressAction) ?? .burst
+    }
+
+    private var shutterLongPressActionBinding: Binding<ShutterLongPressAction> {
+        Binding(
+            get: { selectedShutterLongPressAction },
+            set: { storedShutterLongPressAction = $0.rawValue }
+        )
+    }
+
+    private var selectedPhotoFilterChoice: PhotoFilterChoice {
+        PhotoFilterChoice(rawValue: storedPhotoFilterChoice) ?? .auto
+    }
+
+    private var selectedFilterApplicationMode: EffectApplicationMode {
+        EffectApplicationMode(rawValue: storedFilterApplicationMode) ?? .auto
+    }
+
+    private var customPhotoFilterChoice: PhotoFilterChoice {
+        switch selectedPhotoFilterChoice {
+        case .auto, .none:
+            return .natural
+        default:
+            return selectedPhotoFilterChoice
+        }
+    }
+
+    private var resolvedPhotoFilter: PhotoFilterChoice {
+        switch selectedFilterApplicationMode {
+        case .auto: return PhotoFilterChoice.auto.resolved(for: activeSituation)
+        case .custom: return customPhotoFilterChoice
+        case .off: return .none
+        }
+    }
+
+    private var photoFilterDisplayValue: String {
+        switch selectedFilterApplicationMode {
+        case .auto: return "Auto · \(resolvedPhotoFilter.title)"
+        case .custom: return "Custom · \(resolvedPhotoFilter.title)"
+        case .off: return "Off"
+        }
+    }
+
+    private var captureEffectsDisplayValue: String {
+        if selectedFilterApplicationMode == selectedBeautifierApplicationMode {
+            return "Both \(selectedFilterApplicationMode.title)"
+        }
+        return "F \(selectedFilterApplicationMode.title) · B \(selectedBeautifierApplicationMode.title)"
+    }
+
+    private func setBothCaptureEffects(to mode: EffectApplicationMode) {
+        storedFilterApplicationMode = mode.rawValue
+        storedBeautifierApplicationMode = mode.rawValue
+    }
+
+    private var photoFilterPresetBinding: Binding<PhotoFilterChoice> {
+        Binding(
+            get: { customPhotoFilterChoice },
+            set: { storedPhotoFilterChoice = $0.rawValue }
+        )
+    }
+
+    private var filterApplicationModeBinding: Binding<EffectApplicationMode> {
+        Binding(
+            get: { selectedFilterApplicationMode },
+            set: { storedFilterApplicationMode = $0.rawValue }
+        )
+    }
+
+    private var selectedCapturePolishChoice: CapturePolishChoice {
+        CapturePolishChoice(rawValue: storedCapturePolishChoice) ?? .off
+    }
+
+    private var selectedBeautifierApplicationMode: EffectApplicationMode {
+        EffectApplicationMode(rawValue: storedBeautifierApplicationMode) ?? .off
+    }
+
+    private var customCapturePolishChoice: CapturePolishChoice {
+        selectedCapturePolishChoice == .off ? .portraitPolish : selectedCapturePolishChoice
+    }
+
+    private var resolvedCapturePolishChoice: CapturePolishChoice {
+        switch selectedBeautifierApplicationMode {
+        case .off:
+            return .off
+        case .custom:
+            return customCapturePolishChoice
+        case .auto:
+            switch activeSituation {
+            case .portrait, .group, .personScene:
+                return .portraitPolish
+            case .landscape:
+                return .landscapePolish
+            case .auto, .action, .closeUp, .food:
+                return .generalEnhance
+            }
+        }
+    }
+
+    private var capturePolishChoiceBinding: Binding<CapturePolishChoice> {
+        Binding(
+            get: { customCapturePolishChoice },
+            set: { storedCapturePolishChoice = $0.rawValue }
+        )
+    }
+
+    private var beautifierApplicationModeBinding: Binding<EffectApplicationMode> {
+        Binding(
+            get: { selectedBeautifierApplicationMode },
+            set: { storedBeautifierApplicationMode = $0.rawValue }
+        )
+    }
+
+    private var selectedPortraitBeautifierPreset: PortraitBeautifierPreset {
+        PortraitBeautifierPreset(rawValue: storedPortraitBeautifierPreset) ?? .polished
+    }
+
+    private var selectedLandscapeBeautifierPreset: LandscapeBeautifierPreset {
+        LandscapeBeautifierPreset(rawValue: storedLandscapeBeautifierPreset) ?? .vivid
+    }
+
+    private var portraitBeautifierPresetBinding: Binding<PortraitBeautifierPreset> {
+        Binding(
+            get: { selectedPortraitBeautifierPreset },
+            set: { preset in
+                storedPortraitBeautifierPreset = preset.rawValue
+                if preset == .custom { customBeautifierSettingsExpanded = true }
+                syncCapturePolish()
+            }
+        )
+    }
+
+    private var landscapeBeautifierPresetBinding: Binding<LandscapeBeautifierPreset> {
+        Binding(
+            get: { selectedLandscapeBeautifierPreset },
+            set: { preset in
+                storedLandscapeBeautifierPreset = preset.rawValue
+                if preset == .custom { customBeautifierSettingsExpanded = true }
+                syncCapturePolish()
+            }
+        )
+    }
+
+    private var customPortraitBeautifierSettings: BeautifySettings {
+        BeautifySettings(
+            strength: storedPortraitBeautifierStrength,
+            landscapeSkyEnabled: false,
+            landscapeColorEnabled: false,
+            faceBrightnessEnabled: storedPortraitBeautifierBrightness,
+            skinSmoothingEnabled: storedPortraitBeautifierSmoothing,
+            blemishReductionEnabled: storedPortraitBeautifierBlemishes,
+            eyeEnlargementEnabled: storedPortraitBeautifierEyes,
+            lipPlumpingEnabled: storedPortraitBeautifierLips
+        )
+    }
+
+    private var customLandscapeBeautifierSettings: BeautifySettings {
+        BeautifySettings(
+            strength: storedLandscapeBeautifierStrength,
+            landscapeSkyEnabled: storedLandscapeBeautifierSky,
+            landscapeColorEnabled: storedLandscapeBeautifierColor,
+            faceBrightnessEnabled: false,
+            skinSmoothingEnabled: false,
+            blemishReductionEnabled: false,
+            eyeEnlargementEnabled: false,
+            lipPlumpingEnabled: false
+        )
+    }
+
+    private var activePortraitBeautifierSettings: BeautifySettings {
+        selectedPortraitBeautifierPreset == .custom
+            ? customPortraitBeautifierSettings
+            : selectedPortraitBeautifierPreset.defaultSettings
+    }
+
+    private var activeLandscapeBeautifierSettings: BeautifySettings {
+        selectedLandscapeBeautifierPreset == .custom
+            ? customLandscapeBeautifierSettings
+            : selectedLandscapeBeautifierPreset.defaultSettings
+    }
+
+    private var capturePortraitBeautifierSettings: BeautifySettings {
+        selectedBeautifierApplicationMode == .auto
+            ? PortraitBeautifierPreset.polished.defaultSettings
+            : activePortraitBeautifierSettings
+    }
+
+    private var captureLandscapeBeautifierSettings: BeautifySettings {
+        selectedBeautifierApplicationMode == .auto
+            ? LandscapeBeautifierPreset.vivid.defaultSettings
+            : activeLandscapeBeautifierSettings
+    }
+
+    private var portraitBeautifierStrengthBinding: Binding<Double> {
+        Binding(
+            get: { Double(activePortraitBeautifierSettings.strength) },
+            set: { value in
+                var settings = activePortraitBeautifierSettings
+                settings.strength = max(1, min(5, Int(value.rounded())))
+                storeCustomPortraitBeautifierSettings(settings)
+                storedPortraitBeautifierPreset = PortraitBeautifierPreset.custom.rawValue
+                syncCapturePolish()
+            }
+        )
+    }
+
+    private var landscapeBeautifierStrengthBinding: Binding<Double> {
+        Binding(
+            get: { Double(activeLandscapeBeautifierSettings.strength) },
+            set: { value in
+                var settings = activeLandscapeBeautifierSettings
+                settings.strength = max(1, min(5, Int(value.rounded())))
+                storeCustomLandscapeBeautifierSettings(settings)
+                storedLandscapeBeautifierPreset = LandscapeBeautifierPreset.custom.rawValue
+                syncCapturePolish()
+            }
+        )
+    }
+
+    private func portraitBeautifierToggleBinding(
+        _ keyPath: WritableKeyPath<BeautifySettings, Bool>
+    ) -> Binding<Bool> {
+        Binding(
+            get: { activePortraitBeautifierSettings[keyPath: keyPath] },
+            set: { enabled in
+                var settings = activePortraitBeautifierSettings
+                settings[keyPath: keyPath] = enabled
+                storeCustomPortraitBeautifierSettings(settings)
+                storedPortraitBeautifierPreset = PortraitBeautifierPreset.custom.rawValue
+                syncCapturePolish()
+            }
+        )
+    }
+
+    private func landscapeBeautifierToggleBinding(
+        _ keyPath: WritableKeyPath<BeautifySettings, Bool>
+    ) -> Binding<Bool> {
+        Binding(
+            get: { activeLandscapeBeautifierSettings[keyPath: keyPath] },
+            set: { enabled in
+                var settings = activeLandscapeBeautifierSettings
+                settings[keyPath: keyPath] = enabled
+                storeCustomLandscapeBeautifierSettings(settings)
+                storedLandscapeBeautifierPreset = LandscapeBeautifierPreset.custom.rawValue
+                syncCapturePolish()
+            }
+        )
+    }
+
+    private func storeCustomPortraitBeautifierSettings(_ settings: BeautifySettings) {
+        storedPortraitBeautifierStrength = settings.strength
+        storedPortraitBeautifierBrightness = settings.faceBrightnessEnabled
+        storedPortraitBeautifierSmoothing = settings.skinSmoothingEnabled
+        storedPortraitBeautifierBlemishes = settings.blemishReductionEnabled
+        storedPortraitBeautifierEyes = settings.eyeEnlargementEnabled
+        storedPortraitBeautifierLips = settings.lipPlumpingEnabled
+    }
+
+    private func storeCustomLandscapeBeautifierSettings(_ settings: BeautifySettings) {
+        storedLandscapeBeautifierStrength = settings.strength
+        storedLandscapeBeautifierSky = settings.landscapeSkyEnabled
+        storedLandscapeBeautifierColor = settings.landscapeColorEnabled
+    }
+
+    private var customPhotoFilterSettings: PhotoFilterSettings {
+        PhotoFilterSettings(
+            exposure: storedPhotoFilterExposure,
+            warmth: storedPhotoFilterWarmth,
+            color: storedPhotoFilterColor,
+            contrast: storedPhotoFilterContrast,
+            softness: storedPhotoFilterSoftness,
+            detail: storedPhotoFilterDetail,
+            blueSky: storedPhotoFilterBlueSky
+        )
+    }
+
+    private var activePhotoFilterSettings: PhotoFilterSettings {
+        resolvedPhotoFilter == .custom
+            ? customPhotoFilterSettings
+            : resolvedPhotoFilter.defaultSettings
+    }
+
+    private func photoFilterAdjustmentBinding(
+        _ keyPath: WritableKeyPath<PhotoFilterSettings, Int>,
+        range: ClosedRange<Int>
+    ) -> Binding<Double> {
+        Binding(
+            get: { Double(activePhotoFilterSettings[keyPath: keyPath]) },
+            set: { value in
+                var settings = activePhotoFilterSettings
+                settings[keyPath: keyPath] = max(range.lowerBound, min(range.upperBound, Int(value.rounded())))
+                storeCustomPhotoFilterSettings(settings)
+                storedPhotoFilterChoice = PhotoFilterChoice.custom.rawValue
+                storedFilterApplicationMode = EffectApplicationMode.custom.rawValue
+                camera.setPhotoFilter(settings: settings)
+            }
+        )
+    }
+
+    private func storeCustomPhotoFilterSettings(_ settings: PhotoFilterSettings) {
+        storedPhotoFilterExposure = settings.exposure
+        storedPhotoFilterWarmth = settings.warmth
+        storedPhotoFilterColor = settings.color
+        storedPhotoFilterContrast = settings.contrast
+        storedPhotoFilterSoftness = settings.softness
+        storedPhotoFilterDetail = settings.detail
+        storedPhotoFilterBlueSky = settings.blueSky
+    }
+
+    private var photoFilterDescription: String {
+        if selectedFilterApplicationMode == .auto {
+            return "Auto chooses one named preset for the scene. It currently uses \(resolvedPhotoFilter.title) for \(activeSituation.title.lowercased())."
+        }
+        if selectedFilterApplicationMode == .off || !activePhotoFilterSettings.isActive {
+            return "Off finalizes new photos without a filter."
+        }
+        if resolvedPhotoFilter == .custom {
+            return "Custom uses your saved individual settings below."
+        }
+        return "\(resolvedPhotoFilter.title) is one complete preset: a saved combination of the individual settings below."
+    }
+
+    private func syncPhotoFilter() {
+        camera.setPhotoFilter(settings: activePhotoFilterSettings)
+    }
+
+    private func syncCapturePolish() {
+        camera.setCapturePolish(
+            choice: resolvedCapturePolishChoice,
+            strength: storedCapturePolishStrength,
+            portraitSettings: capturePortraitBeautifierSettings,
+            landscapeSettings: captureLandscapeBeautifierSettings
+        )
     }
 
     private func selectPosture(_ pose: GuidedPose?) {
@@ -640,11 +1590,41 @@ struct ContentView: View {
 
     private var topBar: some View {
         HStack {
-            Text("Dali V1")
+            Text("Dali Cam")
                 .font(.headline.bold())
                 .foregroundStyle(.teal)
+                .accessibilityIdentifier("cameraBrandName")
 
             Spacer()
+
+            Button {
+                if focusExposureMode == .manual {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        manualControlsVisible.toggle()
+                        if !manualControlsVisible { selectedManualPreviewTool = nil }
+                    }
+                } else {
+                    focusExposureMode = .manual
+                    DispatchQueue.main.async {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            manualControlsVisible = true
+                        }
+                    }
+                }
+            } label: {
+                VStack(spacing: 1) {
+                    Image(systemName: "m.circle.fill")
+                        .font(.system(size: 20, weight: .bold))
+                    Text("Manual")
+                        .font(.system(size: 8, weight: .bold))
+                }
+                .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(manualControlsVisible ? .black : (focusExposureMode == .manual ? .teal : .white))
+            .background(manualControlsVisible ? .teal : .black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityLabel(manualControlsVisible ? "Hide manual controls" : "Show manual controls")
+            .accessibilityIdentifier("manualControlsButton")
 
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -668,28 +1648,17 @@ struct ContentView: View {
             .accessibilityIdentifier("coachingToggle")
 
             Button {
-                showConfiguration = true
+                showAppSettings = true
             } label: {
-                Image(systemName: "slider.horizontal.3")
+                Image(systemName: "gearshape.fill")
                     .font(.system(size: 20, weight: .bold))
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)
             .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
-            .accessibilityLabel("Configure")
-
-            Button {
-                showTutor = true
-            } label: {
-                Image(systemName: "questionmark.circle")
-                    .accessibilityLabel("Help")
-                    .font(.system(size: 20, weight: .bold))
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.white)
-            .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityLabel("App settings")
+            .accessibilityIdentifier("appSettingsButton")
 
             Button {
                 camera.switchCamera()
@@ -706,171 +1675,15 @@ struct ContentView: View {
         }
     }
 
-    private var configurationSheet: some View {
-        NavigationStack {
-            Form {
-                Section("Guidance") {
-                    Picker("Pose package", selection: $camera.selectedPosePackage) {
-                        ForEach(PosePackageID.allCases) { package in
-                            Text(package.title).tag(package)
-                        }
-                    }
-
-                    Toggle("Debug overlay", isOn: $camera.debugEnabled)
-                }
-
-                Section("Beautify") {
-                    Text("Portrait polish applies in photo review. Captures are saved as originals; save a copy to keep an enhancement.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("Portrait polish")
-                            Spacer()
-                            Text("\(camera.beautifySettings.strength)")
-                                .font(.headline.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Slider(value: beautifyStrengthBinding, in: 0...10, step: 1)
-                            .accessibilityLabel("Portrait polish strength")
-                    }
-
-                    Toggle("Face brightness", isOn: $camera.beautifySettings.faceBrightnessEnabled)
-                    Toggle("Skin smoothing", isOn: $camera.beautifySettings.skinSmoothingEnabled)
-                    Toggle("Warmth", isOn: $camera.beautifySettings.warmthEnabled)
-                    Toggle("Face clarity", isOn: $camera.beautifySettings.clarityEnabled)
-                    Toggle("Subject emphasis", isOn: $camera.beautifySettings.subjectEmphasisEnabled)
-                }
-            }
-            .navigationTitle("Configure")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        showConfiguration = false
-                    }
-                }
-            }
-        }
-    }
-
     private var cameraControlSheet: some View {
         let capabilities = camera.cameraControlCapabilities
 
         return NavigationStack {
             Form {
-                Section {
-                    Picker("Camera control", selection: $cameraControlMode) {
-                        ForEach(CameraControlMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .accessibilityIdentifier("cameraControlMode")
-                    .onChange(of: cameraControlMode) { _, mode in
-                        if mode == .auto { camera.resetCameraControlsToAuto() }
-                    }
-                } footer: {
-                    Text(cameraControlMode == .auto
-                         ? "The phone chooses camera settings."
-                         : "Dali explains simple adjustments; you decide whether to use them.")
-                }
-
-                Section {
-                    Toggle(
-                        "Say “Cheese”",
-                        isOn: Binding(
-                            get: { voiceShutter.isEnabled },
-                            set: { voiceShutter.setEnabled($0) }
-                        )
-                    )
-                    .accessibilityIdentifier("voiceShutterToggle")
-
-                    Label(
-                        voiceShutter.statusText,
-                        systemImage: voiceShutter.isListening ? "waveform.circle.fill" : "mic.circle"
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(voiceShutter.isListening ? .green : .secondary)
-                    .accessibilityIdentifier("voiceShutterStatus")
-
-                    if voiceShutter.permissionDenied {
-                        Button("Open Settings") { openSettings() }
-                    }
-                } header: {
-                    Text("Voice shutter")
-                } footer: {
-                    Text("Voice shutter listens only while the live camera is open. It pauses during photo review and when Dali is in the background.")
-                }
-
-                if capabilities.isAvailable {
-                    Section("This camera") {
-                        LabeledContent("Device", value: capabilities.cameraName)
-                        LabeledContent("Active lens", value: capabilities.lensName)
-                        if let duration = capabilities.currentExposureDurationSeconds {
-                            LabeledContent("Shutter", value: shutterDurationLabel(duration))
-                        }
-                        if let iso = capabilities.currentISO {
-                            LabeledContent("ISO", value: "\(Int(iso.rounded()))")
-                        }
-                    }
-
-                    Section("Basic controls") {
-                        if capabilities.supportsExposureBias {
-                            VStack(alignment: .leading, spacing: 10) {
-                                HStack {
-                                    Text("Exposure compensation")
-                                    Spacer()
-                                    Text(String(format: "%+.1f EV", capabilities.currentExposureBias))
-                                        .font(.headline.monospacedDigit())
-                                }
-                                Slider(
-                                    value: exposureBiasBinding,
-                                    in: capabilities.minimumExposureBias...capabilities.maximumExposureBias,
-                                    step: 0.1
-                                )
-                                .disabled(cameraControlMode == .auto)
-                                .accessibilityIdentifier("exposureBiasSlider")
-                                Text("Negative values protect bright areas; positive values brighten the image.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        if capabilities.supportsFocusLock || capabilities.supportsExposureLock {
-                            Toggle("Lock focus and exposure", isOn: focusExposureLockBinding)
-                                .disabled(cameraControlMode == .auto || !(capabilities.supportsFocusLock && capabilities.supportsExposureLock))
-                                .accessibilityIdentifier("focusExposureLock")
-                        }
-
-                        Button("Return camera controls to Auto") {
-                            cameraControlMode = .auto
-                            camera.resetCameraControlsToAuto()
-                        }
-                        .accessibilityIdentifier("resetCameraControls")
-                    }
-
-                    Section("Available on this camera") {
-                        capabilityRow("Exposure compensation", supported: capabilities.supportsExposureBias)
-                        capabilityRow("Focus lock", supported: capabilities.supportsFocusLock)
-                        capabilityRow("Exposure lock", supported: capabilities.supportsExposureLock)
-                    }
-                } else {
-                    Section {
-                        ContentUnavailableView(
-                            "Camera controls need an iPhone",
-                            systemImage: "iphone.gen3",
-                            description: Text("Dali reads the active camera's capabilities at runtime. Controls appear only when that camera supports them.")
-                        )
-                    }
-                }
-
-                Section("Placement test") {
-                    Text("The Camera button is beside the shutter so it stays available even when coaching is turned off. We can move it after testing this layout on the phone.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                basicCameraControlsSection
+                photoFilterControlsSection
+                capturePolishControlsSection
+                advancedCameraControlsSection(capabilities)
             }
             .navigationTitle("Camera controls")
             .navigationBarTitleDisplayMode(.inline)
@@ -882,6 +1695,486 @@ struct ContentView: View {
         }
     }
 
+    private var appSettingsSheet: some View {
+        NavigationStack {
+            Form {
+                Section("About") {
+                    LabeledContent("App", value: "Dali Camera")
+                    LabeledContent("Version", value: appVersionLabel)
+                    Text("Live photography guidance, camera controls, capture effects, and photo enhancement.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        showAppSettings = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            showTutor = true
+                        }
+                    } label: {
+                        Label("Quick camera tutorial", systemImage: "play.rectangle")
+                    }
+                    .accessibilityIdentifier("cameraTutorialButton")
+                }
+
+                Section("Language") {
+                    LabeledContent {
+                        Text("System default")
+                    } label: {
+                        Label("Language choice", systemImage: "globe")
+                    }
+                    Label("Additional languages coming soon", systemImage: "clock")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Display") {
+                    LabeledContent {
+                        Text("System appearance")
+                    } label: {
+                        Label("Display option", systemImage: "circle.lefthalf.filled")
+                    }
+                    Label("Light and dark appearance choices coming soon", systemImage: "clock")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Purchase") {
+                    LabeledContent {
+                        Text("Coming soon")
+                    } label: {
+                        Label("Dali Pro", systemImage: "crown")
+                    }
+                    Text("Dali Pro will remove the signature watermark from captured photos and unlock premium camera features.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    LabeledContent {
+                        Text("Coming soon")
+                    } label: {
+                        Label("Restore purchases", systemImage: "arrow.clockwise")
+                    }
+                }
+            }
+            .navigationTitle("App Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showAppSettings = false }
+                }
+            }
+            .accessibilityIdentifier("appSettingsSheet")
+        }
+    }
+
+    private var appVersionLabel: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        return "\(version) (\(build))"
+    }
+
+    private var basicCameraControlsSection: some View {
+        Section {
+            DisclosureGroup(isExpanded: $shutterControlsExpanded) {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Photo timer", systemImage: "timer")
+                    .font(.headline)
+
+                Picker("Photo timer", selection: $storedShutterTimerSeconds) {
+                    ForEach(ShutterTimerDelay.allCases) { delay in
+                        Text(delay.title).tag(delay.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("shutterTimerPicker")
+            }
+
+            Toggle(
+                "Voice shutter",
+                isOn: Binding(
+                    get: { voiceShutter.isEnabled },
+                    set: { voiceShutter.setEnabled($0) }
+                )
+            )
+            .accessibilityIdentifier("voiceShutterToggle")
+
+            Label(
+                voiceShutter.statusText,
+                systemImage: voiceShutter.isListening ? "waveform.circle.fill" : "mic.circle"
+            )
+            .font(.footnote)
+            .foregroundStyle(voiceShutter.isListening ? .green : .secondary)
+            .accessibilityIdentifier("voiceShutterStatus")
+
+            if voiceShutter.isEnabled {
+                TextField("Your shutter word or phrase", text: $storedVoiceShutterCustomPhrase)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("voiceShutterCustomPhrase")
+
+                Text(voiceShutterCommandHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("voiceShutterCommands")
+            }
+
+            if voiceShutter.permissionDenied {
+                Button("Open Settings") { openSettings() }
+                    .accessibilityIdentifier("voiceShutterOpenSettings")
+            }
+
+            Picker("Long-press shutter", selection: shutterLongPressActionBinding) {
+                ForEach(ShutterLongPressAction.allCases) { action in
+                    Text(action.title).tag(action)
+                }
+            }
+            .accessibilityIdentifier("shutterLongPressAction")
+
+            Text(selectedShutterLongPressAction.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("Choose when a photo is taken, which spoken phrase triggers it, and what holding the shutter button does.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } label: {
+                Label("Shutter Controls", systemImage: "camera.shutter.button")
+                    .font(.headline)
+            }
+            .accessibilityIdentifier("shutterControlsGroup")
+        }
+    }
+
+    private var voiceShutterCommandHelp: String {
+        let customPhrase = storedVoiceShutterCustomPhrase.trimmingCharacters(in: .whitespacesAndNewlines)
+        if customPhrase.isEmpty {
+            return "Add your own shutter word, or say “Cheese,” “Take photo,” “Take a picture,” “Capture photo,” or “Snap a photo.”"
+        }
+        return "Say “\(customPhrase),” or use a built-in command such as “Cheese” or “Take photo.”"
+    }
+
+    private var photoFilterControlsSection: some View {
+        Section {
+            DisclosureGroup(isExpanded: $filterControlsExpanded) {
+            Text("Auto chooses for the scene, Custom lets you select and fine-tune a preset, and Off applies nothing.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("Application", selection: filterApplicationModeBinding) {
+                ForEach(EffectApplicationMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("filterApplicationMode")
+
+            Text(photoFilterDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if selectedFilterApplicationMode == .custom {
+                Picker("Filter preset", selection: photoFilterPresetBinding) {
+                    ForEach(PhotoFilterChoice.namedPresets) { choice in
+                        Label(choice.title, systemImage: choice.symbol).tag(choice)
+                    }
+                    Label("Custom", systemImage: PhotoFilterChoice.custom.symbol)
+                        .tag(PhotoFilterChoice.custom)
+                }
+                .accessibilityIdentifier("photoFilterPicker")
+
+                DisclosureGroup(isExpanded: $customFilterSettingsExpanded) {
+                    Text("Moving any slider copies the current preset into Custom, then changes that individual setting.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    photoFilterAdjustmentRow("Exposure", keyPath: \.exposure, range: -5...5, symbol: "sun.max", accessibilityID: "photoFilterExposure")
+                    photoFilterAdjustmentRow("Warmth", keyPath: \.warmth, range: -5...5, symbol: "thermometer.sun", accessibilityID: "photoFilterWarmth")
+                    photoFilterAdjustmentRow("Color", keyPath: \.color, range: 0...5, symbol: "paintpalette", accessibilityID: "photoFilterColor")
+                    photoFilterAdjustmentRow("Contrast", keyPath: \.contrast, range: -5...5, symbol: "circle.lefthalf.filled", accessibilityID: "photoFilterContrast")
+                    photoFilterAdjustmentRow("Softness", keyPath: \.softness, range: 0...5, symbol: "cloud", accessibilityID: "photoFilterSoftness")
+                    photoFilterAdjustmentRow("Detail", keyPath: \.detail, range: 0...5, symbol: "camera.macro", accessibilityID: "photoFilterDetail")
+                    photoFilterAdjustmentRow("Blue sky", keyPath: \.blueSky, range: 0...5, symbol: "cloud.sun", accessibilityID: "photoFilterBlueSky")
+                } label: {
+                    Label("Individual settings", systemImage: "slider.horizontal.3")
+                }
+                .accessibilityIdentifier("customFilterSettings")
+            }
+            } label: {
+                Label("Filters", systemImage: "camera.filters")
+                    .font(.headline)
+            }
+            .accessibilityIdentifier("filterControlsGroup")
+        }
+    }
+
+    private func photoFilterAdjustmentRow(
+        _ title: String,
+        keyPath: WritableKeyPath<PhotoFilterSettings, Int>,
+        range: ClosedRange<Int>,
+        symbol: String,
+        accessibilityID: String
+    ) -> some View {
+        let value = activePhotoFilterSettings[keyPath: keyPath]
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(title, systemImage: symbol)
+                Spacer()
+                Text(range.lowerBound < 0 ? String(format: "%+d", value) : "\(value)")
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Slider(
+                value: photoFilterAdjustmentBinding(keyPath, range: range),
+                in: Double(range.lowerBound)...Double(range.upperBound),
+                step: 1
+            )
+            .accessibilityLabel(title)
+            .accessibilityValue("Level \(value)")
+            .accessibilityIdentifier(accessibilityID)
+        }
+    }
+
+    private var capturePolishControlsSection: some View {
+        Section {
+            DisclosureGroup(isExpanded: $capturePolishExpanded) {
+                Text("Auto chooses for the scene, Custom lets you select and fine-tune a beautifier, and Off applies nothing.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Application", selection: beautifierApplicationModeBinding) {
+                    ForEach(EffectApplicationMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("beautifierApplicationMode")
+
+                if selectedBeautifierApplicationMode == .auto {
+                    Text("Auto currently uses \(resolvedCapturePolishChoice.title) for \(activeSituation.title.lowercased()).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if selectedBeautifierApplicationMode == .off {
+                    Text("Off finalizes new photos without a beautifier.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("Beautifier type", selection: capturePolishChoiceBinding) {
+                        ForEach(CapturePolishChoice.allCases.filter { $0 != .off }) { choice in
+                            Label(choice.title, systemImage: choice.symbol).tag(choice)
+                        }
+                    }
+                    .accessibilityIdentifier("capturePolishPicker")
+
+                    switch customCapturePolishChoice {
+                    case .off:
+                        EmptyView()
+
+                case .generalEnhance:
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Enhancement level")
+                            Spacer()
+                            Text("\(storedCapturePolishStrength) · \(CapturePolishChoice.levelName(storedCapturePolishStrength))")
+                                .font(.headline.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(
+                            value: Binding(
+                                get: { Double(storedCapturePolishStrength) },
+                                set: { storedCapturePolishStrength = Int($0.rounded()) }
+                            ),
+                            in: 1...5,
+                            step: 1
+                        )
+                        .accessibilityLabel("Enhancement level")
+                        .accessibilityIdentifier("capturePolishStrength")
+                    }
+
+                    Text(capturePolishDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                case .portraitPolish:
+                    Picker("Portrait preset", selection: portraitBeautifierPresetBinding) {
+                        ForEach(PortraitBeautifierPreset.allCases) { preset in
+                            Text(preset.title).tag(preset)
+                        }
+                    }
+                    .accessibilityIdentifier("portraitBeautifierPreset")
+
+                    Text("\(selectedPortraitBeautifierPreset.title) combines the portrait settings below. Changing any individual setting creates Custom.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    DisclosureGroup(isExpanded: $customBeautifierSettingsExpanded) {
+                        beautifierLevelRow(
+                            title: "Portrait level",
+                            settings: activePortraitBeautifierSettings,
+                            value: portraitBeautifierStrengthBinding,
+                            accessibilityID: "portraitBeautifierStrength"
+                        )
+                        Toggle("Brighten and even skin", isOn: portraitBeautifierToggleBinding(\.faceBrightnessEnabled))
+                        Toggle("Smooth skin", isOn: portraitBeautifierToggleBinding(\.skinSmoothingEnabled))
+                        Toggle("Reduce blemishes", isOn: portraitBeautifierToggleBinding(\.blemishReductionEnabled))
+                        Toggle("Enlarge eyes", isOn: portraitBeautifierToggleBinding(\.eyeEnlargementEnabled))
+                        Toggle("Plump lips", isOn: portraitBeautifierToggleBinding(\.lipPlumpingEnabled))
+                    } label: {
+                        Label("Portrait individual settings", systemImage: "person.crop.circle")
+                    }
+                    .accessibilityIdentifier("portraitBeautifierSettings")
+
+                case .landscapePolish:
+                    Picker("Landscape preset", selection: landscapeBeautifierPresetBinding) {
+                        ForEach(LandscapeBeautifierPreset.allCases) { preset in
+                            Text(preset.title).tag(preset)
+                        }
+                    }
+                    .accessibilityIdentifier("landscapeBeautifierPreset")
+
+                    Text("\(selectedLandscapeBeautifierPreset.title) combines the landscape settings below. Changing any individual setting creates Custom.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    DisclosureGroup(isExpanded: $customBeautifierSettingsExpanded) {
+                        beautifierLevelRow(
+                            title: "Landscape level",
+                            settings: activeLandscapeBeautifierSettings,
+                            value: landscapeBeautifierStrengthBinding,
+                            accessibilityID: "landscapeBeautifierStrength"
+                        )
+                        Toggle("Blue sky & cloud detail", isOn: landscapeBeautifierToggleBinding(\.landscapeSkyEnabled))
+                        Toggle("Rich landscape color", isOn: landscapeBeautifierToggleBinding(\.landscapeColorEnabled))
+                    } label: {
+                        Label("Landscape individual settings", systemImage: "mountain.2")
+                    }
+                    .accessibilityIdentifier("landscapeBeautifierSettings")
+                    }
+                }
+            } label: {
+                Label("Beautifier", systemImage: "wand.and.stars.inverse")
+                    .font(.headline)
+            }
+            .accessibilityIdentifier("capturePolishGroup")
+        }
+    }
+
+    private func beautifierLevelRow(
+        title: String,
+        settings: BeautifySettings,
+        value: Binding<Double>,
+        accessibilityID: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text("\(settings.strength) · \(settings.levelName)")
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Slider(value: value, in: 1...5, step: 1)
+                .accessibilityLabel(title)
+                .accessibilityValue("Level \(settings.strength), \(settings.levelName)")
+                .accessibilityIdentifier(accessibilityID)
+        }
+    }
+
+    private var capturePolishDescription: String {
+        switch resolvedCapturePolishChoice {
+        case .off:
+            return "No beautifier is applied."
+        case .generalEnhance:
+            return "Improves overall tone, color, clarity, and noise using the General Enhance options."
+        case .portraitPolish:
+            return "Applies the enabled face and skin options when a face is detected."
+        case .landscapePolish:
+            return "Applies the enabled landscape color, blue-sky, and cloud options."
+        }
+    }
+
+    private func advancedCameraControlsSection(_ capabilities: CameraControlCapabilities) -> some View {
+        Section {
+            DisclosureGroup(isExpanded: $advancedControlsExpanded) {
+            Text("Auto keeps focus and exposure under camera control. Manual closes this panel and places focus, depth, and exposure controls directly over the live preview.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("Mode", selection: $focusExposureMode) {
+                ForEach(FocusExposureMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("focusExposureMode")
+            .onChange(of: focusExposureMode) { _, mode in
+                dismissedAssistedRecommendation = nil
+                autoAssistanceEnabled = false
+                if mode == .manual {
+                    selectedManualPreviewTool = nil
+                    manualControlsVisible = false
+                    manualShutterAuto = true
+                    proExposureEnabled = false
+                    camera.resetExposureToAuto()
+                    syncProExposureValues()
+                    camera.setDigitalDepthBlur(level: digitalDepthOfFocus)
+                    DispatchQueue.main.async { showCameraControls = false }
+                } else {
+                    selectedManualPreviewTool = nil
+                    manualControlsVisible = false
+                    proExposureEnabled = false
+                    proExposureAdjustment = 0
+                    camera.setDigitalDepthBlur(level: 0)
+                    camera.setDigitalDepthFocusPoint(nil)
+                    meteringIndicatorTask?.cancel()
+                    meteringIndicatorPoint = nil
+                    camera.resetCameraControlsToAuto()
+                }
+            }
+
+            if capabilities.isAvailable {
+                Divider()
+                LabeledContent("Camera", value: capabilities.cameraName)
+                LabeledContent("Lens", value: capabilities.lensName)
+                if let duration = capabilities.currentExposureDurationSeconds {
+                    LabeledContent("Tv", value: shutterDurationLabel(duration))
+                }
+                if let aperture = capabilities.currentLensAperture {
+                    LabeledContent("Av", value: String(format: "f/%.1f", aperture))
+                }
+                if let iso = capabilities.currentISO {
+                    LabeledContent("ISO", value: "\(Int(iso.rounded()))")
+                }
+
+                if focusExposureMode == .auto {
+                    Label("Continuous auto focus and exposure", systemImage: "a.circle.fill")
+                        .foregroundStyle(.green)
+                        .accessibilityIdentifier("focusExposureAutoStatus")
+                } else {
+                    Label("Manual controls are active on the preview", systemImage: "rectangle.on.rectangle")
+                        .foregroundStyle(.teal)
+
+                    Text("Tap the live image for focus, then adjust digital depth of focus and exposure while seeing the result.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Button("Return Focus and Exposure to Auto") {
+                        focusExposureMode = .auto
+                        proExposureEnabled = false
+                        camera.resetCameraControlsToAuto()
+                    }
+                    .accessibilityIdentifier("resetCameraControls")
+                }
+            } else {
+                Label("Focus and Exposure controls require an iPhone", systemImage: "iphone.gen3")
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("cameraControlsUnavailable")
+            }
+            } label: {
+                Label("Focus and Exposure", systemImage: "viewfinder.circle")
+                    .font(.headline)
+            }
+            .accessibilityIdentifier("focusExposureControlsGroup")
+        }
+    }
+
     private var exposureBiasBinding: Binding<Double> {
         Binding(
             get: { camera.cameraControlCapabilities.currentExposureBias },
@@ -889,11 +2182,493 @@ struct ContentView: View {
         )
     }
 
-    private var focusExposureLockBinding: Binding<Bool> {
+    @ViewBuilder
+    private func proExposureControls(_ capabilities: CameraControlCapabilities) -> some View {
+        if capabilities.supportsCustomExposure,
+           capabilities.minimumExposureDurationSeconds > 0,
+           capabilities.maximumExposureDurationSeconds > capabilities.minimumExposureDurationSeconds,
+           capabilities.minimumISO > 0,
+           capabilities.maximumISO > capabilities.minimumISO {
+                Divider()
+                Label("Exposure", systemImage: "camera.aperture")
+                    .font(.headline)
+
+                if availableProExposurePrograms(capabilities).count > 1 {
+                    Picker("Exposure program", selection: $proExposureProgram) {
+                        ForEach(availableProExposurePrograms(capabilities)) { program in
+                            Text(program.title).tag(program)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: proExposureProgram) { _, program in
+                        if program != .manual { linkedISOEnabled = false }
+                        proExposureAdjustment = 0
+                        camera.setExposureBias(0)
+                        applyProExposure()
+                    }
+                    .accessibilityIdentifier("proExposureProgram")
+                }
+
+                exposureMeter(capabilities.currentExposureTargetOffset)
+
+                if proExposureProgram != .aperturePriority {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Tv · Shutter time")
+                            Spacer()
+                            Text(shutterDurationLabel(manualShutterSeconds))
+                                .font(.headline.monospacedDigit())
+                        }
+                        Slider(value: manualShutterStopBinding, in: shutterStopRange, step: 1.0 / 3.0)
+                            .accessibilityIdentifier("manualShutterSlider")
+                    }
+                }
+
+                if proExposureProgram == .manual {
+                    Toggle("Linked ISO", isOn: $linkedISOEnabled)
+                        .onChange(of: linkedISOEnabled) { _, enabled in
+                            proExposureAdjustment = 0
+                            if enabled {
+                                linkedExposureBaseProduct = manualShutterSeconds * manualISO
+                            }
+                            applyProExposure()
+                        }
+                        .accessibilityIdentifier("linkedISOToggle")
+
+                    if linkedISOEnabled {
+                        LabeledContent("ISO", value: "Linked · \(Int(manualISO.rounded()))")
+                        exposureAdjustmentControl(capabilities)
+                    } else {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text("ISO")
+                                Spacer()
+                                Text("\(Int(manualISO.rounded()))")
+                                    .font(.headline.monospacedDigit())
+                            }
+                            Slider(value: manualISOStopBinding, in: isoStopRange, step: 0.1)
+                                .accessibilityIdentifier("manualISOSlider")
+                        }
+                    }
+                } else {
+                    LabeledContent("ISO", value: "Auto")
+                    exposureAdjustmentControl(capabilities)
+                }
+
+                if proExposureProgram == .aperturePriority,
+                   let minimum = capabilities.minimumLensAperture,
+                   let maximum = capabilities.maximumLensAperture,
+                   maximum > minimum {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Av · Aperture")
+                            Spacer()
+                            Text(String(format: "f/%.1f", manualAperture))
+                                .font(.headline.monospacedDigit())
+                        }
+                        Slider(value: $manualAperture, in: minimum...maximum)
+                            .onChange(of: manualAperture) { _, _ in applyProExposure() }
+                            .accessibilityIdentifier("manualApertureSlider")
+                    }
+                } else if let aperture = capabilities.currentLensAperture {
+                    LabeledContent("Av · Aperture", value: String(format: "f/%.1f · Fixed", aperture))
+                        .accessibilityIdentifier("fixedApertureValue")
+                }
+
+                Text(proExposureProgram == .manual
+                     ? "Manual keeps Tv and ISO independent. Linked ISO compensates when Tv changes; the meter shows remaining under- or overexposure."
+                     : "The selected priority stays fixed while the camera automatically balances the remaining exposure values.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+        } else {
+            Label("Manual exposure is unavailable on this camera", systemImage: "minus.circle")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func availableProExposurePrograms(_ capabilities: CameraControlCapabilities) -> [ProExposureProgram] {
+        var programs: [ProExposureProgram] = [.manual]
+        if capabilities.supportsShutterPriority { programs.append(.shutterPriority) }
+        if capabilities.supportsAperturePriority { programs.append(.aperturePriority) }
+        return programs
+    }
+
+    private var shutterStopRange: ClosedRange<Double> {
+        let capabilities = camera.cameraControlCapabilities
+        return log2(capabilities.minimumExposureDurationSeconds)...log2(capabilities.maximumExposureDurationSeconds)
+    }
+
+    private var isoStopRange: ClosedRange<Double> {
+        let capabilities = camera.cameraControlCapabilities
+        return log2(capabilities.minimumISO)...log2(capabilities.maximumISO)
+    }
+
+    private var manualShutterStopBinding: Binding<Double> {
         Binding(
-            get: { camera.cameraControlCapabilities.isFocusExposureLocked },
-            set: { camera.setFocusExposureLocked($0) }
+            get: { log2(manualShutterSeconds) },
+            set: {
+                manualShutterAuto = false
+                proExposureEnabled = true
+                manualShutterSeconds = pow(2, $0)
+                if linkedISOEnabled {
+                    updateLinkedISO()
+                } else if proExposureProgram == .manual {
+                    proExposureAdjustment = 0
+                    linkedExposureBaseProduct = manualShutterSeconds * manualISO
+                }
+                applyProExposure()
+            }
         )
+    }
+
+    private var manualShutterAutoBinding: Binding<Bool> {
+        Binding(
+            get: { manualShutterAuto },
+            set: { isAuto in
+                manualShutterAuto = isAuto
+                if isAuto {
+                    proExposureEnabled = false
+                    proExposureAdjustment = 0
+                    camera.resetExposureToAuto()
+                } else {
+                    proExposureEnabled = true
+                    syncProExposureValues()
+                    applyProExposure()
+                }
+            }
+        )
+    }
+
+    private var digitalDepthOfFocusBinding: Binding<Double> {
+        Binding(
+            get: { Double(digitalDepthOfFocus) },
+            set: { value in
+                digitalDepthOfFocus = Int(value.rounded())
+                camera.setDigitalDepthBlur(level: digitalDepthOfFocus)
+            }
+        )
+    }
+
+    private func handlePreviewExposureProgramChange(_ program: ProExposureProgram) {
+        if program != .manual { linkedISOEnabled = false }
+        proExposureAdjustment = 0
+        camera.setExposureBias(0)
+        if program == .aperturePriority {
+            manualShutterAuto = true
+        } else {
+            manualShutterAuto = false
+        }
+        proExposureEnabled = true
+        applyProExposure()
+    }
+
+    private var manualISOStopBinding: Binding<Double> {
+        Binding(
+            get: { log2(manualISO) },
+            set: {
+                manualISO = pow(2, $0)
+                proExposureAdjustment = 0
+                linkedExposureBaseProduct = manualShutterSeconds * manualISO
+                applyProExposure()
+            }
+        )
+    }
+
+    private func syncProExposureValues() {
+        let capabilities = camera.cameraControlCapabilities
+        if let duration = capabilities.currentExposureDurationSeconds {
+            manualShutterSeconds = capabilities.clampedExposureDuration(duration)
+        }
+        if let iso = capabilities.currentISO {
+            manualISO = capabilities.clampedISO(iso)
+        }
+        if let aperture = capabilities.currentLensAperture {
+            manualAperture = capabilities.clampedLensAperture(aperture)
+        }
+        linkedExposureBaseProduct = manualShutterSeconds * manualISO
+        proExposureAdjustment = 0
+        let available = availableProExposurePrograms(capabilities)
+        if !available.contains(proExposureProgram) { proExposureProgram = .manual }
+    }
+
+    private func applyProExposure() {
+        guard proExposureEnabled else { return }
+        camera.setProExposure(
+            program: proExposureProgram,
+            shutterSeconds: manualShutterSeconds,
+            iso: manualISO,
+            aperture: manualAperture
+        )
+    }
+
+    private func updateLinkedISO() {
+        guard linkedISOEnabled, proExposureProgram == .manual else { return }
+        manualISO = camera.cameraControlCapabilities.linkedISO(
+            baseExposureProduct: linkedExposureBaseProduct,
+            shutterSeconds: manualShutterSeconds,
+            adjustmentEV: proExposureAdjustment
+        )
+    }
+
+    @ViewBuilder
+    private func exposureAdjustmentControl(_ capabilities: CameraControlCapabilities) -> some View {
+        let minimumAdjustment = max(-2, capabilities.minimumExposureBias)
+        let maximumAdjustment = min(2, capabilities.maximumExposureBias)
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Under / over exposure", systemImage: "plusminus.circle")
+                Spacer()
+                Text(String(format: "%+.1f EV", proExposureAdjustment))
+                    .font(.headline.monospacedDigit())
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "sun.min.fill")
+                    .accessibilityLabel("Underexpose")
+
+                Slider(
+                    value: liveExposureAdjustmentBinding,
+                    in: minimumAdjustment...maximumAdjustment,
+                    step: 0.1
+                )
+                .accessibilityLabel("Under or over exposure")
+                .accessibilityValue(String(format: "%+.1f EV", proExposureAdjustment))
+
+                Image(systemName: "sun.max.fill")
+                    .accessibilityLabel("Overexpose")
+            }
+
+            HStack {
+                Text("Under")
+                Spacer()
+                Button("Reset to 0") {
+                    resetLiveExposureAdjustment()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!exposureAdjustmentNeedsReset)
+                .accessibilityIdentifier("resetExposureAdjustment")
+                Spacer()
+                Text("Over")
+            }
+            .font(.caption2)
+        }
+        .accessibilityIdentifier("proExposureAdjustment")
+    }
+
+    private var liveExposureAdjustmentBinding: Binding<Double> {
+        Binding(
+            get: { proExposureAdjustment },
+            set: { adjustment in
+                proExposureAdjustment = adjustment
+                applyLiveExposureAdjustment(adjustment)
+            }
+        )
+    }
+
+    private var exposureAdjustmentNeedsReset: Bool {
+        if abs(proExposureAdjustment) >= 0.01 { return true }
+        let usesCameraBias = !proExposureEnabled || proExposureProgram != .manual || manualShutterAuto
+        return usesCameraBias && abs(camera.cameraControlCapabilities.currentExposureBias) >= 0.01
+    }
+
+    private func resetLiveExposureAdjustment() {
+        proExposureAdjustment = 0
+        applyLiveExposureAdjustment(0)
+    }
+
+    private func applyLiveExposureAdjustment(_ adjustment: Double) {
+        if proExposureProgram == .manual, !manualShutterAuto, proExposureEnabled {
+            manualISO = camera.cameraControlCapabilities.linkedISO(
+                baseExposureProduct: linkedExposureBaseProduct,
+                shutterSeconds: manualShutterSeconds,
+                adjustmentEV: adjustment
+            )
+            applyProExposure()
+        } else {
+            camera.setExposureBias(adjustment)
+        }
+    }
+
+    private func exposureMeter(_ offset: Double) -> some View {
+        let clampedOffset = min(3, max(-3, offset))
+        let status = if abs(offset) < 0.25 {
+            "Balanced"
+        } else if offset < 0 {
+            "Underexposed"
+        } else {
+            "Overexposed"
+        }
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Exposure meter")
+                Spacer()
+                Text(String(format: "%+.1f EV · %@", offset, status))
+                    .font(.subheadline.bold().monospacedDigit())
+                    .foregroundStyle(abs(offset) < 0.25 ? .green : .orange)
+            }
+            Gauge(value: clampedOffset, in: -3...3) {
+                Text("Exposure")
+            } currentValueLabel: {
+                EmptyView()
+            } minimumValueLabel: {
+                Text("−")
+            } maximumValueLabel: {
+                Text("+")
+            }
+            .gaugeStyle(.linearCapacity)
+            .accessibilityIdentifier("proExposureMeter")
+        }
+    }
+
+    private var focusLockBinding: Binding<Bool> {
+        Binding(
+            get: { camera.cameraControlCapabilities.isFocusLocked },
+            set: { camera.setFocusLocked($0) }
+        )
+    }
+
+    private var exposureLockBinding: Binding<Bool> {
+        Binding(
+            get: { camera.cameraControlCapabilities.isExposureLocked },
+            set: { camera.setExposureLocked($0) }
+        )
+    }
+
+    private func availableTapMeteringTargets(_ capabilities: CameraControlCapabilities) -> [TapMeteringTarget] {
+        if capabilities.supportsFocusPoint && capabilities.supportsExposurePoint {
+            return TapMeteringTarget.allCases
+        }
+        if capabilities.supportsFocusPoint { return [.focus] }
+        if capabilities.supportsExposurePoint { return [.exposure] }
+        return []
+    }
+
+    private func handlePreviewTap(previewPoint: CGPoint, devicePoint: CGPoint) {
+        guard camera.reviewImage == nil, shutterCountdownRemaining == nil else { return }
+        let available = availableTapMeteringTargets(camera.cameraControlCapabilities)
+        guard !available.isEmpty else { return }
+        let target: TapMeteringTarget
+        if focusExposureMode == .manual, available.contains(.focus) {
+            target = .focus
+            camera.setDigitalDepthFocusPoint(previewPoint)
+        } else {
+            target = available.contains(.focusAndExposure) ? .focusAndExposure : available[0]
+        }
+        camera.setMeteringPoint(devicePoint, target: target)
+        meteringIndicatorTask?.cancel()
+        meteringIndicatorTarget = target
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.7)) {
+            meteringIndicatorPoint = previewPoint
+        }
+        if focusExposureMode != .manual {
+            meteringIndicatorTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.2)) { meteringIndicatorPoint = nil }
+            }
+        }
+    }
+
+    private func meteringIndicator(at point: CGPoint, target: TapMeteringTarget) -> some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .bottomTrailing) {
+                if target.includesFocus {
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(.teal, lineWidth: 3)
+                        .frame(width: 72, height: 72)
+                }
+                if target.includesExposure {
+                    Image(systemName: "sun.max.fill")
+                        .font(.system(size: target.includesFocus ? 20 : 34, weight: .bold))
+                        .foregroundStyle(.yellow)
+                        .padding(target.includesFocus ? 3 : 14)
+                        .background(.black.opacity(0.55), in: Circle())
+                }
+            }
+            .shadow(color: .black.opacity(0.7), radius: 5)
+            .position(x: point.x * proxy.size.width, y: point.y * proxy.size.height)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var meteringLockIndicators: some View {
+        let capabilities = camera.cameraControlCapabilities
+        if capabilities.isFocusLocked || capabilities.isExposureLocked || camera.isManualExposureEnabled {
+            HStack(spacing: 6) {
+                if capabilities.isFocusLocked {
+                    Label("AF-L", systemImage: "viewfinder")
+                        .accessibilityLabel("Focus locked")
+                }
+                if capabilities.isExposureLocked || camera.isManualExposureEnabled {
+                    Label(camera.isManualExposureEnabled ? "M" : "AE-L", systemImage: "sun.max.fill")
+                        .accessibilityLabel(camera.isManualExposureEnabled ? "Manual exposure" : "Exposure locked")
+                }
+            }
+            .font(.caption.bold())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(.black.opacity(0.68), in: Capsule())
+        }
+    }
+
+    private var assistedRecommendationCandidate: AssistedRecommendation? {
+        guard autoAssistanceEnabled else { return nil }
+        return AssistedRecommendationEngine().recommendation(
+            measurements: camera.measurements,
+            capabilities: camera.cameraControlCapabilities,
+            shutterTimerSeconds: storedShutterTimerSeconds,
+            recentCaptureCount: camera.recentCaptureCount
+        )
+    }
+
+    private var activeAssistedRecommendation: AssistedRecommendation? {
+        guard let candidate = assistedRecommendationCandidate,
+              candidate.kind != dismissedAssistedRecommendation else { return nil }
+        return candidate
+    }
+
+    @ViewBuilder
+    private func assistedRecommendationCard(_ recommendation: AssistedRecommendation) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(recommendation.goal, systemImage: "wand.and.stars")
+                .font(.headline)
+                .foregroundStyle(.teal)
+            Text(recommendation.setting)
+                .font(.title3.bold().monospacedDigit())
+            Text(recommendation.reason)
+                .font(.subheadline)
+            Text("Tradeoff: \(recommendation.tradeoff)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Apply") { applyAssistedRecommendation(recommendation) }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("applyAssistedRecommendation")
+                Button("Dismiss") { dismissedAssistedRecommendation = recommendation.kind }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("dismissAssistedRecommendation")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("assistedRecommendationCard")
+    }
+
+    private func applyAssistedRecommendation(_ recommendation: AssistedRecommendation) {
+        dismissedAssistedRecommendation = recommendation.kind
+        switch recommendation.action {
+        case .setExposureBias(let bias):
+            camera.setExposureBias(bias)
+        case .setShutterTimer(let seconds):
+            storedShutterTimerSeconds = seconds
+        case .lockFocusAndExposure:
+            camera.setFocusExposureLocked(true)
+        }
     }
 
     private func capabilityRow(_ title: String, supported: Bool) -> some View {
@@ -912,29 +2687,248 @@ struct ContentView: View {
         return "1/\(max(1, Int((1 / seconds).rounded()))) s"
     }
 
+    private var voiceShutterCanListen: Bool {
+        scenePhase == .active
+            && camera.cameraReady
+            && !camera.permissionDenied
+            && camera.reviewImage == nil
+            && !camera.isCapturing
+            && !isBurstCapturing
+            && shutterCountdownRemaining == nil
+            && !showTutor
+            && !showPoseChooser
+            && !showLandscapeChooser
+            && !showFoodChooser
+            && examplePose == nil
+            && landscapeExampleRecipe == nil
+            && foodExampleRecipe == nil
+            && sharedPhoto == nil
+            && !showAppSettings
+            && !showCameraControls
+            && !showFullScreenReviewImage
+            && !showingFolderImporter
+    }
+
+    private func syncVoiceShutterState() {
+        guard voiceShutterCanListen else {
+            let reason: String
+            if scenePhase != .active {
+                reason = "Paused while Dali is in the background"
+            } else if camera.reviewImage != nil {
+                reason = "Paused during photo review"
+            } else if camera.isCapturing {
+                reason = "Paused while taking the photo"
+            } else if shutterCountdownRemaining != nil {
+                reason = "Paused during the shutter countdown"
+            } else if !camera.cameraReady || camera.permissionDenied {
+                reason = "Paused until the camera is ready"
+            } else {
+                reason = "Paused while a menu is open"
+            }
+            voiceShutter.pauseListening(reason: reason)
+            return
+        }
+        voiceShutter.resumeIfEnabled()
+    }
+
+    private var shutterCountdownBlocked: Bool {
+        scenePhase != .active
+            || camera.reviewImage != nil
+            || showTutor
+            || showPoseChooser
+            || showLandscapeChooser
+            || showFoodChooser
+            || examplePose != nil
+            || landscapeExampleRecipe != nil
+            || foodExampleRecipe != nil
+            || sharedPhoto != nil
+            || showAppSettings
+            || showCameraControls
+            || showFullScreenReviewImage
+            || showingFolderImporter
+    }
+
+    @MainActor
+    @discardableResult
+    private func requestPhotoCapture() -> Bool {
+        guard shutterCountdownTask == nil, camera.canCapturePhoto else { return false }
+        guard storedShutterTimerSeconds > 0 else { return camera.capturePhoto() }
+
+        let delay = storedShutterTimerSeconds
+        shutterCountdownTask = Task { @MainActor in
+            for remaining in stride(from: delay, through: 1, by: -1) {
+                guard !Task.isCancelled else { return }
+                shutterCountdownRemaining = remaining
+                camera.captureStatus = "Shutter in \(remaining) second\(remaining == 1 ? "" : "s")…"
+                UIImpactFeedbackGenerator(style: remaining == 1 ? .heavy : .light).impactOccurred()
+                if UIAccessibility.isVoiceOverRunning {
+                    UIAccessibility.post(notification: .announcement, argument: "\(remaining)")
+                }
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    return
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+            shutterCountdownTask = nil
+            shutterCountdownRemaining = nil
+            if !camera.capturePhoto() {
+                camera.captureStatus = "Camera is not ready. Please try again."
+            }
+        }
+        return true
+    }
+
+    private var isBurstCapturing: Bool {
+        burstCaptureTask != nil
+    }
+
+    @MainActor
+    private func handleShutterTap() {
+        if suppressNextShutterTap {
+            suppressNextShutterTap = false
+            return
+        }
+        requestPhotoCapture()
+    }
+
+    @MainActor
+    private func performShutterLongPress() {
+        suppressNextShutterTap = true
+        switch selectedShutterLongPressAction {
+        case .burst:
+            startBurstCapture()
+        case .timer:
+            requestPhotoCapture()
+        case .disabled:
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+
+    @MainActor
+    private func shutterPressingChanged(_ pressing: Bool) {
+        guard !pressing else { return }
+        stopBurstCapture()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            suppressNextShutterTap = false
+        }
+    }
+
+    @MainActor
+    private func startBurstCapture() {
+        guard burstCaptureTask == nil, shutterCountdownTask == nil, camera.canCapturePhoto else { return }
+        burstPhotoCount = 0
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+        burstCaptureTask = Task { @MainActor in
+            while !Task.isCancelled, burstPhotoCount < 20 {
+                if camera.canCapturePhoto, camera.capturePhoto() {
+                    burstPhotoCount += 1
+                    camera.captureStatus = "Burst · \(burstPhotoCount)"
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
+
+                do {
+                    try await Task.sleep(for: .milliseconds(60))
+                } catch {
+                    return
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+            burstCaptureTask = nil
+            camera.captureStatus = "Burst complete · \(burstPhotoCount) photos"
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
+    }
+
+    @MainActor
+    private func stopBurstCapture() {
+        guard let task = burstCaptureTask else { return }
+        task.cancel()
+        burstCaptureTask = nil
+        if burstPhotoCount > 0 {
+            camera.captureStatus = "Burst · \(burstPhotoCount) photo\(burstPhotoCount == 1 ? "" : "s")"
+        }
+    }
+
+    @MainActor
+    private func cancelShutterCountdown() {
+        guard shutterCountdownTask != nil || shutterCountdownRemaining != nil else { return }
+        shutterCountdownTask?.cancel()
+        shutterCountdownTask = nil
+        shutterCountdownRemaining = nil
+        if camera.captureStatus?.hasPrefix("Shutter in ") == true {
+            camera.captureStatus = nil
+        }
+    }
+
     private func loadStoredBeautifySettings() {
+        let migratedLevel: Int
+        if storedBeautifyLevelVersion < 1 {
+            migratedLevel = Int((Double(max(0, min(10, storedBeautifyStrength))) / 2).rounded())
+            storedBeautifyStrength = migratedLevel
+            storedBeautifyLevelVersion = 1
+        } else {
+            migratedLevel = max(0, min(5, storedBeautifyStrength))
+        }
+
         camera.beautifySettings = BeautifySettings(
-            strength: storedBeautifyStrength,
+            strength: migratedLevel,
+            landscapeSkyEnabled: storedBeautifyLandscapeSkyEnabled,
+            landscapeColorEnabled: storedBeautifyLandscapeColorEnabled,
             faceBrightnessEnabled: storedBeautifyFaceBrightnessEnabled,
             skinSmoothingEnabled: storedBeautifySkinSmoothingEnabled,
-            warmthEnabled: storedBeautifyWarmthEnabled,
-            clarityEnabled: storedBeautifyClarityEnabled,
-            subjectEmphasisEnabled: storedBeautifySubjectEmphasisEnabled
+            blemishReductionEnabled: storedBeautifyBlemishReductionEnabled,
+            eyeEnlargementEnabled: storedBeautifyEyeEnlargementEnabled,
+            lipPlumpingEnabled: storedBeautifyLipPlumpingEnabled
+        )
+        camera.landscapePolishStrength = max(0, min(5, storedLandscapePolishStrength))
+        camera.reviewTreatment = ReviewTreatment(rawValue: storedReviewTreatment) ?? .generalEnhance
+    }
+
+    private func loadStoredEnhanceSettings() {
+        camera.enhanceSettings = EnhanceSettings(
+            strength: max(0, min(5, storedEnhanceStrength)),
+            autoToneEnabled: storedEnhanceAutoToneEnabled,
+            warmthEnabled: storedEnhanceWarmthEnabled,
+            vibranceEnabled: storedEnhanceVibranceEnabled,
+            clarityEnabled: storedEnhanceClarityEnabled,
+            noiseReductionEnabled: storedEnhanceNoiseReductionEnabled,
+            subjectEmphasisEnabled: storedEnhanceSubjectEmphasisEnabled
         )
     }
 
     private func persistBeautifySettings() {
         storedBeautifyStrength = camera.beautifySettings.strength
+        storedBeautifyLevelVersion = 1
+        storedBeautifyLandscapeSkyEnabled = camera.beautifySettings.landscapeSkyEnabled
+        storedBeautifyLandscapeColorEnabled = camera.beautifySettings.landscapeColorEnabled
         storedBeautifyFaceBrightnessEnabled = camera.beautifySettings.faceBrightnessEnabled
         storedBeautifySkinSmoothingEnabled = camera.beautifySettings.skinSmoothingEnabled
-        storedBeautifyWarmthEnabled = camera.beautifySettings.warmthEnabled
-        storedBeautifyClarityEnabled = camera.beautifySettings.clarityEnabled
-        storedBeautifySubjectEmphasisEnabled = camera.beautifySettings.subjectEmphasisEnabled
+        storedBeautifyBlemishReductionEnabled = camera.beautifySettings.blemishReductionEnabled
+        storedBeautifyEyeEnlargementEnabled = camera.beautifySettings.eyeEnlargementEnabled
+        storedBeautifyLipPlumpingEnabled = camera.beautifySettings.lipPlumpingEnabled
+        storedLandscapePolishStrength = camera.landscapePolishStrength
+    }
+
+    private func persistEnhanceSettings() {
+        storedEnhanceStrength = camera.enhanceSettings.strength
+        storedEnhanceAutoToneEnabled = camera.enhanceSettings.autoToneEnabled
+        storedEnhanceWarmthEnabled = camera.enhanceSettings.warmthEnabled
+        storedEnhanceVibranceEnabled = camera.enhanceSettings.vibranceEnabled
+        storedEnhanceClarityEnabled = camera.enhanceSettings.clarityEnabled
+        storedEnhanceNoiseReductionEnabled = camera.enhanceSettings.noiseReductionEnabled
+        storedEnhanceSubjectEmphasisEnabled = camera.enhanceSettings.subjectEmphasisEnabled
     }
 
     private func reviewSlideshowView(original: UIImage) -> some View {
         GeometryReader { proxy in
-            let image = currentReviewDisplayImage(original: original)
+            let processedImage = currentReviewDisplayImage(original: original)
+            let image = reviewComparisonMode == .before ? original : processedImage
             let imageHeight = max(280, proxy.size.height * 0.52)
 
             ScrollView {
@@ -944,7 +2938,7 @@ struct ContentView: View {
                         .padding(.top, 12)
                         .padding(.bottom, 8)
 
-                    reviewModePicker
+                    reviewComparisonPicker
                         .padding(.horizontal, 12)
                         .padding(.bottom, 8)
 
@@ -956,15 +2950,27 @@ struct ContentView: View {
 
                     reviewImagePane(
                         image: image,
-                        title: reviewVariant.title,
+                        originalImage: original,
+                        title: reviewVariantTitle,
                         subtitle: reviewImageSubtitle,
-                        showOverlay: false
+                        showOverlay: false,
+                        showSplitComparison: reviewComparisonMode == .split
                     )
                     .frame(maxWidth: .infinity, minHeight: imageHeight, maxHeight: imageHeight)
 
                     VStack(spacing: 12) {
                         reviewActions(original: original)
-                        beautifyControls
+                        Button {
+                            returnToCameraMode()
+                        } label: {
+                            Label("Back to Camera", systemImage: "camera.viewfinder")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .tint(.teal)
+                        .accessibilityIdentifier("backToCameraButton")
+                        selectedTreatmentControls
                         if camera.hasUnsavedCapture { captureRecoveryControls }
                     }
                     .padding(12)
@@ -979,17 +2985,26 @@ struct ContentView: View {
         .background(Color.black)
     }
 
+    private func returnToCameraMode() {
+        reviewPhotos = []
+        reviewPhotoIndex = 0
+        reviewVariant = .original
+        reviewComparisonMode = .before
+        camera.clearStillPhoto()
+        camera.start()
+    }
+
     private var reviewSlideshowTopBar: some View {
         HStack(spacing: 8) {
             Button {
-                reviewPhotos = []
-                reviewPhotoIndex = 0
-                reviewVariant = .original
-                camera.clearStillPhoto()
-                camera.start()
+                returnToCameraMode()
             } label: {
-                Image(systemName: "camera.viewfinder")
-                    .frame(width: 44, height: 44)
+                VStack(spacing: 2) {
+                    Image(systemName: "camera.viewfinder")
+                    Text("Camera")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .frame(width: 54, height: 44)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.black)
@@ -1057,38 +3072,23 @@ struct ContentView: View {
         .background(.black)
     }
 
-    private var reviewModePicker: some View {
-        HStack(spacing: 8) {
-            Picker("Review image", selection: $reviewVariant) {
-                ForEach(availableReviewVariants, id: \.self) { variant in
-                    Text(variant.title).tag(variant)
-                }
+    private var reviewComparisonPicker: some View {
+        Picker("Photo comparison", selection: $reviewComparisonMode) {
+            ForEach(ReviewComparisonMode.allCases) { mode in
+                Text(mode.title).tag(mode)
             }
-            .pickerStyle(.segmented)
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("reviewComparisonPicker")
+    }
 
-            if camera.debugEnabled {
-                Button {
-                    camera.simulateTilt(degrees: -7)
-                    reviewVariant = .tilted
-                } label: {
-                    Image(systemName: "rotate.left")
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white)
-                .background(.white.opacity(0.11), in: RoundedRectangle(cornerRadius: 8))
-
-                Button {
-                    camera.simulateTilt(degrees: 7)
-                    reviewVariant = .tilted
-                } label: {
-                    Image(systemName: "rotate.right")
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white)
-                .background(.white.opacity(0.11), in: RoundedRectangle(cornerRadius: 8))
-            }
+    @ViewBuilder
+    private var selectedTreatmentControls: some View {
+        switch camera.reviewTreatment {
+        case .generalEnhance:
+            enhanceControls
+        case .portraitPolish, .landscapePolish:
+            beautifyControls
         }
     }
 
@@ -1101,18 +3101,68 @@ struct ContentView: View {
         .pickerStyle(.segmented)
     }
 
-    private func reviewImagePane(image: UIImage, title: String, subtitle: String?, showOverlay: Bool) -> some View {
+    private func reviewImagePane(
+        image: UIImage,
+        originalImage: UIImage,
+        title: String,
+        subtitle: String?,
+        showOverlay: Bool,
+        showSplitComparison: Bool
+    ) -> some View {
         ZStack(alignment: .topLeading) {
             Color.black
 
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            GeometryReader { proxy in
+                ZStack {
+                    Image(uiImage: showSplitComparison ? originalImage : image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    if showSplitComparison {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .mask(alignment: .trailing) {
+                                Rectangle()
+                                    .frame(width: proxy.size.width / 2)
+                            }
+
+                        Rectangle()
+                            .fill(.white.opacity(0.9))
+                            .frame(width: 2)
+
+                        HStack {
+                            Text("BEFORE")
+                            Spacer()
+                            Text("AFTER")
+                        }
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 12)
+                    }
+                }
                 .contentShape(Rectangle())
                 .onTapGesture {
+                    startReviewComparison = showSplitComparison
                     showFullScreenReviewImage = true
                 }
+                .gesture(
+                    DragGesture(minimumDistance: 36)
+                        .onEnded { value in
+                            guard canNavigateReviewPhotos else { return }
+                            if value.translation.width <= -60 {
+                                showNextReviewPhoto()
+                            } else if value.translation.width >= 60 {
+                                showPreviousReviewPhoto()
+                            }
+                        }
+                )
+                .accessibilityHint(canNavigateReviewPhotos ? "Swipe left or right for another photo" : "Double-tap for full screen")
+                .accessibilityIdentifier("reviewImagePane")
+            }
 
             if showOverlay {
                 OverlayView(
@@ -1166,6 +3216,9 @@ struct ContentView: View {
         if camera.leveledImage != nil {
             variants.append(.leveled)
         }
+        if camera.enhancedImage != nil {
+            variants.append(.enhanced)
+        }
         if camera.beautifiedImage != nil {
             variants.append(.beautified)
         }
@@ -1195,6 +3248,10 @@ struct ContentView: View {
         return reviewPhotos[reviewPhotoIndex].title
     }
 
+    private var reviewVariantTitle: String {
+        reviewVariant == .beautified ? camera.reviewTreatment.title : reviewVariant.title
+    }
+
     private func currentReviewDisplayImage(original: UIImage) -> UIImage {
         switch reviewVariant {
         case .original:
@@ -1203,6 +3260,8 @@ struct ContentView: View {
             return camera.reframedImage ?? original
         case .leveled:
             return camera.leveledImage ?? original
+        case .enhanced:
+            return camera.enhancedImage ?? original
         case .beautified:
             return camera.beautifiedImage ?? original
         case .tilted:
@@ -1220,12 +3279,13 @@ struct ContentView: View {
             }
         }
 
-        if let first = loadedPhotos.first {
+        if let first = loadedPhotos.first, let data = first.data {
             camera.stop()
             reviewPhotos = loadedPhotos
             reviewPhotoIndex = 0
             reviewVariant = .original
-            camera.analyzeStillPhoto(data: first.data)
+            reviewComparisonMode = .before
+            camera.analyzeStillPhoto(data: data)
         } else {
             camera.captureStatus = "Could not load photos"
         }
@@ -1249,12 +3309,13 @@ struct ContentView: View {
             }
         }
 
-        if let first = loadedPhotos.first {
+        if let first = loadedPhotos.first, let data = first.data {
             camera.stop()
             reviewPhotos = loadedPhotos
             reviewPhotoIndex = 0
             reviewVariant = .original
-            camera.analyzeStillPhoto(data: first.data)
+            reviewComparisonMode = .before
+            camera.analyzeStillPhoto(data: data)
         } else {
             camera.captureStatus = "No images found in folder"
         }
@@ -1288,6 +3349,108 @@ struct ContentView: View {
         analyzeCurrentReviewPhoto()
     }
 
+    private func openSystemPhotoLibrary() {
+        guard !isLoadingPhotoLibrary else { return }
+        isLoadingPhotoLibrary = true
+        camera.captureStatus = "Opening Photos…"
+
+        Task { @MainActor in
+            let status = await photoLibraryAuthorizationStatus()
+            guard status == .authorized || status == .limited else {
+                isLoadingPhotoLibrary = false
+                camera.captureStatus = "Photos access is needed. Enable it in Settings, or use the photo picker."
+                if camera.latestPhotoThumbnail != nil { openCapturedPhotoHistory() }
+                return
+            }
+
+            let options = PHFetchOptions()
+            options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+            let assets = PHAsset.fetchAssets(with: .image, options: options)
+            var libraryPhotos: [ReviewPhoto] = []
+            libraryPhotos.reserveCapacity(assets.count)
+            assets.enumerateObjects { asset, index, _ in
+                let title = asset.creationDate?.formatted(date: .abbreviated, time: .shortened)
+                    ?? "Library photo \(index + 1)"
+                libraryPhotos.append(
+                    ReviewPhoto(assetIdentifier: asset.localIdentifier, title: title)
+                )
+            }
+
+            guard !libraryPhotos.isEmpty else {
+                isLoadingPhotoLibrary = false
+                camera.captureStatus = status == .limited
+                    ? "No selected Photos are available. Add photos in Settings or use the photo picker."
+                    : "No photos found in the library."
+                if camera.latestPhotoThumbnail != nil { openCapturedPhotoHistory() }
+                return
+            }
+
+            camera.stop()
+            reviewPhotos = libraryPhotos
+            reviewPhotoIndex = 0
+            reviewVariant = .original
+            reviewComparisonMode = .before
+            isLoadingPhotoLibrary = false
+            analyzeCurrentReviewPhoto()
+        }
+    }
+
+    private func photoLibraryAuthorizationStatus() async -> PHAuthorizationStatus {
+        let current = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard current == .notDetermined else { return current }
+        return await Self.requestPhotoLibraryAuthorizationFromSystem()
+    }
+
+    /// Photos invokes this completion on an arbitrary queue. Building the
+    /// callback outside MainActor isolation avoids a Swift 6 executor trap.
+    nonisolated private static func requestPhotoLibraryAuthorizationFromSystem() async -> PHAuthorizationStatus {
+        return await withCheckedContinuation { continuation in
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+                continuation.resume(returning: status)
+            }
+        }
+    }
+
+    private func photoData(for assetIdentifier: String) async -> Data? {
+        let results = PHAsset.fetchAssets(withLocalIdentifiers: [assetIdentifier], options: nil)
+        guard let asset = results.firstObject else { return nil }
+        return await Self.requestPhotoDataFromSystem(for: asset)
+    }
+
+    /// PHImageManager also owns its callback queue, so keep its completion
+    /// nonisolated and return to the caller's actor only after it completes.
+    nonisolated private static func requestPhotoDataFromSystem(for asset: PHAsset) async -> Data? {
+        let options = PHImageRequestOptions()
+        options.deliveryMode = .highQualityFormat
+        options.isNetworkAccessAllowed = true
+        options.version = .current
+
+        return await withCheckedContinuation { continuation in
+            PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { data, _, _, _ in
+                continuation.resume(returning: data)
+            }
+        }
+    }
+
+    private func openCapturedPhotoHistory() {
+        let capturedPhotos = camera.capturedPhotoHistory()
+        guard let latest = capturedPhotos.first else {
+            camera.captureStatus = "The captured photo could not be loaded."
+            return
+        }
+
+        reviewPhotos = capturedPhotos.map { photo in
+            ReviewPhoto(
+                data: photo.data,
+                title: photo.capturedAt.formatted(date: .abbreviated, time: .shortened)
+            )
+        }
+        reviewPhotoIndex = 0
+        reviewVariant = .original
+        reviewComparisonMode = .before
+        camera.analyzeStillPhoto(data: latest.data)
+    }
+
     private func showNextReviewPhoto() {
         guard canNavigateReviewPhotos else { return }
         reviewPhotoIndex = (reviewPhotoIndex + 1) % reviewPhotos.count
@@ -1296,15 +3459,171 @@ struct ContentView: View {
 
     private func analyzeCurrentReviewPhoto() {
         guard reviewPhotos.indices.contains(reviewPhotoIndex) else { return }
+        let index = reviewPhotoIndex
+        let loadID = UUID()
+        reviewPhotoLoadID = loadID
         reviewVariant = .original
-        camera.analyzeStillPhoto(data: reviewPhotos[reviewPhotoIndex].data)
+        reviewComparisonMode = .before
+        if let data = reviewPhotos[index].data {
+            camera.analyzeStillPhoto(data: data)
+            return
+        }
+
+        guard let assetIdentifier = reviewPhotos[index].assetIdentifier else {
+            camera.captureStatus = "This photo could not be loaded."
+            return
+        }
+
+        camera.captureStatus = "Loading photo…"
+        Task { @MainActor in
+            guard let data = await photoData(for: assetIdentifier), UIImage(data: data) != nil else {
+                guard reviewPhotoLoadID == loadID else { return }
+                camera.captureStatus = "This photo could not be loaded from Photos."
+                return
+            }
+            guard reviewPhotoLoadID == loadID,
+                  reviewPhotos.indices.contains(index),
+                  reviewPhotoIndex == index else { return }
+            camera.analyzeStillPhoto(data: data)
+        }
     }
 
     private var beautifyStrengthBinding: Binding<Double> {
         Binding(
             get: { Double(camera.beautifySettings.strength) },
-            set: { camera.setBeautifyStrength(Int($0.rounded())) }
+            set: {
+                let level = Int($0.rounded())
+                camera.setBeautifyStrength(level)
+                reviewVariant = activeProcessedReviewVariant
+                reviewComparisonMode = .after
+            }
         )
+    }
+
+    private var landscapePolishStrengthBinding: Binding<Double> {
+        Binding(
+            get: { Double(camera.landscapePolishStrength) },
+            set: {
+                camera.setLandscapePolishStrength(Int($0.rounded()))
+                reviewVariant = activeProcessedReviewVariant
+                reviewComparisonMode = .after
+            }
+        )
+    }
+
+    private var activePolishStrengthBinding: Binding<Double> {
+        camera.reviewTreatment == .landscapePolish
+            ? landscapePolishStrengthBinding
+            : beautifyStrengthBinding
+    }
+
+    private var activePolishStrength: Int {
+        camera.reviewTreatment == .landscapePolish
+            ? camera.landscapePolishStrength
+            : camera.beautifySettings.strength
+    }
+
+    private var activePolishLevelName: String {
+        var settings = camera.beautifySettings
+        settings.strength = activePolishStrength
+        return settings.levelName
+    }
+
+    private var landscapePolishLevelName: String {
+        var settings = camera.beautifySettings
+        settings.strength = camera.landscapePolishStrength
+        return settings.levelName
+    }
+
+    private var enhanceStrengthBinding: Binding<Double> {
+        Binding(
+            get: { Double(camera.enhanceSettings.strength) },
+            set: {
+                camera.setEnhanceStrength(Int($0.rounded()))
+                reviewVariant = activeProcessedReviewVariant
+                reviewComparisonMode = .after
+            }
+        )
+    }
+
+    private var activeProcessedReviewVariant: ReviewVariant {
+        switch camera.reviewTreatment {
+        case .generalEnhance:
+            return camera.enhancedImage == nil ? .original : .enhanced
+        case .portraitPolish, .landscapePolish:
+            return camera.beautifiedImage == nil ? .original : .beautified
+        }
+    }
+
+    private var enhanceControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 28, height: 28)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    reviewTreatmentMenu
+                    Text(enhanceStatusText)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.62))
+                }
+
+                Spacer()
+
+                Text("\(camera.enhanceSettings.strength) · \(camera.enhanceSettings.levelName)")
+                    .font(.subheadline.monospacedDigit().bold())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 9)
+                    .frame(minHeight: 36)
+                    .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            }
+
+            Slider(value: enhanceStrengthBinding, in: 0...5, step: 1)
+                .accessibilityLabel("Enhance level")
+                .accessibilityValue("\(camera.enhanceSettings.levelName), level \(camera.enhanceSettings.strength) of 5")
+                .tint(.orange)
+
+            HStack(spacing: 8) {
+                Button {
+                    camera.setEnhanceStrength(0)
+                    reviewVariant = activeProcessedReviewVariant
+                    reviewComparisonMode = .after
+                } label: {
+                    Label("Reset", systemImage: "arrow.counterclockwise")
+                        .font(.caption.bold())
+                        .frame(minHeight: 44)
+                        .padding(.horizontal, 10)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+
+                Spacer()
+
+                Label("Updates automatically", systemImage: "bolt.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.58))
+            }
+
+            if camera.debugEnabled {
+                FlowLayout(spacing: 6, lineSpacing: 6) {
+                    ForEach(enhanceDebugChips, id: \.self) { chip in
+                        metricChip(chip)
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var enhanceStatusText: String {
+        guard camera.enhanceSettings.strength > 0 else {
+            return "Original image unchanged"
+        }
+        return "\(camera.enhanceSettings.levelName) · Whole-photo enhancement"
     }
 
     private var beautifyControls: some View {
@@ -1316,9 +3635,7 @@ struct ContentView: View {
                     .frame(width: 28, height: 28)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Portrait polish")
-                        .font(.headline.bold())
-                        .foregroundStyle(.white)
+                    reviewTreatmentMenu
                     Text(beautifyStatusText)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.62))
@@ -1326,21 +3643,28 @@ struct ContentView: View {
 
                 Spacer()
 
-                Text("\(camera.beautifySettings.strength)")
-                    .font(.title3.monospacedDigit().bold())
+                Text("\(activePolishStrength) · \(activePolishLevelName)")
+                    .font(.subheadline.monospacedDigit().bold())
                     .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
+                    .padding(.horizontal, 9)
+                    .frame(minHeight: 36)
                     .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
             }
 
-            Slider(value: beautifyStrengthBinding, in: 0...10, step: 1)
-                            .accessibilityLabel("Portrait polish strength")
+            Slider(value: activePolishStrengthBinding, in: 0...5, step: 1)
+                .accessibilityLabel("\(camera.reviewTreatment.title) level")
+                .accessibilityValue("\(activePolishLevelName), level \(activePolishStrength) of 5")
                 .tint(.teal)
 
             HStack(spacing: 8) {
                 Button {
-                    camera.setBeautifyStrength(0)
-                    reviewVariant = .original
+                    if camera.reviewTreatment == .landscapePolish {
+                        camera.setLandscapePolishStrength(0)
+                    } else {
+                        camera.setBeautifyStrength(0)
+                    }
+                    reviewVariant = activeProcessedReviewVariant
+                    reviewComparisonMode = .after
                 } label: {
                     Label("Reset", systemImage: "arrow.counterclockwise")
                         .font(.caption.bold())
@@ -1351,21 +3675,11 @@ struct ContentView: View {
                 .foregroundStyle(.white)
                 .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
 
-                if camera.beautifiedImage != nil {
-                    Button {
-                        reviewVariant = .beautified
-                    } label: {
-                        Label("Show", systemImage: "sparkles")
-                            .font(.caption.bold())
-                            .frame(minHeight: 44)
-                            .padding(.horizontal, 10)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.black)
-                    .background(.teal, in: RoundedRectangle(cornerRadius: 8))
-                }
-
                 Spacer()
+
+                Label("Updates automatically", systemImage: "bolt.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.58))
             }
 
             if camera.debugEnabled {
@@ -1381,7 +3695,7 @@ struct ContentView: View {
     }
 
     private var beautifyStatusText: String {
-        guard camera.beautifySettings.strength > 0 else {
+        guard activePolishStrength > 0 else {
             return "Original image unchanged"
         }
 
@@ -1389,11 +3703,55 @@ struct ContentView: View {
             return "Ready"
         }
 
-        if result.faceDetected {
-            return "Face-aware polish active"
+        switch camera.reviewTreatment {
+        case .portraitPolish:
+            return result.faceDetected
+                ? "\(activePolishLevelName) · Face-aware portrait polish"
+                : "No face detected"
+        case .landscapePolish:
+            if result.skyApplied && result.landscapeColorApplied {
+                return "\(activePolishLevelName) · Rich color + sky detail"
+            }
+            if result.skyApplied {
+                return "\(activePolishLevelName) · Blue sky + cloud detail"
+            }
+            return "\(activePolishLevelName) · Rich landscape color"
+        case .generalEnhance:
+            return "General enhancement selected"
         }
+    }
 
-        return "Global polish active"
+    private var reviewTreatmentMenu: some View {
+        Menu {
+            ForEach(ReviewTreatment.allCases) { treatment in
+                Button {
+                    camera.setReviewTreatment(treatment)
+                    reviewVariant = activeProcessedReviewVariant
+                    reviewComparisonMode = .after
+                } label: {
+                    if camera.reviewTreatment == treatment {
+                        Label(treatment.title, systemImage: "checkmark")
+                    } else {
+                        Text(treatment.title)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(camera.reviewTreatment.title)
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.bold())
+            }
+            .font(.headline.bold())
+            .foregroundStyle(.white)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Photo treatment")
+        .accessibilityValue(camera.reviewTreatment.title)
+        .accessibilityHint("Choose Portrait Polish, Landscape Polish, or General Enhance")
+        .accessibilityIdentifier("reviewTreatmentMenu")
     }
 
     private var detailedAnalysisPanel: some View {
@@ -1412,6 +3770,10 @@ struct ContentView: View {
                     }
                     .padding(10)
                     .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                }
+
+                analysisSection(title: "Enhance") {
+                    enhanceControls
                 }
 
                 analysisSection(title: "Beautify") {
@@ -1560,26 +3922,237 @@ struct ContentView: View {
 
     private var tutorCard: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    Label("Frame your friend and the view", systemImage: "person.crop.rectangle")
-                        .font(.title2.bold())
-                    Text("Dali shows one suggestion at a time. Subject means the person in the photo; Photographer means you.")
-                    Text("Use Poses & angles for optional guided steps. Tap Done / Next when comfortable, or skip any step. You can take a photo whenever you like.")
-                    Text("Tap the thumbnail to review your latest photo. Originals save to Photos; Save a copy keeps the enhancement you are viewing.")
-                    Button("Start taking photos") { showTutor = false }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .frame(minHeight: 44)
+            VStack(spacing: 12) {
+                TabView(selection: $tutorialPage) {
+                    ForEach(CameraTutorialStep.allCases) { step in
+                        tutorialPageView(step)
+                            .tag(step.rawValue)
+                            .padding(.horizontal, 20)
+                    }
                 }
-                .padding(24)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+
+                HStack(spacing: 7) {
+                    ForEach(CameraTutorialStep.allCases) { step in
+                        Capsule()
+                            .fill(step.rawValue == tutorialPage ? Color.teal : Color.secondary.opacity(0.28))
+                            .frame(width: step.rawValue == tutorialPage ? 24 : 8, height: 8)
+                            .animation(.easeInOut(duration: 0.2), value: tutorialPage)
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Tutorial step \(tutorialPage + 1) of \(CameraTutorialStep.allCases.count)")
+
+                HStack(spacing: 12) {
+                    if tutorialPage > 0 {
+                        Button("Back") {
+                            withAnimation { tutorialPage -= 1 }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    }
+
+                    Button(tutorialPage == CameraTutorialStep.allCases.count - 1 ? "Start taking photos" : "Next") {
+                        if tutorialPage == CameraTutorialStep.allCases.count - 1 {
+                            showTutor = false
+                        } else {
+                            withAnimation { tutorialPage += 1 }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier(
+                        tutorialPage == CameraTutorialStep.allCases.count - 1
+                            ? "tutorialStartButton"
+                            : "tutorialNextButton"
+                    )
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 18)
             }
-            .navigationTitle("Welcome to Dali")
+            .navigationTitle("Quick Camera Tutorial")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showTutor = false }
+                    Button("Skip") { showTutor = false }
                 }
             }
+        }
+    }
+
+    private func tutorialPageView(_ step: CameraTutorialStep) -> some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                Spacer(minLength: 4)
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 28)
+                        .fill(
+                            LinearGradient(
+                                colors: [step.accent.opacity(0.32), Color.black.opacity(0.92)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    RoundedRectangle(cornerRadius: 28)
+                        .stroke(step.accent.opacity(0.7), lineWidth: 1)
+
+                    tutorialIllustration(step)
+                }
+                .frame(maxWidth: 420, minHeight: 220, maxHeight: 270)
+                .accessibilityHidden(true)
+
+                VStack(spacing: 10) {
+                    Text(step.title)
+                        .font(.title2.bold())
+                        .multilineTextAlignment(.center)
+                    Text(step.detail)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(spacing: 8) {
+                    ForEach(step.tips, id: \.self) { tip in
+                        Label(tip, systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(step.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+            }
+            .padding(.vertical, 10)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Step \(step.rawValue + 1). \(step.title). \(step.detail)")
+    }
+
+    @ViewBuilder
+    private func tutorialIllustration(_ step: CameraTutorialStep) -> some View {
+        switch step {
+        case .posture:
+            VStack(spacing: 18) {
+                HStack(spacing: 10) {
+                    tutorialPackageTile("person.crop.rectangle.stack", label: "Portrait", color: .teal)
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.white.opacity(0.72))
+                    tutorialPackageTile("figure.stand", label: "Posture", color: .yellow)
+                }
+                HStack(spacing: 9) {
+                    Label("Choose package", systemImage: "square.grid.2x2")
+                    Image(systemName: "chevron.right")
+                    Label("Choose pose", systemImage: "photo")
+                }
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+            }
+        case .landscape:
+            VStack(spacing: 18) {
+                HStack(spacing: 10) {
+                    tutorialPackageTile("mountain.2", label: "Landscape", color: .blue)
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.white.opacity(0.72))
+                    tutorialPackageTile("rectangle.3.group", label: "Composition", color: .green)
+                }
+                HStack(spacing: 9) {
+                    Label("Choose scene", systemImage: "square.grid.2x2")
+                    Image(systemName: "chevron.right")
+                    Label("Frame photo", systemImage: "viewfinder")
+                }
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+            }
+        case .coach:
+            VStack(spacing: 18) {
+                HStack(spacing: 24) {
+                    tutorialStatusLight(color: .green, label: "Ready")
+                    tutorialStatusLight(color: .orange, label: "Adjust")
+                }
+                Image(systemName: step.symbol)
+                    .font(.system(size: 56, weight: .thin))
+                    .foregroundStyle(.white)
+            }
+        case .style:
+            HStack(spacing: 28) {
+                tutorialFeatureSymbol("camera.filters", label: "Filters", color: .teal)
+                tutorialFeatureSymbol("wand.and.stars", label: "Beautifier", color: .yellow)
+            }
+        case .capture:
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle().fill(.white).frame(width: 90, height: 90)
+                    Circle().stroke(.black.opacity(0.4), lineWidth: 4).frame(width: 72, height: 72)
+                }
+                HStack(spacing: 20) {
+                    Label("Timer", systemImage: "timer")
+                    Label("Voice", systemImage: "waveform")
+                    Label("Burst", systemImage: "square.stack.3d.up.fill")
+                }
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+            }
+        case .review:
+            HStack(spacing: 18) {
+                Image(systemName: "chevron.left")
+                Image(systemName: step.symbol)
+                    .font(.system(size: 72, weight: .light))
+                Image(systemName: "chevron.right")
+            }
+            .font(.title.bold())
+            .foregroundStyle(.white)
+        case .choose:
+            ZStack {
+                Image(systemName: step.symbol)
+                    .font(.system(size: 122, weight: .thin))
+                    .foregroundStyle(.white)
+                Image(systemName: "person.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.yellow)
+            }
+        }
+    }
+
+    private func tutorialStatusLight(color: Color, label: String) -> some View {
+        VStack(spacing: 7) {
+            Circle()
+                .fill(color)
+                .frame(width: 30, height: 30)
+                .shadow(color: color.opacity(0.8), radius: 8)
+            Text(label)
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+        }
+    }
+
+    private func tutorialFeatureSymbol(_ symbol: String, label: String, color: Color) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 58, weight: .light))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.headline)
+                .foregroundStyle(.white)
+        }
+    }
+
+    private func tutorialPackageTile(_ symbol: String, label: String, color: Color) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 42, weight: .light))
+            Text(label)
+                .font(.caption.bold())
+        }
+        .foregroundStyle(color)
+        .frame(width: 112, height: 96)
+        .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(color.opacity(0.75), lineWidth: 1)
         }
     }
 
@@ -1587,14 +4160,18 @@ struct ContentView: View {
         let guidance = situationGuidance
 
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: guidance.symbol)
-                    .accessibilityHidden(true)
-                Text(shootingMode == .auto ? "Auto · \(activeSituation.title)" : activeSituation.title)
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: guidance.symbol)
+                        .accessibilityHidden(true)
+                    Text(shootingMode == .auto ? "Auto · \(activeSituation.title)" : activeSituation.title)
+                }
+                Spacer(minLength: 8)
+                coachingStatusLED(guidance.tone)
             }
             .font(.caption.bold())
             .textCase(.uppercase)
-            .foregroundStyle(.teal)
+            .foregroundStyle(coachingColor(guidance.tone))
             Text(guidance.title)
                 .font(.title2.bold())
                 .foregroundStyle(.white)
@@ -1606,17 +4183,17 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
+        .background(coachingColor(guidance.tone).opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .stroke(.teal.opacity(0.65), lineWidth: 1)
+                .stroke(coachingColor(guidance.tone).opacity(0.9), lineWidth: 2)
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("situationGuidanceCard")
         .padding(.bottom, 8)
     }
 
-    private var situationGuidance: (title: String, instruction: String, symbol: String) {
+    private var situationGuidance: CoachingGuidance {
         switch activeSituation {
         case .portrait, .personScene:
             let detail: String
@@ -1625,59 +4202,71 @@ struct ContentView: View {
             case "Subject": detail = "Ask the subject to make this adjustment."
             default: detail = "Dali is analyzing the live camera view."
             }
-            return (camera.advice.instruction, detail, camera.advice.directionSymbol ?? activeSituation.symbol)
+            return CoachingGuidance(
+                title: camera.advice.instruction,
+                instruction: detail,
+                symbol: camera.advice.directionSymbol ?? activeSituation.symbol,
+                tone: camera.advice.tone
+            )
         case .group:
             guard let group = camera.measurements.groupAnalysis else {
-                return ("Bring everyone into frame", "Step back until every person is visible.", "person.3")
+                return CoachingGuidance("Bring everyone into frame", "Step back until every person is visible.", "person.3", .warning)
             }
             if group.faceVisibilityRatio < 0.8 {
-                return ("Make every face visible", "Ask the group to adjust so no face is blocked.", "person.3")
+                return CoachingGuidance("Make every face visible", "Ask the group to adjust so no face is blocked.", "person.3", .warning)
             }
             if group.edgeCrowdingScore > 0.35 {
-                return ("Leave space at the edges", "Step back slightly so nobody is cut off.", "arrow.down.right.and.arrow.up.left")
+                return CoachingGuidance("Leave space at the edges", "Step back slightly so nobody is cut off.", "arrow.down.right.and.arrow.up.left", .warning)
             }
             if let spacing = group.spacingScore, spacing > 1.8 {
-                return ("Bring the group closer", "Reduce the gaps between people.", "arrow.left.and.right")
+                return CoachingGuidance("Bring the group closer", "Reduce the gaps between people.", "arrow.left.and.right", .warning)
             }
-            return ("Group looks ready", "Keep every face visible and take the photo.", "checkmark.circle")
+            return CoachingGuidance("Group looks ready", "Keep every face visible and take the photo.", "checkmark.circle", .ready)
         case .action:
             guard let person = camera.measurements.personBox else {
-                return ("Find the moving subject", "Frame the subject before following the action.", "figure.run")
+                return CoachingGuidance("Find the moving subject", "Frame the subject before following the action.", "figure.run", .warning)
             }
             if person.rect.minX < 0.06 || person.rect.maxX > 0.94 {
-                return ("Give the subject more room", "Keep space around them so movement stays in frame.", "arrow.left.and.right")
+                return CoachingGuidance("Give the subject more room", "Keep space around them so movement stays in frame.", "arrow.left.and.right", .warning)
             }
             if camera.measurements.cameraMotion > 0.5 {
-                return ("Track more smoothly", "Follow the subject steadily before pressing the shutter.", "viewfinder")
+                return CoachingGuidance("Track more smoothly", "Follow the subject steadily before pressing the shutter.", "viewfinder", .warning)
             }
             if camera.measurements.subjectMotion >= 0.16 {
-                return ("Keep following the action", "Track the subject and take the photo as the moment develops.", "figure.run")
+                return CoachingGuidance("Keep following the action", "Track the subject and take the photo as the moment develops.", "figure.run", .waiting)
             }
-            return ("Anticipate the movement", "Leave room in the direction the subject is moving.", "figure.run")
+            return CoachingGuidance("Action frame looks ready", "Leave room for movement and take the photo at the peak moment.", "checkmark.circle", .ready)
         case .closeUp:
             if camera.measurements.cameraMotion > 0.22 {
-                return ("Steady the close-up", "Hold the phone still so the detail stays sharp.", "viewfinder")
+                return CoachingGuidance("Steady the close-up", "Hold the phone still so the detail stays sharp.", "viewfinder", .warning)
             }
             if let object = camera.measurements.salientObjectBox {
                 let area = object.rect.width * object.rect.height
                 if area < 0.18 {
-                    return ("Move closer to the detail", "Fill more of the frame while keeping the subject sharp.", "plus.magnifyingglass")
+                    return CoachingGuidance("Move closer to the detail", "Fill more of the frame while keeping the subject sharp.", "plus.magnifyingglass", .warning)
                 }
                 if area > 0.72 || object.rect.minX < 0.025 || object.rect.maxX > 0.975 {
-                    return ("Give the detail more space", "Step back slightly so its edges are not cut off.", "minus.magnifyingglass")
+                    return CoachingGuidance("Give the detail more space", "Step back slightly so its edges are not cut off.", "minus.magnifyingglass", .warning)
                 }
             } else {
-                return ("Choose one clear detail", "Center the object you want Dali to evaluate.", "viewfinder")
+                return CoachingGuidance("Choose one clear detail", "Center the object you want Dali to evaluate.", "viewfinder", .warning)
             }
             if abs(camera.measurements.cameraRollDegrees) > 3 {
-                return ("Align the subject", "Rotate the phone slightly to straighten the composition.", "level")
+                return CoachingGuidance("Align the subject", "Rotate the phone slightly to straighten the composition.", "level", .warning)
             }
-            return ("Simplify the background", "Fill the frame with the detail and remove distractions around it.", "viewfinder")
+            return CoachingGuidance("Close-up looks ready", "Keep the background simple and take the photo.", "checkmark.circle", .ready)
+        case .food:
+            if camera.measurements.cameraMotion > 0.22 {
+                return CoachingGuidance("Steady the food photo", "Brace the phone before refining the composition.", "camera.aperture", .warning)
+            }
+            guard camera.measurements.salientObjectBox != nil else {
+                return CoachingGuidance("Choose the hero dish", "Make one plate or detail the clear center of attention.", "fork.knife", .warning)
+            }
+            return CoachingGuidance("Food frame looks ready", "Keep the frame edges clean and take the photo.", "checkmark.circle", .ready)
         case .landscape:
-            let guidance = landscapeGuidance
-            return (guidance.title, guidance.instruction, guidance.symbol)
+            return landscapeGuidance
         case .auto:
-            return ("Checking the scene", "Hold the camera steady while Dali chooses a situation.", "wand.and.stars")
+            return CoachingGuidance("Checking the scene", "Hold the camera steady while Dali chooses a situation.", "wand.and.stars", .waiting)
         }
     }
 
@@ -1969,18 +4558,222 @@ struct ContentView: View {
         }
     }
 
+    private var foodCompositionChooser: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Button {
+                        chosenFoodRecipe = nil
+                        showFoodChooser = false
+                    } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "leaf.fill")
+                                .font(.title2)
+                                .foregroundStyle(.teal)
+                                .frame(width: 46, height: 46)
+                                .background(.teal.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Natural")
+                                    .font(.headline)
+                                Text("No food recipe; live stability and framing guidance stays on")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if chosenFoodRecipe == nil {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.teal)
+                            }
+                        }
+                        .padding(12)
+                        .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(chosenFoodRecipe == nil ? .teal : .clear, lineWidth: 2)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("naturalFoodOption")
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("Food", systemImage: "fork.knife")
+                            .font(.title2.bold())
+                        Text("Plates, flat lays, table stories, ingredients, texture, and action details")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 148), spacing: 12)], spacing: 12) {
+                        ForEach(FoodCompositionRecipe.allCases) { recipe in
+                            foodRecipeCard(for: recipe)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Food package")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showFoodChooser = false }
+                }
+            }
+            .accessibilityIdentifier("foodCompositionChooser")
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func foodRecipeCard(for recipe: FoodCompositionRecipe) -> some View {
+        Button {
+            chosenFoodRecipe = recipe
+            selectedAngle = recipe.recommendedCameraAngle
+            showFoodChooser = false
+        } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                Image(recipe.exampleAssetName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                Text(recipe.title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                Label(recipe.recommendedCameraAngle.title, systemImage: recipe.recommendedCameraAngle.symbol)
+                    .font(.caption2.bold())
+                    .foregroundStyle(.teal)
+                    .lineLimit(1)
+                Label(recipe.recommendedLight.title, systemImage: recipe.recommendedLight.symbol)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(8)
+            .background(.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 15))
+            .overlay {
+                RoundedRectangle(cornerRadius: 15)
+                    .stroke(chosenFoodRecipe == recipe ? .teal : .clear, lineWidth: 2)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(recipe.title). Recommended angle: \(recipe.recommendedCameraAngle.title). Best light: \(recipe.recommendedLight.title).")
+        .accessibilityIdentifier("foodOption_\(recipe.id)")
+    }
+
+    private var activeFoodCompositionCard: some View {
+        Group {
+            if let recipe = chosenFoodRecipe {
+                HStack(spacing: 12) {
+                    Image(recipe.exampleAssetName)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 86, height: 96)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(recipe.title)
+                            .font(.caption.bold())
+                            .textCase(.uppercase)
+                            .foregroundStyle(.teal)
+                        Text(recipe.instruction)
+                            .font(.headline.bold())
+                            .foregroundStyle(.white)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Label("Recommended angle: \(recipe.recommendedCameraAngle.title)", systemImage: recipe.recommendedCameraAngle.symbol)
+                            .font(.caption.bold())
+                            .foregroundStyle(.teal)
+                        Label("Best light: \(recipe.recommendedLight.title)", systemImage: recipe.recommendedLight.symbol)
+                            .font(.caption.bold())
+                            .foregroundStyle(.yellow)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(10)
+                .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(.teal.opacity(0.65), lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { foodExampleRecipe = recipe }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Food composition, \(recipe.title). Tap for the full example and safety note.")
+                .accessibilityAction(named: "Show food example") { foodExampleRecipe = recipe }
+            }
+        }
+        .accessibilityIdentifier("activeFoodCard")
+    }
+
+    private func foodCompositionExampleSheet(for recipe: FoodCompositionRecipe) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Image(recipe.exampleAssetName)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .accessibilityLabel("Example food photo for \(recipe.title)")
+                        .accessibilityIdentifier("foodExamplePhoto")
+
+                    Text(recipe.instruction)
+                        .font(.title3.bold())
+
+                    Label("Recommended camera angle: \(recipe.recommendedCameraAngle.title)", systemImage: recipe.recommendedCameraAngle.symbol)
+                        .font(.headline)
+                        .foregroundStyle(.teal)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label("Best light: \(recipe.recommendedLight.title)", systemImage: recipe.recommendedLight.symbol)
+                            .font(.headline)
+                        Text(recipe.recommendedLight.instruction)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label("Work safely", systemImage: "exclamationmark.shield.fill")
+                            .font(.headline)
+                            .foregroundStyle(.orange)
+                        Text(recipe.safetyNote)
+                    }
+                    .padding(12)
+                    .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityIdentifier("foodSafetyNote")
+                }
+                .padding()
+            }
+            .navigationTitle(recipe.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { foodExampleRecipe = nil }
+                }
+            }
+        }
+    }
+
     private var landscapeGuidanceCard: some View {
         let guidance = landscapeGuidance
 
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: guidance.symbol)
-                    .accessibilityHidden(true)
-                Text(shootingMode == .auto ? "Auto · Landscape" : "Landscape guidance")
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: guidance.symbol)
+                        .accessibilityHidden(true)
+                    Text(shootingMode == .auto ? "Auto · Landscape" : "Landscape guidance")
+                }
+                Spacer(minLength: 8)
+                coachingStatusLED(guidance.tone)
             }
             .font(.caption.bold())
             .textCase(.uppercase)
-            .foregroundStyle(.teal)
+            .foregroundStyle(coachingColor(guidance.tone))
             Text(guidance.title)
                 .font(.title2.bold())
                 .foregroundStyle(.white)
@@ -1991,34 +4784,37 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
+        .background(coachingColor(guidance.tone).opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .stroke(.teal.opacity(0.65), lineWidth: 1)
+                .stroke(coachingColor(guidance.tone).opacity(0.9), lineWidth: 2)
         }
         .accessibilityIdentifier("landscapeGuidanceCard")
     }
 
-    private var landscapeGuidance: (title: String, instruction: String, symbol: String) {
+    private var landscapeGuidance: CoachingGuidance {
         let horizonTilt = camera.measurements.horizonAngleDegrees ?? camera.measurements.cameraRollDegrees
         if abs(horizonTilt) > 2.5 {
-            return (
+            return CoachingGuidance(
                 "Level the horizon",
                 horizonTilt > 0 ? "Rotate the phone slightly counterclockwise." : "Rotate the phone slightly clockwise.",
-                "level"
+                "level",
+                .warning
             )
         }
         if camera.measurements.horizonConfidence > 0.2 {
-            return (
+            return CoachingGuidance(
                 "Horizon looks level",
                 "Place the horizon away from the center, then include a foreground element for depth.",
-                "checkmark.circle"
+                "checkmark.circle",
+                .ready
             )
         }
-        return (
+        return CoachingGuidance(
             "Build depth in the scene",
             "Include a nearby subject, a middle distance, and the background before taking the photo.",
-            "mountain.2"
+            "mountain.2",
+            .warning
         )
     }
 
@@ -2231,10 +5027,14 @@ struct ContentView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 if let pose = camera.guidedSession.pose {
-                    Text(pose.title)
-                        .font(.caption.bold())
-                        .textCase(.uppercase)
-                        .foregroundStyle(.teal)
+                    HStack(spacing: 8) {
+                        Text(pose.title)
+                            .font(.caption.bold())
+                            .textCase(.uppercase)
+                        Spacer(minLength: 8)
+                        coachingStatusLED(camera.advice.tone)
+                    }
+                    .foregroundStyle(coachingColor(camera.advice.tone))
 
                     Text("\(pose.category.title) · \(pose.setting.title)")
                         .font(.caption2.bold())
@@ -2260,10 +5060,10 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(10)
-        .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
+        .background(coachingColor(camera.advice.tone).opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .stroke(.teal.opacity(0.65), lineWidth: 1)
+                .stroke(coachingColor(camera.advice.tone).opacity(0.9), lineWidth: 2)
         }
         .contentShape(Rectangle())
         .gesture(
@@ -2554,13 +5354,27 @@ struct ContentView: View {
         var chips = [
             "strength \(camera.beautifySettings.strength)",
             "face \(result.faceDetected ? "yes" : "no")",
-            "person \(result.personDetected ? "yes" : "no")"
+            "person \(result.personDetected ? "yes" : "no")",
+            "landscape \(result.landscapeApplied ? "yes" : "no")",
+            "sky \(result.skyApplied ? "yes" : "no")"
         ]
 
         chips.append(contentsOf: result.debugValues
             .sorted { $0.key < $1.key }
             .map { "\($0.key) \(format($0.value))" })
 
+        return chips
+    }
+
+    private var enhanceDebugChips: [String] {
+        guard let result = camera.enhanceResult else {
+            return ["enhance ready"]
+        }
+
+        var chips = ["level \(camera.enhanceSettings.strength)"]
+        chips.append(contentsOf: result.debugValues
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key) \(format($0.value))" })
         return chips
     }
 
@@ -2670,28 +5484,29 @@ struct ContentView: View {
         let thumbnail = camera.latestPhotoThumbnail
 
         return HStack {
-            if thumbnail != nil {
-                Button {
-                    reviewPhotos = []
-                    reviewPhotoIndex = 0
-                    reviewVariant = .original
-                    camera.openLatestCapture()
-                } label: {
+            Button {
+                openSystemPhotoLibrary()
+            } label: {
+                ZStack {
                     PhotoLibraryButtonLabel(thumbnail: thumbnail)
+                    if isLoadingPhotoLibrary {
+                        ProgressView()
+                            .tint(.white)
+                            .padding(6)
+                            .background(.black.opacity(0.65), in: Circle())
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Review latest photo")
-            } else {
-                PhotosPicker(selection: $selectedPhotoItems, maxSelectionCount: 20, matching: .images) {
-                    PhotoLibraryButtonLabel(thumbnail: nil)
-                }
-                .buttonStyle(.plain)
             }
+            .buttonStyle(.plain)
+            .disabled(isLoadingPhotoLibrary)
+            .accessibilityLabel("Open photo library")
+            .accessibilityHint("Opens accessible Photos with swipe navigation")
+            .accessibilityIdentifier("photoLibraryButton")
 
             Spacer()
 
             Button {
-                camera.capturePhoto()
+                handleShutterTap()
             } label: {
                 ZStack {
                     Circle()
@@ -2700,29 +5515,53 @@ struct ContentView: View {
                     Circle()
                         .stroke(.black.opacity(0.35), lineWidth: 3)
                         .frame(width: 60, height: 60)
+                    if storedShutterTimerSeconds > 0 {
+                        Text("\(storedShutterTimerSeconds)")
+                            .font(.caption.bold().monospacedDigit())
+                            .foregroundStyle(.black)
+                    }
                 }
-                .accessibilityLabel("Take photo")
+                .accessibilityLabel(
+                    storedShutterTimerSeconds > 0
+                        ? "Take photo, \(storedShutterTimerSeconds) second timer"
+                        : "Take photo"
+                )
+                .accessibilityHint("Double-tap for one photo. Hold for \(selectedShutterLongPressAction.title.lowercased()).")
             }
             .buttonStyle(.plain)
-            .disabled(!camera.cameraReady || camera.isCapturing || camera.isSaving || camera.hasUnsavedCapture || camera.isAnalyzingPhoto)
+            .onLongPressGesture(
+                minimumDuration: 0.4,
+                maximumDistance: 50,
+                pressing: shutterPressingChanged,
+                perform: performShutterLongPress
+            )
+            .disabled((!camera.canCapturePhoto && !isBurstCapturing) || shutterCountdownTask != nil)
 
             Spacer()
 
             Button {
                 showCameraControls = true
             } label: {
-                VStack(spacing: 2) {
-                    Image(systemName: "camera.aperture")
-                        .font(.system(size: 20, weight: .bold))
-                    Text(cameraControlMode.title)
-                        .font(.system(size: 9, weight: .bold))
+                ZStack(alignment: .topTrailing) {
+                    VStack(spacing: 2) {
+                        Image(systemName: "camera.aperture")
+                            .font(.system(size: 20, weight: .bold))
+                        Text("Controls")
+                            .font(.system(size: 9, weight: .bold))
+                    }
+                    if activeAssistedRecommendation != nil {
+                        Circle()
+                            .fill(.orange)
+                            .frame(width: 9, height: 9)
+                            .accessibilityHidden(true)
+                    }
                 }
-                .foregroundStyle(cameraControlMode == .auto ? .white : .teal)
+                .foregroundStyle(focusExposureMode == .manual ? .teal : .white)
                 .frame(width: 52, height: 52)
                 .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Camera controls, \(cameraControlMode.title)")
+            .accessibilityLabel("Camera controls")
             .accessibilityIdentifier("cameraControlButton")
         }
         .font(.headline)
@@ -2800,10 +5639,14 @@ struct ContentView: View {
             showFullScreenReviewImage = true
         }
         .disabled(camera.isAnalyzingPhoto || reviewVariant == .original)
-        Button("Save a copy") { camera.saveCopy(currentReviewDisplayImage(original: original)) }
+        Button("Save a copy") { camera.saveCopy(reviewOutputImage(original: original)) }
             .disabled(camera.isSaving || camera.isAnalyzingPhoto)
-        Button("Share") { sharedPhoto = SharedPhoto(image: currentReviewDisplayImage(original: original)) }
+        Button("Share") { sharedPhoto = SharedPhoto(image: reviewOutputImage(original: original)) }
             .disabled(camera.isAnalyzingPhoto)
+    }
+
+    private func reviewOutputImage(original: UIImage) -> UIImage {
+        reviewComparisonMode == .before ? original : currentReviewDisplayImage(original: original)
     }
 
     private var floatingDebugPanel: some View {
@@ -2849,21 +5692,78 @@ struct ContentView: View {
     private func toneColor(_ tone: AdviceTone) -> Color {
         switch tone {
         case .waiting:
-            return .white.opacity(0.35)
-        case .ready:
-            return .teal
-        case .warning:
             return .yellow
+        case .ready:
+            return .green
+        case .warning:
+            return .orange
         case .danger:
             return .red
         }
+    }
+
+    private func coachingColor(_ tone: AdviceTone) -> Color {
+        switch tone {
+        case .ready: return .green
+        case .warning, .danger: return .orange
+        case .waiting: return .yellow
+        }
+    }
+
+    private func coachingStatusLED(_ tone: AdviceTone) -> some View {
+        ZStack {
+            Circle()
+                .fill(.black.opacity(0.62))
+                .frame(width: 24, height: 24)
+            Circle()
+                .fill(coachingColor(tone))
+                .frame(width: 14, height: 14)
+                .overlay { Circle().stroke(.white.opacity(0.9), lineWidth: 1.5) }
+                .shadow(color: coachingColor(tone).opacity(0.95), radius: 5)
+        }
+        .accessibilityElement()
+        .accessibilityLabel(tone.coachingStatusTitle)
+    }
+}
+
+private struct CoachingGuidance {
+    let title: String
+    let instruction: String
+    let symbol: String
+    let tone: AdviceTone
+
+    init(_ title: String, _ instruction: String, _ symbol: String, _ tone: AdviceTone) {
+        self.title = title
+        self.instruction = instruction
+        self.symbol = symbol
+        self.tone = tone
+    }
+
+    init(title: String, instruction: String, symbol: String, tone: AdviceTone) {
+        self.title = title
+        self.instruction = instruction
+        self.symbol = symbol
+        self.tone = tone
     }
 }
 
 private struct ReviewPhoto: Identifiable {
     let id = UUID()
-    let data: Data
+    var data: Data?
+    let assetIdentifier: String?
     let title: String
+
+    init(data: Data, title: String) {
+        self.data = data
+        assetIdentifier = nil
+        self.title = title
+    }
+
+    init(assetIdentifier: String, title: String) {
+        data = nil
+        self.assetIdentifier = assetIdentifier
+        self.title = title
+    }
 }
 
 private struct PosePhotoThumbnail: View {
@@ -3145,10 +6045,27 @@ private let supportedImageExtensions = [
     "heif"
 ]
 
+private enum ReviewComparisonMode: String, CaseIterable, Identifiable {
+    case before
+    case after
+    case split
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .before: return "Before"
+        case .after: return "After"
+        case .split: return "Split"
+        }
+    }
+}
+
 private enum ReviewVariant: Hashable {
     case original
     case reframed
     case leveled
+    case enhanced
     case beautified
     case tilted
 
@@ -3160,12 +6077,15 @@ private enum ReviewVariant: Hashable {
             return "Reframed"
         case .leveled:
             return "Leveled"
+        case .enhanced:
+            return "Enhanced"
         case .beautified:
-            return "Beautified"
+            return "Polished"
         case .tilted:
             return "Tilt Test"
         }
     }
+
 }
 
 private struct LightingReviewSummary {

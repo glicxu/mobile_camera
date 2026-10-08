@@ -70,7 +70,7 @@ while IFS= read -r -d '' source_image; do
   converted_count=$((converted_count + 1))
 done < <(
   find "$asset_catalog" \
-    \( -path '*Pose*.imageset/*' -o -path '*Landscape*.imageset/*' \) \
+    \( -path '*Pose*.imageset/*' -o -path '*Landscape*.imageset/*' -o -path '*Food*.imageset/*' \) \
     -type f \
     \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) \
     -print0

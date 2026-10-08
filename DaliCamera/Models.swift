@@ -38,11 +38,94 @@ struct PendingCaptureStore {
     }
 }
 
+struct CapturedPhotoRecord: Identifiable, Equatable {
+    let id: String
+    let data: Data
+    let capturedAt: Date
+}
+
+struct CaptureHistoryStore {
+    let directoryURL: URL
+    var maximumCount = 25
+
+    @discardableResult
+    func retain(
+        _ data: Data,
+        capturedAt: Date = Date(),
+        id: UUID = UUID()
+    ) throws -> CapturedPhotoRecord {
+        try FileManager.default.createDirectory(
+            at: directoryURL,
+            withIntermediateDirectories: true
+        )
+        let milliseconds = Int64((capturedAt.timeIntervalSince1970 * 1_000).rounded())
+        let recordID = String(format: "%020lld-%@", milliseconds, id.uuidString)
+        try data.write(to: fileURL(for: recordID), options: .atomic)
+        try pruneIfNeeded()
+        return CapturedPhotoRecord(id: recordID, data: data, capturedAt: capturedAt)
+    }
+
+    func loadAll() throws -> [CapturedPhotoRecord] {
+        guard FileManager.default.fileExists(atPath: directoryURL.path) else { return [] }
+        return try FileManager.default.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        .filter { $0.pathExtension == "photo" }
+        .sorted { $0.lastPathComponent > $1.lastPathComponent }
+        .compactMap { url in
+            let recordID = url.deletingPathExtension().lastPathComponent
+            guard let milliseconds = Int64(recordID.prefix(20)) else { return nil }
+            return CapturedPhotoRecord(
+                id: recordID,
+                data: try Data(contentsOf: url),
+                capturedAt: Date(timeIntervalSince1970: Double(milliseconds) / 1_000)
+            )
+        }
+    }
+
+    func remove(id: String) throws {
+        let url = fileURL(for: id)
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+
+    private func fileURL(for id: String) -> URL {
+        directoryURL.appendingPathComponent(id).appendingPathExtension("photo")
+    }
+
+    private func pruneIfNeeded() throws {
+        let records = try loadAll()
+        guard records.count > maximumCount else { return }
+        for record in records.dropFirst(maximumCount) {
+            try remove(id: record.id)
+        }
+    }
+}
+
 enum AdviceTone {
     case waiting
     case ready
     case warning
     case danger
+
+    var coachingStatusTitle: String {
+        switch self {
+        case .waiting: return "Checking"
+        case .ready: return "Looks good"
+        case .warning, .danger: return "Needs attention"
+        }
+    }
+
+    var coachingStatusSymbol: String {
+        switch self {
+        case .waiting: return "ellipsis.circle.fill"
+        case .ready: return "checkmark.circle.fill"
+        case .warning, .danger: return "exclamationmark.triangle.fill"
+        }
+    }
 }
 
 enum GuidedAction: String {
@@ -704,13 +787,67 @@ struct Advice: Equatable {
     let instruction: String
     let tone: AdviceTone
 
+    var visualGuidanceDirection: VisualGuidanceDirection? {
+        let instruction = instruction.lowercased()
+
+        if instruction.contains("move") && instruction.contains("left") { return .left }
+        if instruction.contains("move") && instruction.contains("right") { return .right }
+        if instruction.contains("raise") || instruction.contains("move up") { return .up }
+        if instruction.contains("lower") || instruction.contains("move down") { return .down }
+        if instruction.contains("step closer") || instruction.contains("move closer") { return .closer }
+        if instruction.contains("step back") || instruction.contains("farther back") || instruction.contains("move back") {
+            return .farther
+        }
+        if instruction.contains("tilt left") { return .rotateLeft }
+        if instruction.contains("tilt right") { return .rotateRight }
+        if type == "feet_cropped" { return .farther }
+        return nil
+    }
+
     var directionSymbol: String? {
+        if let visualGuidanceDirection { return visualGuidanceDirection.symbol }
         switch type {
         case "camera_tilted", "horizon_tilted": return "arrow.triangle.2.circlepath.camera"
         case "headroom_too_large", "headroom_too_small": return "arrow.up.and.down"
         case "limb_cropped": return "figure.walk"
         case "subject_too_close", "subject_too_far", "scene_excluded", "feet_cropped": return "arrow.up.left.and.arrow.down.right"
         default: return recipient == "Subject" ? "figure.stand" : nil
+        }
+    }
+}
+
+enum VisualGuidanceDirection: String, Equatable {
+    case left
+    case right
+    case up
+    case down
+    case closer
+    case farther
+    case rotateLeft
+    case rotateRight
+
+    var symbol: String {
+        switch self {
+        case .left: return "arrow.left"
+        case .right: return "arrow.right"
+        case .up: return "arrow.up"
+        case .down: return "arrow.down"
+        case .closer: return "arrow.down.right.and.arrow.up.left"
+        case .farther: return "arrow.up.left.and.arrow.down.right"
+        case .rotateLeft: return "rotate.left"
+        case .rotateRight: return "rotate.right"
+        }
+    }
+
+    var movementOffset: CGSize {
+        switch self {
+        case .left: return CGSize(width: -14, height: 0)
+        case .right: return CGSize(width: 14, height: 0)
+        case .up: return CGSize(width: 0, height: -14)
+        case .down: return CGSize(width: 0, height: 14)
+        case .closer: return CGSize(width: 0, height: -8)
+        case .farther: return CGSize(width: 0, height: 8)
+        case .rotateLeft, .rotateRight: return .zero
         }
     }
 }
@@ -740,6 +877,7 @@ struct Measurements {
     var timestamp: Date
     var salientObjectBox: DetectionBox? = nil
     var subjectMotion: Double = 0
+    var faceLandmarks: FaceLandmarkGeometry? = nil
 }
 
 enum PhotographicSituation: String, CaseIterable, Identifiable {
@@ -750,6 +888,7 @@ enum PhotographicSituation: String, CaseIterable, Identifiable {
     case landscape
     case action
     case closeUp
+    case food
 
     var id: String { rawValue }
 
@@ -762,6 +901,7 @@ enum PhotographicSituation: String, CaseIterable, Identifiable {
         case .landscape: return "Landscape"
         case .action: return "Action"
         case .closeUp: return "Close-up"
+        case .food: return "Food"
         }
     }
 
@@ -774,13 +914,14 @@ enum PhotographicSituation: String, CaseIterable, Identifiable {
         case .landscape: return "mountain.2"
         case .action: return "figure.run"
         case .closeUp: return "viewfinder"
+        case .food: return "fork.knife"
         }
     }
 
     var showsPersonOverlay: Bool {
         switch self {
         case .portrait, .group, .personScene, .action: return true
-        case .auto, .landscape, .closeUp: return false
+        case .auto, .landscape, .closeUp, .food: return false
         }
     }
 
@@ -797,6 +938,7 @@ enum PhotographicSituation: String, CaseIterable, Identifiable {
         case .landscape: return [.low, .eyeLevel, .slightlyHigh]
         case .action: return [.low, .eyeLevel, .side]
         case .closeUp: return [.overhead, .fortyFive, .side]
+        case .food: return [.fortyFive, .overhead, .side]
         }
     }
 }
@@ -855,18 +997,53 @@ enum CameraAngleChoice: String, CaseIterable, Identifiable {
     }
 }
 
-enum CameraControlMode: String, CaseIterable, Identifiable {
+enum ProExposureProgram: String, CaseIterable, Identifiable {
+    case manual
+    case shutterPriority
+    case aperturePriority
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .manual: return "Manual"
+        case .shutterPriority: return "Tv"
+        case .aperturePriority: return "Av"
+        }
+    }
+}
+
+enum FocusExposureMode: String, CaseIterable, Identifiable {
     case auto
-    case assisted
+    case manual
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .auto: return "Auto"
-        case .assisted: return "Assisted"
+        case .manual: return "Manual"
         }
     }
+}
+
+enum TapMeteringTarget: String, CaseIterable, Identifiable {
+    case focusAndExposure
+    case focus
+    case exposure
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .focusAndExposure: return "AF + AE"
+        case .focus: return "Focus"
+        case .exposure: return "Exposure"
+        }
+    }
+
+    var includesFocus: Bool { self != .exposure }
+    var includesExposure: Bool { self != .focus }
 }
 
 struct CameraControlCapabilities: Equatable, Sendable {
@@ -882,6 +1059,21 @@ struct CameraControlCapabilities: Equatable, Sendable {
     var isFocusExposureLocked: Bool
     var currentISO: Double?
     var currentExposureDurationSeconds: Double?
+    var currentLensAperture: Double? = nil
+    var supportsCustomExposure: Bool = false
+    var minimumISO: Double = 0
+    var maximumISO: Double = 0
+    var minimumExposureDurationSeconds: Double = 0
+    var maximumExposureDurationSeconds: Double = 0
+    var supportsShutterPriority: Bool = false
+    var supportsAperturePriority: Bool = false
+    var minimumLensAperture: Double? = nil
+    var maximumLensAperture: Double? = nil
+    var currentExposureTargetOffset: Double = 0
+    var supportsFocusPoint: Bool = false
+    var supportsExposurePoint: Bool = false
+    var isFocusLocked: Bool = false
+    var isExposureLocked: Bool = false
 
     static let unavailable = CameraControlCapabilities(
         isAvailable: false,
@@ -900,6 +1092,144 @@ struct CameraControlCapabilities: Equatable, Sendable {
 
     func clampedExposureBias(_ value: Double) -> Double {
         min(maximumExposureBias, max(minimumExposureBias, value))
+    }
+
+    func clampedISO(_ value: Double) -> Double {
+        min(maximumISO, max(minimumISO, value))
+    }
+
+    func clampedExposureDuration(_ value: Double) -> Double {
+        min(maximumExposureDurationSeconds, max(minimumExposureDurationSeconds, value))
+    }
+
+    func clampedLensAperture(_ value: Double) -> Double {
+        guard let minimumLensAperture, let maximumLensAperture else { return value }
+        return min(maximumLensAperture, max(minimumLensAperture, value))
+    }
+
+    func linkedISO(baseExposureProduct: Double, shutterSeconds: Double, adjustmentEV: Double) -> Double {
+        guard shutterSeconds > 0 else { return clampedISO(maximumISO) }
+        return clampedISO(baseExposureProduct * pow(2, adjustmentEV) / shutterSeconds)
+    }
+}
+
+enum AssistedRecommendationKind: String, Equatable, Sendable {
+    case motion
+    case lowLight
+    case brightSky
+    case portrait
+    case consistentSeries
+}
+
+enum AssistedRecommendationAction: Equatable, Sendable {
+    case setExposureBias(Double)
+    case setShutterTimer(Int)
+    case lockFocusAndExposure
+}
+
+struct AssistedRecommendation: Equatable, Identifiable, Sendable {
+    let kind: AssistedRecommendationKind
+    let goal: String
+    let setting: String
+    let reason: String
+    let tradeoff: String
+    let action: AssistedRecommendationAction
+
+    var id: AssistedRecommendationKind { kind }
+}
+
+struct AssistedRecommendationEngine {
+    func recommendation(
+        measurements: Measurements,
+        capabilities: CameraControlCapabilities,
+        shutterTimerSeconds: Int,
+        recentCaptureCount: Int
+    ) -> AssistedRecommendation? {
+        guard capabilities.isAvailable else { return nil }
+
+        // A delayed shutter makes it harder to catch a moving subject at the intended instant.
+        if measurements.subjectMotion >= 0.2, shutterTimerSeconds > 0 {
+            return AssistedRecommendation(
+                kind: .motion,
+                goal: "Catch the movement",
+                setting: "Shutter timer Off",
+                reason: "The subject is moving, so the countdown may miss the moment.",
+                tradeoff: "Pressing the shutter directly can add a little camera shake.",
+                action: .setShutterTimer(0)
+            )
+        }
+
+        let dimScene = measurements.backgroundLuminance.map { $0 <= 55 } ?? false
+        if (dimScene || measurements.cameraMotion >= 0.3), shutterTimerSeconds != 3 {
+            return AssistedRecommendation(
+                kind: .lowLight,
+                goal: "Reduce camera shake",
+                setting: "3-second timer",
+                reason: dimScene
+                    ? "The camera is using a low-light exposure that benefits from a steady phone."
+                    : "The phone is moving enough to soften the photo.",
+                tradeoff: "Brace or set down the phone; the photo will be taken three seconds later.",
+                action: .setShutterTimer(3)
+            )
+        }
+
+        if capabilities.supportsExposureBias,
+           measurements.skyOrOpenAreaRatio >= 0.25,
+           let backgroundLuminance = measurements.backgroundLuminance,
+           backgroundLuminance >= 175 {
+            let target = capabilities.clampedExposureBias(-0.7)
+            if abs(capabilities.currentExposureBias - target) >= 0.15 {
+                return AssistedRecommendation(
+                    kind: .brightSky,
+                    goal: "Protect the bright sky",
+                    setting: String(format: "%+.1f EV", target),
+                    reason: "A large bright area may lose cloud or sunset detail.",
+                    tradeoff: "Foreground shadows will become darker.",
+                    action: .setExposureBias(target)
+                )
+            }
+        }
+
+        if capabilities.supportsExposureBias,
+           measurements.faceBox != nil,
+           let faceLuminance = measurements.faceLuminance,
+           let backgroundLuminance = measurements.backgroundLuminance {
+            let difference = backgroundLuminance - faceLuminance
+            if abs(difference) >= 35 {
+                let target = capabilities.clampedExposureBias(difference > 0 ? 0.3 : -0.3)
+                if abs(capabilities.currentExposureBias - target) >= 0.15 {
+                    return AssistedRecommendation(
+                        kind: .portrait,
+                        goal: difference > 0 ? "Brighten the face" : "Protect face highlights",
+                        setting: String(format: "%+.1f EV", target),
+                        reason: difference > 0
+                            ? "The face is noticeably darker than the background."
+                            : "The face is noticeably brighter than the background.",
+                        tradeoff: difference > 0
+                            ? "Bright areas in the background may lose some detail."
+                            : "The background and shadows will become darker.",
+                        action: .setExposureBias(target)
+                    )
+                }
+            }
+        }
+
+        if recentCaptureCount >= 2,
+           measurements.cameraStable,
+           capabilities.supportsFocusLock,
+           capabilities.supportsExposureLock,
+           !capabilities.isFocusExposureLocked {
+            return AssistedRecommendation(
+                kind: .consistentSeries,
+                goal: "Keep this series consistent",
+                setting: "Lock focus and exposure",
+                reason: "You have taken several recent photos with a stable composition.",
+                tradeoff: "Unlock the controls before the subject distance or lighting changes.",
+                action: .lockFocusAndExposure
+            )
+        }
+
+        return nil
     }
 }
 
@@ -1227,6 +1557,117 @@ enum LandscapeCompositionRecipe: String, CaseIterable, Identifiable {
     }
 }
 
+enum FoodLightRecommendation: String, CaseIterable, Identifiable {
+    case softWindow
+    case broadOverhead
+    case rakingSide
+    case diffusedBacklight
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .softWindow: return "Soft window side light"
+        case .broadOverhead: return "Broad diffused light"
+        case .rakingSide: return "Low side light"
+        case .diffusedBacklight: return "Diffused back-side light"
+        }
+    }
+
+    var instruction: String {
+        switch self {
+        case .softWindow: return "Place the food beside a large window and turn off mixed-color room lights."
+        case .broadOverhead: return "Use a large diffused source so every dish stays evenly lit with controlled glare."
+        case .rakingSide: return "Let soft light skim across the food to reveal layers, crumbs, and surface texture."
+        case .diffusedBacklight: return "Place a diffused light behind and to one side so steam, pours, and glossy edges separate from the background."
+        }
+    }
+
+    var symbol: String { "sun.max.fill" }
+}
+
+enum FoodCompositionRecipe: String, CaseIterable, Identifiable {
+    case heroPlate = "FD1"
+    case overheadFlatLay = "FD2"
+    case textureDetail = "FD3"
+    case tableStory = "FD4"
+    case ingredientFrame = "FD5"
+    case pourAction = "FD6"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .heroPlate: return "Hero plate"
+        case .overheadFlatLay: return "Overhead flat lay"
+        case .textureDetail: return "Texture detail"
+        case .tableStory: return "Table story"
+        case .ingredientFrame: return "Ingredient frame"
+        case .pourAction: return "Pour or action detail"
+        }
+    }
+
+    var cues: [String] {
+        switch self {
+        case .heroPlate:
+            return ["Turn the plate until its best edge faces the camera.", "Frame the entire plate at a 45-degree angle and leave a little breathing room."]
+        case .overheadFlatLay:
+            return ["Hold the phone parallel to the table.", "Balance the main dish with smaller items and keep the frame edges clean."]
+        case .textureDetail:
+            return ["Move close to one cut edge, layer, or crisp surface.", "Focus on that texture and simplify everything behind it."]
+        case .tableStory:
+            return ["Keep one dish as the clear hero.", "Use a glass, napkin, or side plate to create foreground and background depth."]
+        case .ingredientFrame:
+            return ["Place the finished dish near the center.", "Arrange only a few relevant ingredients around it as a loose frame."]
+        case .pourAction:
+            return ["Set the phone before the pour begins.", "Keep the landing point sharp and leave room for the stream above it."]
+        }
+    }
+
+    var instruction: String { cues.joined(separator: " ") }
+
+    var recommendedCameraAngle: CameraAngleChoice {
+        switch self {
+        case .heroPlate, .tableStory, .pourAction: return .fortyFive
+        case .overheadFlatLay, .ingredientFrame: return .overhead
+        case .textureDetail: return .side
+        }
+    }
+
+    var recommendedLight: FoodLightRecommendation {
+        switch self {
+        case .heroPlate, .tableStory: return .softWindow
+        case .overheadFlatLay, .ingredientFrame: return .broadOverhead
+        case .textureDetail: return .rakingSide
+        case .pourAction: return .diffusedBacklight
+        }
+    }
+
+    var safetyNote: String {
+        switch self {
+        case .heroPlate, .tableStory:
+            return "Set hot plates on a stable surface and keep the phone clear of steam and serving traffic."
+        case .overheadFlatLay, .ingredientFrame:
+            return "Use a secure overhead position; never stand on a chair or hold the phone above an active flame."
+        case .textureDetail:
+            return "Move the phone toward the food only after knives and hot cookware are set safely aside."
+        case .pourAction:
+            return "Keep the phone supported and away from hot liquid, splashes, and the pourer's working space."
+        }
+    }
+
+    var exampleAssetName: String {
+        switch self {
+        case .heroPlate: return "FoodHeroPlate"
+        case .overheadFlatLay: return "FoodOverheadFlatLay"
+        case .textureDetail: return "FoodTextureDetail"
+        case .tableStory: return "FoodTableStory"
+        case .ingredientFrame: return "FoodIngredientFrame"
+        case .pourAction: return "FoodPourAction"
+        }
+    }
+}
+
 struct SituationClassifier {
     private(set) var recommendation: PhotographicSituation = .personScene
     private var candidate: PhotographicSituation?
@@ -1326,6 +1767,21 @@ struct FaceAnalysis: Equatable {
     var occlusionScore: Double
 }
 
+struct FaceLandmarkGeometry: Equatable {
+    var leftEye: [CGPoint]
+    var rightEye: [CGPoint]
+    var outerLips: [CGPoint]
+    var faceContour: [CGPoint]
+
+    var hasEyes: Bool {
+        leftEye.count >= 3 && rightEye.count >= 3
+    }
+
+    var hasLips: Bool {
+        outerLips.count >= 4
+    }
+}
+
 struct PoseAnalysis: Equatable {
     var confidence: Double
     var visibleKeypointCount: Int
@@ -1392,40 +1848,446 @@ struct ReframeSuggestion: Equatable {
     var reason: String
 }
 
+enum ReviewTreatment: String, CaseIterable, Identifiable {
+    case portraitPolish
+    case landscapePolish
+    case generalEnhance
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .portraitPolish: return "Portrait Polish"
+        case .landscapePolish: return "Landscape Polish"
+        case .generalEnhance: return "General Enhance"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .portraitPolish: return "Portrait"
+        case .landscapePolish: return "Landscape"
+        case .generalEnhance: return "Enhance"
+        }
+    }
+}
+
+enum CapturePolishChoice: String, CaseIterable, Identifiable {
+    case off
+    case generalEnhance
+    case portraitPolish
+    case landscapePolish
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .off: return "Off"
+        case .generalEnhance: return "General Enhance"
+        case .portraitPolish: return "Portrait Polish"
+        case .landscapePolish: return "Landscape Polish"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .off: return "circle.slash"
+        case .generalEnhance: return "wand.and.stars"
+        case .portraitPolish: return "person.crop.circle"
+        case .landscapePolish: return "mountain.2"
+        }
+    }
+
+    static func levelName(_ level: Int) -> String {
+        switch max(1, min(5, level)) {
+        case 1: return "Light"
+        case 2: return "Natural"
+        case 3: return "Polished"
+        case 4: return "Strong"
+        default: return "Max"
+        }
+    }
+}
+
+enum EffectApplicationMode: String, CaseIterable, Identifiable {
+    case auto
+    case custom
+    case off
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .auto: return "Auto"
+        case .custom: return "Custom"
+        case .off: return "Off"
+        }
+    }
+}
+
+enum PhotoFilterChoice: String, CaseIterable, Identifiable {
+    case auto
+    case none
+    case custom
+    case natural
+    case soft
+    case bright
+    case vivid
+    case blueSky
+    case golden
+    case fresh
+    case nightClear
+
+    var id: String { rawValue }
+
+    static let namedPresets: [PhotoFilterChoice] = [
+        .natural, .soft, .bright, .vivid, .blueSky, .golden, .fresh, .nightClear
+    ]
+
+    var title: String {
+        switch self {
+        case .auto: return "Auto"
+        case .none: return "None"
+        case .custom: return "Custom"
+        case .natural: return "Natural"
+        case .soft: return "Soft"
+        case .bright: return "Bright"
+        case .vivid: return "Vivid"
+        case .blueSky: return "Blue Sky"
+        case .golden: return "Golden"
+        case .fresh: return "Fresh"
+        case .nightClear: return "Night Clear"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .auto: return "wand.and.stars"
+        case .none: return "circle.slash"
+        case .custom: return "slider.horizontal.3"
+        case .natural: return "leaf"
+        case .soft: return "cloud"
+        case .bright: return "sun.max"
+        case .vivid: return "paintpalette"
+        case .blueSky: return "cloud.sun"
+        case .golden: return "sun.horizon"
+        case .fresh: return "camera.macro"
+        case .nightClear: return "moon.stars"
+        }
+    }
+
+    func resolved(for situation: PhotographicSituation) -> PhotoFilterChoice {
+        guard self == .auto else { return self }
+        switch situation {
+        case .auto, .portrait, .group, .personScene:
+            return .natural
+        case .landscape:
+            return .blueSky
+        case .action:
+            return .vivid
+        case .closeUp:
+            return .bright
+        case .food:
+            return .fresh
+        }
+    }
+
+    var isConcreteFilter: Bool {
+        self != .auto && self != .none
+    }
+
+    var defaultSettings: PhotoFilterSettings {
+        switch self {
+        case .auto, .none:
+            return .zero
+        case .custom:
+            return .zero
+        case .natural:
+            return PhotoFilterSettings(exposure: 0, warmth: 0, color: 1, contrast: 1, softness: 0, detail: 1, blueSky: 0)
+        case .soft:
+            return PhotoFilterSettings(exposure: 1, warmth: 1, color: 1, contrast: -1, softness: 3, detail: 0, blueSky: 0)
+        case .bright:
+            return PhotoFilterSettings(exposure: 3, warmth: 0, color: 1, contrast: 1, softness: 0, detail: 1, blueSky: 0)
+        case .vivid:
+            return PhotoFilterSettings(exposure: 0, warmth: 0, color: 4, contrast: 3, softness: 0, detail: 2, blueSky: 0)
+        case .blueSky:
+            return PhotoFilterSettings(exposure: 0, warmth: -1, color: 3, contrast: 2, softness: 0, detail: 2, blueSky: 5)
+        case .golden:
+            return PhotoFilterSettings(exposure: 0, warmth: 4, color: 2, contrast: 1, softness: 1, detail: 1, blueSky: 0)
+        case .fresh:
+            return PhotoFilterSettings(exposure: 1, warmth: 1, color: 3, contrast: 2, softness: 0, detail: 2, blueSky: 0)
+        case .nightClear:
+            return PhotoFilterSettings(exposure: 2, warmth: -1, color: 1, contrast: 2, softness: 2, detail: 2, blueSky: 0)
+        }
+    }
+}
+
+struct PhotoFilterSettings: Equatable {
+    var exposure: Int
+    var warmth: Int
+    var color: Int
+    var contrast: Int
+    var softness: Int
+    var detail: Int
+    var blueSky: Int
+
+    static let zero = PhotoFilterSettings(
+        exposure: 0,
+        warmth: 0,
+        color: 0,
+        contrast: 0,
+        softness: 0,
+        detail: 0,
+        blueSky: 0
+    )
+
+    var isActive: Bool { self != .zero }
+
+    func scaled(by strength: Int) -> PhotoFilterSettings {
+        let scale = Double(max(0, min(5, strength))) / 3
+        return PhotoFilterSettings(
+            exposure: scaled(exposure, by: scale, range: -5...5),
+            warmth: scaled(warmth, by: scale, range: -5...5),
+            color: scaled(color, by: scale, range: 0...5),
+            contrast: scaled(contrast, by: scale, range: -5...5),
+            softness: scaled(softness, by: scale, range: 0...5),
+            detail: scaled(detail, by: scale, range: 0...5),
+            blueSky: scaled(blueSky, by: scale, range: 0...5)
+        )
+    }
+
+    private func scaled(_ value: Int, by scale: Double, range: ClosedRange<Int>) -> Int {
+        max(range.lowerBound, min(range.upperBound, Int((Double(value) * scale).rounded())))
+    }
+}
+
+enum ShutterLongPressAction: String, CaseIterable, Identifiable {
+    case burst
+    case timer
+    case disabled
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .burst: return "Burst"
+        case .timer: return "Timer"
+        case .disabled: return "Disabled"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .burst:
+            return "Hold to take a series; release to stop. The timer is skipped."
+        case .timer:
+            return "Hold to start the selected shutter countdown."
+        case .disabled:
+            return "Holding the shutter does nothing; a short tap still takes one photo."
+        }
+    }
+}
+
 struct BeautifySettings: Equatable {
     var strength: Int = 0
+    var landscapeSkyEnabled: Bool = true
+    var landscapeColorEnabled: Bool = true
     var faceBrightnessEnabled: Bool = true
     var skinSmoothingEnabled: Bool = true
+    var blemishReductionEnabled: Bool = true
+    var eyeEnlargementEnabled: Bool = true
+    var lipPlumpingEnabled: Bool = true
+
+    var normalizedStrength: Double {
+        Double(max(0, min(5, strength))) / 5
+    }
+
+    var levelName: String {
+        switch max(0, min(5, strength)) {
+        case 0: return "Original"
+        case 1: return "Natural"
+        case 2: return "Fresh"
+        case 3: return "Polished"
+        case 4: return "Glam"
+        default: return "Max"
+        }
+    }
+}
+
+enum PortraitBeautifierPreset: String, CaseIterable, Identifiable {
+    case natural
+    case polished
+    case glam
+    case custom
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .natural: return "Natural"
+        case .polished: return "Polished"
+        case .glam: return "Glam"
+        case .custom: return "Custom"
+        }
+    }
+
+    var defaultSettings: BeautifySettings {
+        var settings = BeautifySettings()
+        settings.landscapeSkyEnabled = false
+        settings.landscapeColorEnabled = false
+        switch self {
+        case .natural:
+            settings.strength = 2
+            settings.eyeEnlargementEnabled = false
+            settings.lipPlumpingEnabled = false
+        case .polished:
+            settings.strength = 3
+            settings.lipPlumpingEnabled = false
+        case .glam:
+            settings.strength = 4
+        case .custom:
+            break
+        }
+        return settings
+    }
+}
+
+enum LandscapeBeautifierPreset: String, CaseIterable, Identifiable {
+    case natural
+    case vivid
+    case dramatic
+    case custom
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .natural: return "Natural"
+        case .vivid: return "Vivid"
+        case .dramatic: return "Dramatic"
+        case .custom: return "Custom"
+        }
+    }
+
+    var defaultSettings: BeautifySettings {
+        var settings = BeautifySettings()
+        settings.faceBrightnessEnabled = false
+        settings.skinSmoothingEnabled = false
+        settings.blemishReductionEnabled = false
+        settings.eyeEnlargementEnabled = false
+        settings.lipPlumpingEnabled = false
+        switch self {
+        case .natural:
+            settings.strength = 2
+            settings.landscapeSkyEnabled = false
+        case .vivid:
+            settings.strength = 3
+        case .dramatic:
+            settings.strength = 4
+        case .custom:
+            break
+        }
+        return settings
+    }
+}
+
+struct EnhanceSettings: Equatable {
+    var strength: Int = 0
+    var autoToneEnabled: Bool = true
     var warmthEnabled: Bool = true
+    var vibranceEnabled: Bool = true
     var clarityEnabled: Bool = true
+    var noiseReductionEnabled: Bool = true
     var subjectEmphasisEnabled: Bool = true
 
     var normalizedStrength: Double {
-        Double(max(0, min(10, strength))) / 10
+        Double(max(0, min(5, strength))) / 5
     }
+
+    var levelName: String {
+        switch max(0, min(5, strength)) {
+        case 0: return "Original"
+        case 1: return "Natural"
+        case 2: return "Balanced"
+        case 3: return "Vivid"
+        case 4: return "Dramatic"
+        default: return "Max"
+        }
+    }
+}
+
+struct EnhanceResult: Equatable {
+    var settings: EnhanceSettings
+    var debugValues: [String: Double]
 }
 
 struct BeautifyResult: Equatable {
     var settings: BeautifySettings
     var faceDetected: Bool
     var personDetected: Bool
+    var landscapeApplied: Bool
+    var landscapeColorApplied: Bool
+    var skyApplied: Bool
     var debugValues: [String: Double]
 }
 
 enum VoiceShutterCommand {
-    static func matches(_ transcript: String) -> Bool {
-        let words = transcript
+    static let spokenExamples = ["Cheese", "Take photo", "Take a picture", "Capture photo", "Snap a photo"]
+
+    static func matches(_ transcript: String, customPhrase: String? = nil) -> Bool {
+        let words = normalizedWords(in: transcript)
+
+        if let customPhrase {
+            let customWords = normalizedWords(in: customPhrase)
+            if !customWords.isEmpty, contains(customWords, in: words) { return true }
+        }
+
+        if words.contains("cheese") { return true }
+
+        let phrases = [
+            ["take", "photo"],
+            ["take", "a", "photo"],
+            ["take", "picture"],
+            ["take", "a", "picture"],
+            ["capture", "photo"],
+            ["capture", "a", "photo"],
+            ["capture", "picture"],
+            ["capture", "a", "picture"],
+            ["snap", "photo"],
+            ["snap", "a", "photo"],
+            ["snap", "picture"],
+            ["snap", "a", "picture"]
+        ]
+        return phrases.contains { contains($0, in: words) }
+    }
+
+    private static func normalizedWords(in phrase: String) -> [String] {
+        phrase
             .lowercased()
             .components(separatedBy: CharacterSet.letters.inverted)
             .filter { !$0.isEmpty }
+    }
 
-        if words.last == "cheese" { return true }
-        guard let takeIndex = words.lastIndex(of: "take") else { return false }
-        let command = Array(words[takeIndex...])
-        return command.starts(with: ["take", "photo"])
-            || command.starts(with: ["take", "a", "photo"])
-            || command.starts(with: ["take", "picture"])
-            || command.starts(with: ["take", "a", "picture"])
+    private static func contains(_ phrase: [String], in words: [String]) -> Bool {
+        guard !phrase.isEmpty, phrase.count <= words.count else { return false }
+        return words.indices.contains { index in
+            let endIndex = index + phrase.count
+            guard endIndex <= words.count else { return false }
+            return Array(words[index..<endIndex]) == phrase
+        }
+    }
+}
+
+enum ShutterTimerDelay: Int, CaseIterable, Identifiable {
+    case off = 0
+    case threeSeconds = 3
+    case fiveSeconds = 5
+    case tenSeconds = 10
+
+    var id: Int { rawValue }
+
+    var title: String {
+        rawValue == 0 ? "Off" : "\(rawValue)s"
     }
 }
 

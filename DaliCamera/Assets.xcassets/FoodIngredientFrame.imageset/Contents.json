@@ -1,0 +1,13 @@
+{
+  "images" : [
+    {
+      "filename" : "food-ingredient-frame.jpg",
+      "idiom" : "universal",
+      "scale" : "1x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
