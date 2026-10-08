@@ -4,6 +4,7 @@ Reference: native iOS `d53a977`, audited October 8, 2026. This records implement
 
 | Reference area | Implemented behavior | Acceptance / platform limits |
 | --- | --- | --- |
+| Header / App Settings / tutorial | Dali Cam, Manual, coaching light, gear and camera switch in native order; teal active states; landscape sidebar; About/version, native placeholder sections and seven-step tutorial | Earlier inventory omitted this header behavior; corrected after user comparison. Camera controls beside shutter; Help/import accessible through App Settings. Physical styling/accessibility acceptance pending |
 | Camera viewport / overlays | Complete oriented preview, normalized geometry, guidance/status and capture controls | Front/rear edge alignment, rotation and physical styling comparison |
 | Situation menu / classifier | Eight choices; Auto starts Person + Scene, uses three stable candidates, holds ambiguity and freezes during creative guidance | Native transition fixtures pass; matched Android scene calibration pending |
 | Effects menu | Independent Filter/Beautifier Auto, Custom, Off; Both Auto/Both Off; selected values and settings | Saved custom filter survives Off/Auto; capture applies from immutable original |
@@ -11,7 +12,7 @@ Reference: native iOS `d53a977`, audited October 8, 2026. This records implement
 | Packages / reference details | Montage overview, native descriptions/counts, reference grids, angles, lighting, cues and safety; selection feeds guidance | All shared catalog content exported; physical typography/spacing comparison |
 | Natural / Next / Skip / coaching | Manual progression, issue priority/cooldown/interruption, recipient/direction/status | 9 baseline and 150 rich native coaching cases; creative pose completion remains manual |
 | Detection | Face landmarks, pose geometry, luminance, scenic saliency/horizon, motion and explicit availability | Android multi-face groups + single-body pose; color-contrast saliency and gradient horizon differ from Vision; 16 native pose fixtures |
-| Camera settings | Timer Off/3/5/10; hold Burst/Timer/Disabled; voice preference/custom phrase; actual listening status | On-device recognition may be unavailable. Desired state survives pause independently from actual listening |
+| Camera controls | Timer Off/3/5/10; hold Burst/Timer/Disabled; voice preference/custom phrase; actual listening status | On-device recognition may be unavailable. Desired state survives pause independently from actual listening |
 | Filter settings | Named presets and seven parameters, Auto per situation, watermark; mode/preset/raw values persisted | iOS native Core Image sequence; Android corresponding spatial/color operations require visual tolerance acceptance |
 | Beautifier settings | General Enhance, Portrait Polish, Landscape Polish; native levels, presets, option switches and separate capture/review settings | Landmark-aware guarded eyes/lips, skin/blemishes and sky/color; strength-zero avoids cosmetics |
 | Depth | Reference rounded subject-region live overlay and feathered saved blur; subject/focus fallback | Baseline has no semantic segmentation or live Filter/Beautifier rendering. Android bounded preview blur needs physical edge/performance checks |

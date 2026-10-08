@@ -10,6 +10,9 @@ import 'camera_selection_row.dart';
 import 'reference_chooser.dart';
 import 'photo_effect_controls.dart';
 import 'review_comparison.dart';
+import 'camera_header.dart';
+import 'app_settings.dart';
+import 'camera_tutorial.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +66,7 @@ class _CameraScreenState extends State<CameraScreen>
   String? reviewVersionId;
   bool initialized = false;
   bool manualToolsVisible = false;
+  int presentedCameraSheets = 0;
   Orientation? orientation;
   @override
   void initState() {
@@ -78,20 +82,10 @@ class _CameraScreenState extends State<CameraScreen>
       final preferences = await SharedPreferences.getInstance();
       if (!mounted) return;
       if (preferences.getBool('welcomeSeen') != true) {
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Welcome to Dali'),
-            content: const Text(
-              'Frame a friend or a scene, follow one short cue, then take your photo. Optional references suggest poses, angles, and light.',
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Start camera'),
-              ),
-            ],
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            fullscreenDialog: true,
+            builder: (_) => const CameraTutorial(),
           ),
         );
         await preferences.setBool('welcomeSeen', true);
@@ -106,6 +100,7 @@ class _CameraScreenState extends State<CameraScreen>
   void refresh() {
     if (mounted) {
       setState(() {
+        if (!camera.manualWorkspace) manualToolsVisible = false;
         final source = camera.original?.id;
         final version = camera.selected?.id;
         if (source != reviewSourceId) {
@@ -183,101 +178,105 @@ class _CameraScreenState extends State<CameraScreen>
                     ],
                   ),
                 ],
-                CameraSelectionRow(
-                  camera: camera,
-                  onPackages: chooser,
-                  onEffects: effects,
-                ),
-                const SizedBox(height: 8),
-                Semantics(
-                  liveRegion: true,
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                camera.advice.tone == AdviceTone.ready
-                                    ? Icons.check_circle
-                                    : camera.advice.tone == AdviceTone.waiting
-                                    ? Icons.pending
-                                    : Icons.warning_amber,
-                                color: camera.advice.tone == AdviceTone.ready
-                                    ? Colors.greenAccent
-                                    : camera.advice.tone == AdviceTone.waiting
-                                    ? Colors.white70
-                                    : Colors.amber,
-                              ),
-                              const SizedBox(width: 8),
-                              Flexible(child: Text(camera.advice.statusTitle)),
-                              if (camera.advice.direction != null) ...[
-                                const SizedBox(width: 8),
-                                Icon(directionIcon(camera.advice.direction!)),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            (camera.shootingMode == PhotographicSituation.auto
-                                    ? 'Auto · ${camera.activeSituation.title}'
-                                    : camera.activeSituation.title)
-                                .toUpperCase(),
-                            style: Theme.of(context).textTheme.labelLarge,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            camera.advice.instruction,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          if (camera.guidanceDetail.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(camera.guidanceDetail),
-                          ],
-                        ],
-                      ),
-                    ),
+                if (camera.coachingEnabled) ...[
+                  CameraSelectionRow(
+                    camera: camera,
+                    onPackages: () => cameraSheet(chooser),
+                    onEffects: () => cameraSheet(effects),
                   ),
-                ),
-                if (camera.guidance.isActive) ...[
                   const SizedBox(height: 8),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Image.asset(
-                      camera.guidance.entry!.asset,
-                      width: 52,
-                      height: 68,
-                      fit: BoxFit.cover,
+                  Semantics(
+                    liveRegion: true,
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  camera.advice.tone == AdviceTone.ready
+                                      ? Icons.check_circle
+                                      : camera.advice.tone == AdviceTone.waiting
+                                      ? Icons.pending
+                                      : Icons.warning_amber,
+                                  color: camera.advice.tone == AdviceTone.ready
+                                      ? Colors.greenAccent
+                                      : camera.advice.tone == AdviceTone.waiting
+                                      ? Colors.white70
+                                      : Colors.amber,
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(camera.advice.statusTitle),
+                                ),
+                                if (camera.advice.direction != null) ...[
+                                  const SizedBox(width: 8),
+                                  Icon(directionIcon(camera.advice.direction!)),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              (camera.shootingMode == PhotographicSituation.auto
+                                      ? 'Auto · ${camera.activeSituation.title}'
+                                      : camera.activeSituation.title)
+                                  .toUpperCase(),
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              camera.advice.instruction,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            if (camera.guidanceDetail.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(camera.guidanceDetail),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
-                    title: Text(camera.guidance.entry!.title),
-                    subtitle: Text(
-                      camera.catalog.angleTitle(camera.guidance.entry!),
+                  ),
+                  if (camera.guidance.isActive) ...[
+                    const SizedBox(height: 8),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Image.asset(
+                        camera.guidance.entry!.asset,
+                        width: 52,
+                        height: 68,
+                        fit: BoxFit.cover,
+                      ),
+                      title: Text(camera.guidance.entry!.title),
+                      subtitle: Text(
+                        camera.catalog.angleTitle(camera.guidance.entry!),
+                      ),
+                      onTap: () => details(camera.guidance.entry!),
                     ),
-                    onTap: () => details(camera.guidance.entry!),
-                  ),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      FilledButton.tonal(
-                        onPressed: camera.guidance.complete
-                            ? null
-                            : camera.next,
-                        child: const Text('Done / Next'),
-                      ),
-                      TextButton(
-                        onPressed: camera.guidance.complete
-                            ? null
-                            : camera.next,
-                        child: const Text('Skip'),
-                      ),
-                      TextButton(
-                        onPressed: () => camera.choose(null),
-                        child: const Text('Natural'),
-                      ),
-                    ],
-                  ),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        FilledButton.tonal(
+                          onPressed: camera.guidance.complete
+                              ? null
+                              : camera.next,
+                          child: const Text('Done / Next'),
+                        ),
+                        TextButton(
+                          onPressed: camera.guidance.complete
+                              ? null
+                              : camera.next,
+                          child: const Text('Skip'),
+                        ),
+                        TextButton(
+                          onPressed: () => camera.choose(null),
+                          child: const Text('Natural'),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
                 if (camera.countdown > 0) ...[
                   Text(
@@ -347,10 +346,25 @@ class _CameraScreenState extends State<CameraScreen>
                   ),
                 ),
               ),
-              IconButton(
-                tooltip: 'Import photos',
-                icon: const Icon(Icons.add_photo_alternate_outlined),
-                onPressed: camera.busy ? null : choosePhotos,
+              HeaderAction(
+                tooltip: 'Camera controls',
+                size: 52,
+                radius: 10,
+                onPressed: camera.busy ? null : () => cameraSheet(settings),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.camera_outlined, size: 20),
+                    Text(
+                      'Controls',
+                      textScaler: TextScaler.noScaling,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -405,13 +419,14 @@ class _CameraScreenState extends State<CameraScreen>
                         ),
                       ),
                     ),
-                  IgnorePointer(
-                    child: CustomPaint(
-                      painter: FramePainter(
-                        camera.debug ? camera.lastFrame : null,
+                  if (camera.coachingEnabled)
+                    IgnorePointer(
+                      child: CustomPaint(
+                        painter: FramePainter(
+                          camera.debug ? camera.lastFrame : null,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -419,70 +434,77 @@ class _CameraScreenState extends State<CameraScreen>
         ),
       ),
     );
+    final header = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: CameraHeader(
+        manualVisible: manualToolsVisible,
+        manualMode: camera.manualWorkspace,
+        coachingEnabled: camera.coachingEnabled,
+        onManual: camera.busy
+            ? null
+            : () => setState(() {
+                if (camera.manualWorkspace) {
+                  manualToolsVisible = !manualToolsVisible;
+                } else {
+                  camera.manualWorkspace = true;
+                  manualToolsVisible = true;
+                }
+              }),
+        onCoaching: () => camera.setCoachingEnabled(!camera.coachingEnabled),
+        onSettings: () => cameraSheet(
+          () => showAppSettings(context, onHelp: help, onImport: choosePhotos),
+        ),
+        onSwitch: camera.starting || camera.busy ? null : camera.switchLens,
+      ),
+    );
+    if (orientation == Orientation.landscape) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Expanded(child: preview),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width * .44).clamp(0, 360),
+              child: Column(
+                children: [
+                  header,
+                  const SizedBox(height: 8),
+                  Expanded(child: controls),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(
+        header,
+        Expanded(
+          child: Column(
             children: [
-              Expanded(
-                child: Text(
-                  'Dali Camera',
-                  style: Theme.of(context).textTheme.titleLarge,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (camera.manualWorkspace)
-                TextButton(
-                  onPressed: () =>
-                      setState(() => manualToolsVisible = !manualToolsVisible),
-                  child: Text(
-                    camera.snapshot?.manualExposure == true
-                        ? 'Manual M'
-                        : 'Manual',
-                  ),
-                ),
-              IconButton(
-                tooltip: 'Camera settings',
-                onPressed: settings,
-                icon: const Icon(Icons.tune),
-              ),
-              IconButton(
-                tooltip: 'Help',
-                onPressed: help,
-                icon: const Icon(Icons.help_outline),
-              ),
-              IconButton(
-                tooltip: 'Switch camera',
-                onPressed: camera.starting || camera.busy
-                    ? null
-                    : camera.switchLens,
-                icon: const Icon(Icons.cameraswitch),
-              ),
+              Expanded(flex: 5, child: preview),
+              if (camera.coachingEnabled)
+                Expanded(flex: 4, child: controls)
+              else
+                SizedBox(height: 132, child: controls),
             ],
           ),
         ),
-        Expanded(
-          child: orientation == Orientation.landscape
-              ? Row(
-                  children: [
-                    Expanded(flex: 3, child: preview),
-                    SizedBox(
-                      width: MediaQuery.sizeOf(context).width * .38,
-                      child: controls,
-                    ),
-                  ],
-                )
-              : Column(
-                  children: [
-                    Expanded(flex: 5, child: preview),
-                    Expanded(flex: 4, child: controls),
-                  ],
-                ),
-        ),
       ],
     );
+  }
+
+  Future<void> cameraSheet(Future<void> Function() show) async {
+    presentedCameraSheets++;
+    camera.setControlsPresented(true);
+    try {
+      await show();
+    } finally {
+      presentedCameraSheets--;
+      if (mounted) camera.setControlsPresented(presentedCameraSheets > 0);
+    }
   }
 
   Widget review() {
@@ -942,7 +964,7 @@ class _CameraScreenState extends State<CameraScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Camera settings',
+                  'Camera controls',
                   style: Theme.of(ctx).textTheme.titleLarge,
                 ),
                 if (snapshot?.minimumISO != null &&
@@ -1056,7 +1078,7 @@ class _CameraScreenState extends State<CameraScreen>
       title: const Text('Take a photo with Dali'),
       content: const SingleChildScrollView(
         child: Text(
-          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Done / Next confirms a creative step; Dali does not verify the pose.\n\nTap the shutter for one photo; hold for a paced burst. Timer and custom voice phrase are in Camera settings. Voice runs on device where your phone supports it.\n\nEffects has separate Filter and Beautifier Auto, Custom, and Off choices. Depth of focus softens the background around the detected subject or your focus point. The original saves first; save the prepared copy separately.\n\nReview offers Original, Reframe, Level, General Enhance, Portrait Polish, and Landscape Polish when measurements are available. Before exports the original; After and Split export the selected version. Tap the photo to zoom and move the comparison split.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed original saves remain available for retry.',
+          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Done / Next confirms a creative step; Dali does not verify the pose.\n\nTap the shutter for one photo; hold for a paced burst. Timer and custom voice phrase are in Camera controls. Voice runs on device where your phone supports it.\n\nEffects has separate Filter and Beautifier Auto, Custom, and Off choices. Depth of focus softens the background around the detected subject or your focus point. The original saves first; save the prepared copy separately.\n\nReview offers Original, Reframe, Level, General Enhance, Portrait Polish, and Landscape Polish when measurements are available. Before exports the original; After and Split export the selected version. Tap the photo to zoom and move the comparison split.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed original saves remain available for retry.',
         ),
       ),
       actions: [

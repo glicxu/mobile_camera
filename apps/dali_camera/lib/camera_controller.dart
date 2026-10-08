@@ -154,6 +154,28 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   bool _depthUpdating = false;
   bool controlBusy = false;
   bool manualWorkspace = false;
+  bool coachingEnabled = true;
+  bool controlsPresented = false;
+
+  void setControlsPresented(bool value) {
+    controlsPresented = value;
+    if (value) cancelSequence();
+    notifyListeners();
+  }
+
+  void setCoachingEnabled(bool enabled) {
+    if (coachingEnabled == enabled) return;
+    coachingEnabled = enabled;
+    engine.reset();
+    if (!enabled) {
+      guidance = CatalogSession(null, catalog);
+      guidanceDetail = '';
+    } else if (lastFrame != null) {
+      analysis(jsonEncode(lastFrame));
+    }
+    notifyListeners();
+  }
+
   bool linkedISO = false;
   double linkedExposureProduct = 100 / 125;
   double linkedEV = 0;
@@ -177,6 +199,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       !controlBusy &&
       !starting &&
       !reviewing &&
+      !controlsPresented &&
       snapshot?.ready == true &&
       original?.unsaved != true;
 
@@ -1031,6 +1054,10 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       lastFrame = data;
       unawaited(updateDepthPreview());
       aspectRatio = packet.aspectRatio;
+      if (!coachingEnabled) {
+        notifyListeners();
+        return;
+      }
       var signals = packet.situationSignals;
       signals = signals.withSubjectMotion(
         subjectMotionTracker.update(signals, packet.frame.timestamp),

@@ -30,6 +30,32 @@ void main() {
         reason:
             'Camera readiness: ${camera.cameraError}; ${camera.message}; starting=${camera.starting}; snapshot=${camera.snapshot?.ready}',
       );
+      expect(find.text('Dali Cam'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('coachingToggle')));
+      await tester.pumpAndSettle();
+      expect(camera.coachingEnabled, isFalse);
+      expect(find.byKey(const Key('referenceMenu')), findsNothing);
+      expect(camera.canCapture, isTrue);
+      await tester.tap(find.byKey(const Key('coachingToggle')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('appSettingsButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('App Settings'), findsOneWidget);
+      expect(camera.canCapture, isFalse);
+      expect(find.text('Version'), findsOneWidget);
+      expect(find.text('Unavailable'), findsNothing);
+      await tester.tap(find.text('Quick camera tutorial'));
+      await tester.pumpAndSettle();
+      expect(find.text('Choose your shot'), findsOneWidget);
+      await tester.tap(find.text('Skip'));
+      await tester.pumpAndSettle();
+      expect(camera.canCapture, isTrue);
+      await tester.tap(find.byTooltip('Camera controls'));
+      await tester.pumpAndSettle();
+      expect(find.text('Camera controls'), findsOneWidget);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(camera.canCapture, isTrue);
       final previewSize = tester.getSize(find.byType(AspectRatio).first);
       expect(
         previewSize.width / previewSize.height,

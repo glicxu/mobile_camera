@@ -12,14 +12,16 @@ The baseline feature implementation is connected in Flutter and both native serv
 | Phase | Implementation status | Verification / remaining acceptance |
 | --- | --- | --- |
 | P0 | Reference behavior and defaults inventoried | Updated [UI inventory](cross_platform_ui_inventory.md); matched physical screenshots pending |
-| P1 | Three selection controls, contextual packages, montages, details, navigation and large-text layouts implemented | Widget navigation checks; physical typography/spacing comparison pending |
+| P1 | Native header (Manual/coaching/App Settings/switch), seven-step tutorial, landscape sidebar, three selection controls, contextual packages, montages, details, navigation and large-text layouts implemented | Widget navigation checks; physical typography/spacing comparison pending |
 | P2 | Eight situations, stable Auto classification, issue selection and creative guidance implemented | Nine baseline, 24 transition and 150 rich native coaching fixtures pass |
 | P3 | Face/pose/group geometry, luminance, saliency and optical horizon connected | 16 native pose fixtures pass; Android uses multi-face group coverage and single-body pose. Matched real-scene calibration pending |
 | P4 | Separate Filter/Beautifier modes, seven filter controls, Enhance/Portrait/Landscape, strengths/presets/options and capture sequence implemented | Immutable original/full-resolution bridge checks; Android cross-engine visual tolerances pending |
 | P5 | Reference subject-region depth preview and saved feathered blur implemented | Not semantic segmentation; front/rear depth edges and low-tier performance need joint testing |
 | P6 | Linked ISO, actual aperture, metering/locks/zoom, settings and persistent voice preference implemented | Capability-gated controls; Android live exposure-offset meter unavailable. Native Tv/Av requires the reference's disabled iOS 27 compile gate and is outside the Xcode 16.4 baseline |
 | P7 | Before/After/Split with zoom, analysis, reframe/level and polish, slideshow, imports, exports and cleanup implemented | Photos max 20; folder max 50 intentionally retained. Treatment settings are global in the reference, not persisted per photo. Save/share/recovery checks included |
-| P8 | Help, semantics, automated checks and test instructions updated | Physical iPhone, matched visual comparison, accessibility/audio/permission cases and longer thermal sessions remain acceptance work |
+| P8 | App Settings/About/version/native placeholder sections, Help, semantics, automated checks and test instructions updated | Physical iPhone, matched visual comparison, accessibility/audio/permission cases and longer thermal sessions remain acceptance work |
+
+Header correction: the user identified an omitted native header flow in the earlier parity candidate. The implementation now includes the coaching toggle and App Settings/tutorial, keeps camera controls beside the shutter, and guards shutter/voice capture while these screens are presented. Local analyzer and 19 Flutter tests pass, including large-text portrait/landscape navigation. Real-device validation is in progress.
 
 Read [joint phone testing](cross_platform_joint_testing.md) for the acceptance order and [Mac/iPhone setup](cross_platform_iphone_checkpoint.md) for signing/install steps. External posture/landscape package loading with image instructions is a future product feature; folder import currently opens photos for this review session.
 
@@ -96,7 +98,7 @@ The current table above records implementation completion. The original checklis
 
 The user requested implementation of all remaining parity features before joint testing. Physical comparison is deferred to that joint test; it is not a reason to stop independent software work. Retain visible folder import by the accepted product decision above.
 
-Processing work has started: typed still-analysis and recipe-rendering commands, generated iOS reference models/coaching/measurement/Enhance/Beautify/Depth engines with drift validation, and Android full-resolution processing with bounded analysis and explicit memory-budget failure. The Android backend currently needs calibrated optical horizon/saliency, feature geometry, exact reframe rules and further render equivalence work. UI wiring and acceptance remain pending; the new backend is not yet advertised as completed parity.
+Typed still-analysis and recipe-rendering commands, generated iOS reference processing engines with drift validation, and Android full-resolution processing are implemented and connected to the UI. Android optical horizon/saliency, guarded feature geometry and native reframe rules are implemented. Cross-engine visual and matched-scene detector calibration remain physical acceptance tasks; see the current coverage table and joint testing record.
 
 Source audit corrects the earlier P5 assumptions: native preview uses a material overlay around a subject region (`OverlayView.swift`, `DigitalDepthOfFocusOverlay`), and saved-photo depth uses a feathered rounded region (`BeautifyEngine.swift`, `DepthBlurEngine`). The baseline does not implement live semantic segmentation or live Filter/Beautify rendering. Match these actual behaviors; semantic segmentation is not an additional parity requirement.
 

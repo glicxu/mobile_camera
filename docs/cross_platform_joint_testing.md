@@ -7,14 +7,14 @@ Branch: `codex/cross-platform-20261007`. Native reference: `d53a977`. Baseline f
 Use `git rev-parse HEAD` to record the tested source. Android integration checks use isolated package `com.dalicamera.dali_camera.test`. The normal app is `com.dalicamera.dali_camera`; normal updates use `adb install -r` and never uninstall as a fallback. APK: `apps/dali_camera/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
 
 - Flutter 3.44.8 / Dart 3.12.2; Mac CI Xcode 16.4, iOS 17+.
-- Galaxy S10+ SM-G975U / Android 12: camera/control/export flow and native rendering/recovery checks pass at the implementation checkpoint. Final spatial treatment rerun pending.
-- Samsung SM-T290 / Android 11: 120-second analysis soak delivered 98 fresh one-second samples. Navigation/bridge rerun pending after removing a test assumption about Auto's active scene.
-- Shared core: 35 tests; Flutter: 18 tests and analysis pass. Swift comparisons: 9 baseline coaching, 24 scene transitions, 150 rich coaching and 16 pose geometry cases pass. Final CI/device evidence will be appended after the last run.
+- Galaxy S10+ SM-G975U / Android 12: camera/control/export flow and native rendering/recovery checks pass at the implementation checkpoint. Camera flow and independent geometry checks passed in 44 seconds; final spatial treatment suite passed in 9 seconds, including deterministic horizon leveling; this device returned a face but no confident body joints for the bundled portrait. The face-based estimated-person fallback is explicitly tested.
+- Samsung SM-T290 / Android 11: 120-second analysis soak delivered 98 fresh one-second samples. Camera navigation/control/export flow passed in 105 seconds and expanded rendering/recovery passed in 42 seconds. A subsequent screenshot exposed preview/analysis aspect mismatch. The correction passed the independent native geometry check and the full camera flow in 99 seconds; final file suite passed in 45 seconds, including the tilted optical horizon and Level correction. The normal app was updated without clearing data.
+- Shared core: 35 tests; Flutter: 19 tests and analysis pass. Swift comparisons: 9 baseline coaching, 24 scene transitions, 150 rich coaching and 16 pose geometry cases pass. Final CI/device evidence is recorded below.
 - Physical iPhone and second Android vendor remain untested. Debug checks do not establish release speed, thermal behavior or exact rendering equality.
 
 ## Test together in this order
 
-1. **Camera and menus.** Open rear camera. Confirm Situation, Effects and the contextual Posture/Landscape/Food control below the viewport. Browse a package, choose a reference, use Next/Skip/Natural, change situations and return. Check Close-up visibility, rotation, front-camera mirroring and large text.
+1. **Camera and menus.** Check Dali Cam ? Manual ? coaching light ? App Settings gear ? camera switch. Open App Settings and the seven-step tutorial; camera controls are beside the shutter. Coaching Off hides guidance while capture stays available. Open rear camera. Confirm Situation, Effects and the contextual Posture/Landscape/Food control below the viewport. Browse a package, choose a reference, use Next/Skip/Natural, change situations and return. Check Close-up visibility, rotation, front-camera mirroring and large text.
 2. **Capture and recovery.** Capture three photos, use timer and hold-burst, review and swipe between them. Confirm gallery originals and recent history. Return to camera, background/resume and switch lenses. A failed original save must offer retry/discard and block overwriting it.
 3. **Effects and custom settings.** Try Both Off, Both Auto and separate modes. Select a named filter, change its parameters, switch Off/Auto/Custom and restart: custom values must survive. Compare matching native iOS presets using the same imported source. Try General Enhance, Portrait and Landscape at strengths 0, 3 and 5 and toggle their options.
 4. **Review and exports.** Open a new photo in Before; choose a treatment and inspect After/Split/fullscreen zoom. Before saves/shares the original; After/Split saves/shares the selected copy. Cancel sharing, navigate, save another copy and confirm exported photo identity. Originals must remain unchanged.
@@ -28,3 +28,19 @@ On your Mac follow [iPhone installation](cross_platform_iphone_checkpoint.md). C
 ## Explicit acceptance limits
 
 Android's multi-face groups, single-body pose, color-contrast saliency, gradient horizon and spatial/color rendering differ from Vision/Core Image. We still need to agree on visual and detector tolerances using matched scenes. Depth matches the native rounded subject-region design, not semantic segmentation. On-device speech availability depends on the phone. Android live exposure-offset metering is unavailable; native Tv/Av is behind the disabled iOS 27 compile gate. An iOS add-only Photos commit crash can duplicate an original on retry; cleanup only affects private files, never gallery content.
+
+## Geometry correction
+
+Android now requests the same sensor-space 4:3 ratio for Preview and ImageAnalysis. The earlier fixed 640x480 analysis target was interpreted after target rotation and selected a different oriented ratio on the tablet. See [CameraX ImageAnalysis.Builder](https://developer.android.com/reference/androidx/camera/core/ImageAnalysis.Builder) for these coordinate rules. The camera integration test now compares independently reported preview resolution/rotation with the actual analysis frame dimensions, in addition to Flutter layout bounds. This closes a gap that the earlier layout-only test could not detect.
+
+Full pre-geometry CI [37833259478](https://github.com/glicxu/mobile_camera/actions/runs/37833259478) passed for `0d8d320`: shared and Flutter checks, Android build, unsigned iOS build, 51 native iOS tests, simulator bridge, and all native coaching/scene/pose comparisons. Production geometry correction is `4329ce4`; horizon schema completion and deterministic correction coverage are in `02f774d`. Final source/device evidence follows below.
+
+## Final Android build record
+
+Source: `02f774dad14bfb573d45322c631a8b34aa762d14`. Normal ARM64 debug APK SHA-256: `791bac9b81dcd0f7912dd98aaebcecdb54ea26e744ac1ece4edd30c5daa1cdf3`. Package `com.dalicamera.dali_camera`, version code 2001, version 0.1.0. Both Galaxy S10+ and SM-T290 are updated using `adb install -r`; the installed base APK on each phone was independently hashed and matches the checksum above. No normal app uninstall or data clearing occurred. Final Galaxy file suite passed in 9 seconds; tablet file suite passed in 45 seconds. Full CI result follows below.
+
+The optical horizon fixture is generated in the test, not a private photo: a 480x360 two-tone scene with a roughly 15-degree edge. Detection and Level output must each parse through the shared native-frame contract; the corrected result must be within two degrees of horizontal. Both real-camera suites independently compare preview and analysis geometry. Local analyzer and all 18 Flutter tests pass after the final change.
+
+## Header correction
+
+The earlier inventory omitted native header behavior. The corrected header includes Manual, coaching toggle, App Settings and camera switch in native order with teal active states. Landscape places it above controls in the right sidebar. App Settings contains About/current app version, the seven-step tutorial and native Language/Display/Purchase placeholders. Help and import remain accessible. Camera controls are beside the shutter. Presented settings/tutorials block voice/timer capture. Analyzer and 19 Flutter tests pass, including 2.5? text portrait/landscape navigation. Updated device/build evidence follows after validation.

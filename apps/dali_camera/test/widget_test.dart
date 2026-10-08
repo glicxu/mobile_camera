@@ -6,6 +6,8 @@ import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dali_camera/review_comparison.dart';
+import 'package:dali_camera/capture_settings.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class FakeHost extends CameraHostApi {
   bool failSave = false;
@@ -160,6 +162,81 @@ class ManualHost extends FakeHost {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(
+    () => PackageInfo.setMockInitialValues(
+      appName: 'Dali Camera',
+      packageName: 'com.dalicamera.dali_camera',
+      version: '0.1.0',
+      buildNumber: '2001',
+      buildSignature: '',
+    ),
+  );
+
+  testWidgets('Native header exposes Manual, coaching and App Settings', (
+    tester,
+  ) async {
+    final host = FakeHost();
+    final camera = CameraController(host: host, register: false);
+    await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+    await tester.pumpAndSettle();
+    expect(find.text('Dali Cam'), findsOneWidget);
+    expect(find.byTooltip('Help'), findsNothing);
+    final headerKeys = [
+      'manualControlsButton',
+      'coachingToggle',
+      'appSettingsButton',
+      'switchCamera',
+    ];
+    for (var i = 1; i < headerKeys.length; i++) {
+      expect(
+        tester.getCenter(find.byKey(Key(headerKeys[i]))).dx,
+        greaterThan(tester.getCenter(find.byKey(Key(headerKeys[i - 1]))).dx),
+      );
+    }
+    await tester.tap(find.byKey(const Key('manualControlsButton')));
+    await tester.pumpAndSettle();
+    expect(camera.manualWorkspace, isTrue);
+    expect(find.byType(ManualCameraTools), findsOneWidget);
+    await tester.tap(find.byKey(const Key('manualControlsButton')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ManualCameraTools), findsNothing);
+    await tester.tap(find.byKey(const Key('coachingToggle')));
+    await tester.pumpAndSettle();
+    expect(camera.coachingEnabled, isFalse);
+    expect(find.byKey(const Key('situationMenu')), findsNothing);
+    expect(camera.canCapture, isTrue);
+    await tester.tap(find.byKey(const Key('coachingToggle')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('situationMenu')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('appSettingsButton')));
+    await tester.pumpAndSettle();
+    expect(find.text('App Settings'), findsOneWidget);
+    expect(find.text('0.1.0 (2001)'), findsOneWidget);
+    expect(camera.canCapture, isFalse);
+    camera.voicePreferred = true;
+    camera.voiceShutter();
+    await tester.pumpAndSettle();
+    expect(
+      host.captures,
+      0,
+      reason: 'A settings sheet must block voice capture',
+    );
+    await tester.tap(find.text('Quick camera tutorial'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose your shot'), findsOneWidget);
+    for (var i = 0; i < 6; i++) {
+      await tester.tap(find.text('Next'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Review and return'), findsOneWidget);
+    await tester.tap(find.text('Start taking photos'));
+    await tester.pumpAndSettle();
+    expect(camera.canCapture, isTrue);
+    await tester.tap(find.byTooltip('Camera controls'));
+    await tester.pumpAndSettle();
+    expect(find.text('Camera controls'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   test('Filter application modes preserve the custom preset and settings', () {
     final camera = CameraController(host: FakeHost(), register: false);
     camera.filter = 'fresh';
@@ -581,7 +658,7 @@ void main() {
     final camera = CameraController(host: host, register: false);
     await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Import photos'));
+    await tester.tap(find.byTooltip('Choose photo'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('importFolder')));
     await tester.pumpAndSettle();
@@ -609,7 +686,10 @@ void main() {
         25,
       );
       expect(find.byKey(const Key('shutter')), findsOneWidget);
-      await tester.tap(find.byTooltip('Help'));
+      await tester.tap(find.byKey(const Key('appSettingsButton')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Help'));
+      await tester.tap(find.text('Help'));
       await tester.pumpAndSettle();
       expect(find.text('Take a photo with Dali'), findsOneWidget);
       expect(tester.takeException(), isNull);
