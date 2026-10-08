@@ -13,7 +13,7 @@ The user found that the Manual workspace still did not match iOS. The previous a
 
 Current corrections: compact Focus/Depth/Exposure preview rail and mutually exclusive editors; focus-only Manual tapping and separate exposure-Auto/full-Auto resets; session-only depth; native Camera controls sections including Beautifier; named filter fine-tuning; automatic review treatment updates and Reset; review navigation/action hierarchy; native preview coaching light/direction cues, countdown/burst overlays and watermark; direct reference selection with separate examples and adjacent posture navigation; tutorial illustrations. Analyzer and 21 Flutter tests pass at the initial correction checkpoint. Device/build validation follows after the library work.
 
-Additional audit gap: the lower-left native button browses all accessible system Photos with lazy loading. Flutter only opened a private latest capture/picker. Library listing, lazy loading, permission/limited-access fallback and wrap navigation are being ported next. Do not label P1/P7 complete while that destination differs.
+Additional audit gap: the lower-left native button browses all accessible system Photos with lazy loading. Flutter only opened a private latest capture/picker. That destination is now implemented: library listing, lazy loading, permission/limited-access fallback and wrap navigation. The review header retains its separate 20-photo picker. Device/CI validation and physical acceptance remain explicitly tracked.
 
 The remaining physical iPhone/screenshots, cross-engine rendering tolerances, permission/audio/accessibility scenarios, second Android vendor and ten-minute release performance sessions remain P8 acceptance work. Source helpers that are never called (`proExposureControls`, Auto-assistance card/lock bindings) do not establish an implemented reference screen; retain supported service capabilities without inventing reference UI.
 
@@ -26,7 +26,7 @@ The remaining physical iPhone/screenshots, cross-engine rendering tolerances, pe
 | P4 | Separate Filter/Beautifier modes, seven filter controls, Enhance/Portrait/Landscape, strengths/presets/options and capture sequence implemented | Immutable original/full-resolution bridge checks; Android cross-engine visual tolerances pending |
 | P5 | Reference subject-region depth preview and saved feathered blur implemented | Not semantic segmentation; front/rear depth edges and low-tier performance need joint testing |
 | P6 | **In validation:** native Manual rail/editors and linked ISO, actual aperture, metering/locks/zoom, settings and persistent voice preference implemented | Capability-gated controls; Android live exposure-offset meter unavailable. Native Tv/Av requires the reference's disabled iOS 27 compile gate and is outside the Xcode 16.4 baseline |
-| P7 | **In progress:** system Photos browser plus Before/After/Split with zoom, analysis, reframe/level and polish, slideshow, imports, exports and cleanup implemented | Photos max 20; folder max 50 intentionally retained. Treatment settings are global in the reference, not persisted per photo. Save/share/recovery checks included |
+| P7 | **In progress:** system Photos browser plus Before/After/Split with zoom, analysis, reframe/level and polish, slideshow, imports, exports and cleanup implemented | Selected-photo import max 20; folder max 50; full-library metadata has no import cap and loads images lazily. Folder access is intentionally visible. Treatment settings are global in the reference, not persisted per photo. Save/share/recovery checks included |
 | P8 | App Settings/About/version/native placeholder sections, Help, semantics, automated checks and test instructions updated | Physical iPhone, matched visual comparison, accessibility/audio/permission cases and longer thermal sessions remain acceptance work |
 
 Header correction: the user identified an omitted native header flow in the earlier parity candidate. The implementation now includes the coaching toggle and App Settings/tutorial, keeps camera controls beside the shutter, and guards shutter/voice capture while these screens are presented. Local analyzer and 19 Flutter tests pass, including large-text portrait/landscape navigation. Tablet (107 seconds) and Galaxy (44 seconds) full camera flows pass with the corrected header. Both normal apps are updated without clearing data, with installed hashes verified. Shared checks and Android/unsigned iOS builds pass; The clean-boot run subsequently failed at Flutter VM-service discovery; current CI validation is tracked below.
@@ -114,10 +114,12 @@ Source audit corrects the earlier P5 assumptions: native preview uses a material
 
 Dependencies: none.
 
-- [ ] Enumerate every implemented menu, settings section, screen, action, default, persisted value, and transition in `DaliCamera/ContentView.swift` and `Models.swift`.
+- [x] Enumerate every implemented menu, settings section, screen, action, default, persisted value, and transition in `DaliCamera/ContentView.swift` and `Models.swift`.
 - [ ] Record matching iOS screenshots for camera, all three selection controls, package browsing, capture settings, manual controls, review, and onboarding/help. Obtain physical iPhone evidence on the Mac; use deterministic replay states for repeatable Flutter screenshots.
-- [ ] Expand the coverage inventory into rows for individual behaviors, with reference source, Flutter status, Android/iOS availability, and evidence links.
-- [ ] Specify detector contracts and rendering outputs required by later phases. Distinguish planned native features from features actually implemented at the frozen reference.
+- [x] Expand the coverage inventory into rows for individual behaviors, with reference source, Flutter status, Android/iOS availability, and evidence links.
+- [x] Specify detector contracts and rendering outputs required by later phases. Distinguish planned native features from features actually implemented at the frozen reference.
+
+Checked boxes record software implementation; unchecked physical/mixed verification tasks still prevent acceptance. See the per-action audit and current test record.
 
 Acceptance: every reference action has a tracked destination or an explicit pending entry. Existing fixture matches are labeled with their actual scope; they do not substitute for the complete inventory.
 
@@ -126,10 +128,10 @@ Acceptance: every reference action has a tracked destination or an explicit pend
 Dependencies: P0 UI inventory. Implement this first; richer detection and rendering can follow.
 
 - [ ] Match the iOS hierarchy: viewport and overlays, selection row directly below the viewport, guidance/status, and capture controls. Match spacing, typography, selected values, icons, and menu behavior while retaining readable platform-appropriate controls.
-- [ ] Replace the People/Landscape/Food chip arrangement with the three iOS-style controls described below.
-- [ ] Match package browsing: package overview cards/montages, package detail reference grid, selected-reference indication, reference details, and return navigation. Preserve reference-driven camera angles, lighting, and safety notes.
-- [ ] Match latest-photo access, settings/help placement, guidance Next/Skip/Natural actions, and Manual workspace visibility behavior.
-- [ ] Extract camera, selection, catalog, settings, and review widgets from the large Flutter screen so subsequent parity work can be reviewed independently.
+- [x] Replace the People/Landscape/Food chip arrangement with the three iOS-style controls described below.
+- [x] Match package browsing: package overview cards/montages, package detail reference grid, selected-reference indication, reference details, and return navigation. Preserve reference-driven camera angles, lighting, and safety notes.
+- [x] Match latest-photo access, settings/help placement, guidance Next/Skip/Natural actions, and Manual workspace visibility behavior.
+- [x] Extract camera, selection, catalog, settings, and review widgets from the large Flutter screen so subsequent parity work can be reviewed independently.
 
 | Control below viewport | Required behavior |
 | --- | --- |
@@ -143,11 +145,11 @@ Acceptance: side-by-side screenshots and interaction checks confirm the camera s
 
 Dependencies: P0 contracts; connect to P1 controls.
 
-- [ ] Replace the two scene booleans with explicit situation and active-situation models matching native semantics. Port Auto classification, stability/hysteresis, per-situation guidance, overlays, and reference-reset behavior.
-- [ ] Port situation-specific angle choices and guidance without reintroducing a standalone angle picker absent from the reference flow.
-- [ ] Port the remaining native issue selection, priorities, cooldowns, interruptions, recipient selection, missing-measurement handling, and manual creative progression into Dart.
-- [ ] Export fixtures from the frozen Swift reference for all eight situations, classifier transitions, guidance replacement, Natural, missing signals, and urgent framing interruptions.
-- [ ] Define which choices persist across restart and which reset on lens, situation, reference, lifecycle, or review transitions; match native behavior.
+- [x] Replace the two scene booleans with explicit situation and active-situation models matching native semantics. Port Auto classification, stability/hysteresis, per-situation guidance, overlays, and reference-reset behavior.
+- [x] Port situation-specific angle choices and guidance without reintroducing a standalone angle picker absent from the reference flow.
+- [x] Port the remaining native issue selection, priorities, cooldowns, interruptions, recipient selection, missing-measurement handling, and manual creative progression into Dart.
+- [x] Export fixtures from the frozen Swift reference for all eight situations, classifier transitions, guidance replacement, Natural, missing signals, and urgent framing interruptions.
+- [x] Define which choices persist across restart and which reset on lens, situation, reference, lifecycle, or review transitions; match native behavior.
 
 Acceptance: identical normalized inputs produce the same advice and transitions in Swift and Dart. Situation selections affect behavior, rather than only labels. Unsupported measurements never yield invented corrections or a false ready state. Physical guidance acceptance waits for P3 calibration.
 
@@ -155,12 +157,12 @@ Acceptance: identical normalized inputs produce the same advice and transitions 
 
 Dependencies: P0 contract and P2 rule requirements.
 
-- [ ] Reuse/extract the reference Vision/CoreMotion pipeline in the Flutter iOS service, preserving the separate native app and one camera-session owner.
-- [ ] Add Android equivalents for required multi-person/group signals, pose landmarks, face landmarks/analysis, face and background luminance/backlighting, scenic composition, optical horizon, and subject bounds and saliency geometry (semantic segmentation is not in this baseline).
-- [ ] Evaluate Android detector coverage, offline operation, model size, licensing, and speed before pinning additional dependencies. Record per-signal limitations and tested fallbacks.
-- [ ] Extend the typed bridge with confidence, availability, timestamps, session/configuration IDs, and normalized geometry. Keep large frames and segmentation buffers native.
+- [x] Reuse/extract the reference Vision/CoreMotion pipeline in the Flutter iOS service, preserving the separate native app and one camera-session owner.
+- [x] Add Android equivalents for required multi-person/group signals, pose landmarks, face landmarks/analysis, face and background luminance/backlighting, scenic composition, optical horizon, and subject bounds and saliency geometry (semantic segmentation is not in this baseline).
+- [x] Evaluate Android detector coverage, offline operation, model size, licensing, and speed before pinning additional dependencies. Record per-signal limitations and tested fallbacks.
+- [x] Extend the typed bridge with confidence, availability, timestamps, session/configuration IDs, and normalized geometry. Keep large frames and segmentation buffers native.
 - [ ] Calibrate against annotated images and matched physical scenes across front/rear cameras, rotation, skin tones, low light, groups, and partial subjects. Keep optical horizon distinct from device roll.
-- [ ] Bound analysis queues, discard stale results, and schedule expensive analysis/effects without blocking preview or shutter feedback.
+- [x] Bound analysis queues, discard stale results, and schedule expensive analysis/effects without blocking preview or shutter feedback.
 
 Acceptance: calibrated tolerances and supported-signal tables are recorded. Physical overlays align at edges and corners; group behavior is not inferred from a single-person bounding box. Detector outputs may differ across engines, but downstream guidance must meet the agreed scene acceptance cases.
 
@@ -168,11 +170,11 @@ Acceptance: calibrated tolerances and supported-signal tables are recorded. Phys
 
 Dependencies: P0 rendering inventory; P3 landmarks/masks for subject-aware operations.
 
-- [ ] Expose the existing iOS filter, Enhance, and Beautify engines through the Flutter iOS service. Preserve filter operation ordering, presets, parameter ranges, defaults, Auto choices, and watermark placement.
-- [ ] Implement Android equivalents for temperature/tint, vibrance, shadows/highlights, noise reduction, clarity, and the remaining native filter operations; replace the current color-matrix approximation where it is insufficient.
-- [ ] Port General Enhance, Portrait Polish, and Landscape Polish with native strength levels/presets and individual settings. Include landmark-aware face brightness, skin/blemish processing, feature geometry, and landscape/sky treatment implemented by the reference.
-- [ ] Match separate Filter and Beautifier Auto/Custom/Off state, Both Auto/Both Off actions, settings persistence, and capture-time application behavior.
-- [ ] Define and preserve the native processing order between filters, polish, geometry adjustments, and watermark. Render from an immutable original; key results by source and settings so stale work cannot replace a newer selection.
+- [x] Expose the existing iOS filter, Enhance, and Beautify engines through the Flutter iOS service. Preserve filter operation ordering, presets, parameter ranges, defaults, Auto choices, and watermark placement.
+- [x] Implement Android equivalents for temperature/tint, vibrance, shadows/highlights, noise reduction, clarity, and the remaining native filter operations; replace the current color-matrix approximation where it is insufficient.
+- [x] Port General Enhance, Portrait Polish, and Landscape Polish with native strength levels/presets and individual settings. Include landmark-aware face brightness, skin/blemish processing, feature geometry, and landscape/sky treatment implemented by the reference.
+- [x] Match separate Filter and Beautifier Auto/Custom/Off state, Both Auto/Both Off actions, settings persistence, and capture-time application behavior.
+- [x] Define and preserve the native processing order between filters, polish, geometry adjustments, and watermark. Render from an immutable original; key results by source and settings so stale work cannot replace a newer selection.
 - [ ] Address the current Android derivative resolution limit. Test a full-resolution processing path within a measured memory budget; any remaining limitation must be visible and recorded rather than silently presented as parity.
 
 Acceptance: approved fixture images cover all presets and strengths, faces/no faces, sky/no sky, low light, and watermark on/off. Record visual tolerances before accepting Android equivalents; exact cross-engine bytes are not required. Off preserves original appearance, failed processing preserves the original, and save/share exports the selected result.
@@ -181,10 +183,10 @@ Acceptance: approved fixture images cover all presets and strengths, faces/no fa
 
 Dependencies: P3 subject-region geometry and P4 effect definitions. The native baseline does not require semantic segmentation.
 
-- [ ] Inventory the actual native live-preview effect path and match its supported effect/settings behavior in both services.
-- [ ] Implement subject-aware depth/background blur, masking, edge handling, and the reference's preview-versus-capture behavior. Avoid representing a whole-frame blur as depth.
-- [ ] Keep preview and overlays on one geometry transform; synchronize masks with their source frame and reject stale masks after lens/session changes.
-- [ ] Implement capability/performance fallback states and release rendering resources on pause, review, or camera changes. Manual capture remains available during processing failure.
+- [x] Inventory the actual native live-preview effect path and match its supported effect/settings behavior in both services.
+- [x] Implement subject-aware depth/background blur, masking, edge handling, and the reference's preview-versus-capture behavior. Avoid representing a whole-frame blur as depth.
+- [x] Keep preview and overlays on one geometry transform; synchronize masks with their source frame and reject stale masks after lens/session changes.
+- [x] Implement capability/performance fallback states and release rendering resources on pause, review, or camera changes. Manual capture remains available during processing failure.
 
 Acceptance: physical front/rear-camera tests demonstrate stable subject edges, correct mirroring/rotation, and no delayed masks after switching cameras. Compare live appearance with saved output and the reference. Meet measured performance targets; record lower-tier-device limitations explicitly.
 
@@ -192,11 +194,11 @@ Acceptance: physical front/rear-camera tests demonstrate stable subject edges, c
 
 Dependencies: P0 control inventory; may run before P4/P5 once shared contracts are stable.
 
-- [ ] Match manual/Auto workspace layout, Auto entry state, shutter/ISO changes, lock interactions, reset behavior, and displayed actual camera values.
-- [ ] Port implemented Tv/Av priority, linked ISO, exposure meter/recommendations, and aperture behavior when supported by the active camera and OS/SDK. Keep fixed apertures informational; do not simulate adjustable hardware or advertise unavailable priority modes.
+- [x] Match manual/Auto workspace layout, Auto entry state, shutter/ISO changes, lock interactions, reset behavior, and displayed actual camera values.
+- [x] Port reachable baseline Manual shutter/ISO/EV and aperture information; retain supported linked ISO service behavior. **Scope correction:** Tv/Av priority is behind the disabled iOS 27 compile gate; exposure-meter/recommendation UI helpers are not called by the baseline. Do not advertise them as working baseline hardware.
 - [ ] Verify EV, focus/exposure lock, tap metering, zoom, capture setting retention, and lens-specific capability refresh under concurrent actions and lifecycle interruptions.
 - [ ] Match voice preference versus actual listening state, foreground resumption policy, audio interruptions, custom phrase persistence, command deduplication, and permission/error messaging. Retain on-device-only availability behavior.
-- [ ] Match remaining implemented settings/defaults and help text. Hardware focus distance, custom white balance, RAW, and other reference roadmap features enter this plan only if implemented in the frozen baseline.
+- [x] Match remaining implemented settings/defaults and help text. Hardware focus distance, custom white balance, RAW, and other reference roadmap features enter this plan only if implemented in the frozen baseline.
 
 Acceptance: supported commands change actual sensor behavior, observed values agree with capture metadata, unsupported commands are unavailable, and stale commands are rejected. Both camera backends return completely to Auto. Voice/timer/burst cannot bypass pending-save or capture guards.
 
@@ -204,11 +206,11 @@ Acceptance: supported commands change actual sensor behavior, observed values ag
 
 Dependencies: P3 still-image analysis and P4 processed variants; navigation can start after P1.
 
-- [ ] Match native slideshow/swipe navigation, multiple-photo and folder import where supported, per-photo selection, global treatment settings, and comparison modes.
-- [ ] Port complete original/reframe/level/enhance/beautify treatment selection, strength controls, analysis/status cards, pose/lighting summaries, and diagnostic details from the reference.
-- [ ] Preserve full-resolution originals, orientation and mirror semantics. Keep review progress and exports associated with the correct photo during rapid navigation and processing.
+- [x] Match native slideshow/swipe navigation, multiple-photo and folder import where supported, per-photo selection, global treatment settings, and comparison modes.
+- [x] Port complete original/reframe/level/enhance/beautify treatment selection, strength controls, analysis/status and diagnostic details reachable in the reference. **Scope correction:** the standalone `reviewAnalysisCard` / lighting-summary helper is not called by the baseline review screen.
+- [x] Preserve full-resolution originals, orientation and mirror semantics. Keep review progress and exports associated with the correct photo during rapid navigation and processing.
 - [ ] Harden interrupted save reconciliation, recent-history retention, pending-original recovery, derived-copy cleanup, and disk-full behavior. Document the iOS Photos crash window and tested duplicate-avoidance limits.
-- [ ] Match save/share/copy output selection and cancellation/error/retry messaging. Folder access must use each platform's supported picker and permission model.
+- [x] Match save/share/copy output selection and cancellation/error/retry messaging. Folder access must use each platform's supported picker and permission model.
 
 Acceptance: review navigation, imports, comparisons, and selected exports match the reference. Injected processing/storage failures and process death do not lose originals, export another photo, or delete gallery content. Multi-photo work remains bounded in memory.
 

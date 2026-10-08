@@ -377,6 +377,57 @@ void main() {
     expect(await host.recover(), isNull);
     expect(await File(derived.path).exists(), isFalse);
     await file.delete();
+    // A 3.84 MP source exceeds the old derivative cap and bounded analysis size.
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    canvas.drawRect(
+      const ui.Rect.fromLTWH(0, 0, 2400, 1600),
+      ui.Paint()..color = const ui.Color(0xff606060),
+    );
+    canvas.drawRect(
+      const ui.Rect.fromLTWH(0, 800, 2400, 800),
+      ui.Paint()..color = const ui.Color(0xff406040),
+    );
+    final picture = recorder.endRecording();
+    final largeImage = await picture.toImage(2400, 1600);
+    picture.dispose();
+    final largeData = await largeImage.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
+    largeImage.dispose();
+    final largeBytes = largeData!.buffer.asUint8List(
+      largeData.offsetInBytes,
+      largeData.lengthInBytes,
+    );
+    final largeFile = File(
+      '${Directory.systemTemp.path}/dali-full-resolution.png',
+    );
+    await largeFile.writeAsBytes(largeBytes, flush: true);
+    final largeSource = PhotoHandle(
+      path: largeFile.path,
+      id: 'large-fixture',
+      unsaved: false,
+      mimeType: 'image/png',
+    );
+    final largeResult = await host.renderEffects(
+      largeSource,
+      jsonEncode({'version': 1, 'treatment': 'enhance', 'strength': 3}),
+    );
+    final largeCodec = await ui.instantiateImageCodec(
+      await File(largeResult.path).readAsBytes(),
+    );
+    final resultImage = (await largeCodec.getNextFrame()).image;
+    expect(resultImage.width, 2400);
+    expect(resultImage.height, 1600);
+    resultImage.dispose();
+    largeCodec.dispose();
+    expect(
+      await largeFile.readAsBytes(),
+      orderedEquals(largeBytes),
+      reason: 'High-resolution treatment must not overwrite its source',
+    );
+    await host.releasePhoto(largeResult);
+    await largeFile.delete();
   });
 }
 
