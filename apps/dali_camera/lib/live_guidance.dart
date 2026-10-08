@@ -63,7 +63,7 @@ class LiveGuidancePanel extends StatelessWidget {
                 ),
                 if (!camera.guidance.complete)
                   OutlinedButton(
-                    onPressed: camera.next,
+                    onPressed: camera.canAdvanceGuidance ? camera.next : null,
                     child: const Text('Next'),
                   ),
               ],

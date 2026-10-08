@@ -445,6 +445,22 @@ void main() {
       expect(find.byKey(const Key('situationGuidanceCard')), findsNothing);
       expect(find.text(poses.first.cues.join(' ')), findsOneWidget);
       expect(find.text('Next'), findsOneWidget);
+      camera.advice = const Advice(
+        type: 'subject_missing',
+        recipient: 'Photographer',
+        instruction: 'Find the subject',
+        tone: AdviceTone.warning,
+      );
+      await tester.pump();
+      expect(camera.canAdvanceGuidance, isFalse);
+      camera.next();
+      expect(
+        camera.guidance.index,
+        0,
+        reason: 'Urgent framing cannot confirm a creative step',
+      );
+      camera.choose(poses.first);
+      await tester.pump();
       await tester.timedDrag(
         find.byKey(const Key('activeReferenceCard')),
         const Offset(-100, 0),

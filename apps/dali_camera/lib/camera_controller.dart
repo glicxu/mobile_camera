@@ -1113,7 +1113,13 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     choose(entries[(index + offset + entries.length) % entries.length]);
   }
 
+  bool get canAdvanceGuidance =>
+      guidance.isActive &&
+      !guidance.complete &&
+      advice.type == guidance.advice?.type;
+
   void next() {
+    if (!canAdvanceGuidance) return;
     guidance.advance();
     engine.reset();
     advice = guidance.advice ?? advice;
