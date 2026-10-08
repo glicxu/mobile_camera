@@ -9,6 +9,15 @@ $ErrorActionPreference = 'Stop'
 $appDirectory = Join-Path $PSScriptRoot '../apps/dali_camera'
 $priorTestProperty = $env:DALI_ANDROID_TEST_APP
 $testPackage = 'com.dalicamera.dali_camera.test'
+# Camera tests cannot proceed behind a secure lock screen. Detect this before builds.
+& $Adb -s $DeviceId shell input keyevent KEYCODE_WAKEUP
+if ($LASTEXITCODE -ne 0) { throw 'Android device is unavailable' }
+& $Adb -s $DeviceId shell wm dismiss-keyguard
+$windowPolicy = & $Adb -s $DeviceId shell dumpsys window policy
+if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect Android lock-screen state' }
+if (($windowPolicy -join "`n") -match '(?m)^\s*showing=true\s*$') {
+    throw 'Unlock the attached phone before running camera checks; a secure lock screen cannot be dismissed automatically.'
+}
 Push-Location -LiteralPath $appDirectory
 try {
     # Flutter runner installs/uninstalls use a separate, disposable app ID.
