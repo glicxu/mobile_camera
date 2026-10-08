@@ -391,6 +391,28 @@ void main() {
       camera.dispose();
     },
   );
+  testWidgets('Folder import remains reachable in landscape with large text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(844, 390);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.platformDispatcher.textScaleFactorTestValue = 2.5;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final host = FakeHost();
+    final camera = CameraController(host: host, register: false);
+    await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Import photos'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('importFolder')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('importFolder')));
+    await tester.pumpAndSettle();
+    expect(host.importedFolder, isTrue);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'Shutter, Help and settings remain reachable at large text sizes',
     (tester) async {

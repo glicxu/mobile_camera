@@ -660,26 +660,28 @@ class _CameraScreenState extends State<CameraScreen>
     final folder = await showModalBottomSheet<bool>(
       context: context,
       builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Import up to 50 photos for review'),
-            ),
-            ListTile(
-              key: const Key('importPhotos'),
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Select photos'),
-              onTap: () => Navigator.pop(context, false),
-            ),
-            ListTile(
-              key: const Key('importFolder'),
-              leading: const Icon(Icons.folder_open),
-              title: const Text('Open folder'),
-              onTap: () => Navigator.pop(context, true),
-            ),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('Import up to 50 photos for review'),
+              ),
+              ListTile(
+                key: const Key('importPhotos'),
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Select photos'),
+                onTap: () => Navigator.pop(context, false),
+              ),
+              ListTile(
+                key: const Key('importFolder'),
+                leading: const Icon(Icons.folder_open),
+                title: const Text('Open folder'),
+                onTap: () => Navigator.pop(context, true),
+              ),
+            ],
+          ),
         ),
       ),
     );
