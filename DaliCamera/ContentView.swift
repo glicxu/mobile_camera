@@ -44,7 +44,8 @@ struct ContentView: View {
     @State private var chosenCameraPosition: GuidedCameraPosition?
     @State private var guideMoveRight = false
 
-    var body: some View {
+    // Keep each modifier group small enough for the SwiftUI type checker.
+    private var cameraContent: some View {
         ZStack {
             if let reviewImage = camera.reviewImage {
                 reviewSlideshowView(original: reviewImage)
@@ -64,6 +65,10 @@ struct ContentView: View {
         .background(Color.black)
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
+    }
+
+    private var lifecycleContent: some View {
+        cameraContent
         .task {
             voiceShutter.onTakePhoto = { camera.capturePhoto() }
             loadStoredBeautifySettings()
@@ -97,6 +102,10 @@ struct ContentView: View {
                 voiceShutter.pauseListening()
             }
         }
+    }
+
+    private var guidanceContent: some View {
+        lifecycleContent
         .sheet(item: $sharedPhoto) { photo in
             PhotoShareSheet(image: photo.image)
         }
@@ -142,6 +151,10 @@ struct ContentView: View {
                   !camera.isCapturing, !camera.guidedSession.isActive else { return }
             automaticSituation = situationClassifier.update(with: camera.measurements)
         }
+    }
+
+    private var reviewContent: some View {
+        guidanceContent
         .confirmationDialog("Discard the unsaved original?", isPresented: $showDiscardConfirmation, titleVisibility: .visible) {
             Button("Discard photo", role: .destructive) {
                 camera.discardUnsavedCapture()
@@ -191,6 +204,10 @@ struct ContentView: View {
             camera.stop()
             voiceShutter.pauseListening()
         }
+    }
+
+    var body: some View {
+        reviewContent
         .sheet(isPresented: $showConfiguration) {
             configurationSheet
                 .presentationDetents([.medium, .large])

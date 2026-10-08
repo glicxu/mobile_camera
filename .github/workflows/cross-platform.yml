@@ -75,5 +75,5 @@ jobs:
         run: xcodebuild test -project DaliCamera.xcodeproj -scheme DaliCamera -only-testing:DaliCameraTests -destination "platform=iOS Simulator,id=$DEVICE_ID" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO
       - name: Native Flutter bridge on iPhone simulator
         timeout-minutes: 10
-        run: flutter test integration_test/bridge_test.dart -d "$DEVICE_ID"
+        run: flutter test integration_test/bridge_test.dart -d "$DEVICE_ID" --verbose
         working-directory: apps/dali_camera
