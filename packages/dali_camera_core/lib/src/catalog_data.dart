@@ -16,11 +16,30 @@ const sharedCatalogJson = r'''
     "kids": "Kids",
     "newborn": "Newborn"
   },
+  "posePackageDescriptions": {
+    "masculine": "relaxed and structured solo poses",
+    "feminine": "soft and expressive solo poses",
+    "professional": "headshots, profiles, and workplace portraits",
+    "couples": "coordinated two-person poses",
+    "weddingEngagement": "rings, ceremony moments, dance, and celebration",
+    "friendsGroups": "natural poses for three or more people",
+    "family": "warm poses across ages and generations",
+    "graduation": "diploma, cap, gown, and celebration poses",
+    "maternity": "comfort-first solo and husband poses",
+    "kids": "short, playful, grounded child and sibling poses",
+    "newborn": "caregiver-supported and safe back-position photos"
+  },
   "landscapePackages": {
     "mountains": "Mountains",
     "lakes": "Lakes & Water",
     "plains": "Plains & Fields",
     "plants": "Plants & Gardens"
+  },
+  "landscapePackageDescriptions": {
+    "mountains": "Peaks, ridges, valleys, and foreground depth",
+    "lakes": "Reflections, shorelines, rocks, reeds, and water texture",
+    "plains": "Open sky, paths, repeating rows, and layered fields",
+    "plants": "Garden paths, foliage layers, patterns, and details"
   },
   "angles": {
     "eyeLevel": {

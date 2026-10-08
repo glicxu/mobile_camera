@@ -14,6 +14,8 @@ void main() {
         'pose': 'natural',
         'landscape': 'blueSky',
         'food': 'fresh',
+        'action': 'vivid',
+        'closeUp': 'bright',
       }.entries) {
         expect(
           PhotoStyle.preset(catalog, 'auto', entry.key).values,

@@ -32,6 +32,12 @@ class SharedCatalog {
           .cast<String, String>();
   String angleTitle(CatalogEntry entry) =>
       data['angles'][entry.angle]['title'] as String;
+  String packageDescription(String kind, String package) =>
+      (data['${kind}PackageDescriptions'] as Map?)?[package] as String? ?? '';
+  String lightTitle(CatalogEntry entry) =>
+      data['${entry.kind == 'pose' ? 'pose' : entry.kind}Lighting'][entry
+              .light]['title']
+          as String;
   String angleInstruction(CatalogEntry entry) =>
       data['angles'][entry.angle]['instruction'] as String;
   String lightDescription(CatalogEntry entry) {

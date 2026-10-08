@@ -1,11 +1,13 @@
 import 'package:dali_camera/main.dart';
 import 'package:dali_camera/camera_controller.dart';
 import 'package:dali_camera_platform/dali_camera_platform.dart';
+import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class FakeHost extends CameraHostApi {
   bool failSave = false;
+  bool failRender = false;
   int captures = 0;
   PhotoHandle? retained;
   int released = 0;
@@ -55,10 +57,125 @@ class FakeHost extends CameraHostApi {
 
   @override
   Future<void> share(PhotoHandle photo) async {}
+  @override
+  Future<PhotoHandle> render(
+    PhotoHandle original,
+    double rotationDegrees,
+    bool crop,
+    double strength,
+  ) async {
+    if (failRender) throw StateError('Renderer unavailable');
+    return PhotoHandle(
+      path: 'derived.jpg',
+      id: 'derived-${original.id}',
+      unsaved: false,
+    );
+  }
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'Review navigation protects pending originals and failed variants',
+    () async {
+      final host = FakeHost();
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      for (var i = 0; i < 3; i++) {
+        await camera.capturePhoto(review: false);
+      }
+      await camera.openHistory(camera.history.first);
+      expect(camera.canPreviousPhoto, isFalse);
+      expect(camera.canNextPhoto, isTrue);
+      await camera.nextPhoto();
+      expect(camera.original!.id, 'original-2');
+      await camera.variant(crop: true);
+      final prior = camera.selected;
+      host.failRender = true;
+      await camera.variant(rotation: 2);
+      expect(camera.selected, same(prior));
+      expect(host.released, 0);
+      await camera.previousPhoto();
+      expect(camera.original!.id, 'original-3');
+      expect(host.released, 1);
+      camera.original!.unsaved = true;
+      expect(camera.canNextPhoto, isFalse);
+      await camera.nextPhoto();
+      expect(camera.original!.id, 'original-3');
+      camera.dispose();
+    },
+  );
+  testWidgets('Selection row switches scenes, filters and package navigation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final camera = CameraController(host: FakeHost(), register: false);
+    await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+    await tester.pumpAndSettle();
+    WidgetController.hitTestWarningShouldBeFatal = true;
+    addTearDown(() => WidgetController.hitTestWarningShouldBeFatal = false);
+    expect(find.text('Situation'), findsOneWidget);
+    expect(find.text('Effects'), findsOneWidget);
+    expect(find.text('Posture'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('referenceMenu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Male / Masculine'));
+    await tester.pumpAndSettle();
+    expect(find.text('Relaxed standing'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back to packages'));
+    await tester.pumpAndSettle();
+    expect(find.text('Posture packages'), findsOneWidget);
+    await tester.tap(find.byTooltip('Close packages'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('situationMenu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Group'));
+    await tester.pumpAndSettle();
+    expect(camera.activeSituation, PhotographicSituation.group);
+    await tester.tap(find.byKey(const Key('situationMenu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Food'));
+    await tester.pumpAndSettle();
+    expect(camera.food, isTrue);
+    await tester.tap(find.byKey(const Key('referenceMenu')));
+    await tester.pumpAndSettle();
+    expect(find.text('Hero plate'), findsOneWidget);
+    await tester.tap(find.text('Hero plate'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Use this reference'));
+    await tester.tap(find.text('Use this reference'));
+    await tester.pumpAndSettle();
+    expect(camera.guidance.entry!.kind, 'food');
+
+    await tester.tap(find.byKey(const Key('effectsMenu')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.ancestor(
+        of: find.text('Auto'),
+        matching: find.byType(CheckedPopupMenuItem<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(camera.filter, 'auto');
+    expect(find.text('Filters Auto'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('effectsMenu')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.ancestor(
+        of: find.text('Custom'),
+        matching: find.byType(CheckedPopupMenuItem<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Filters and watermark'), findsOneWidget);
+    expect(find.text('Dali watermark'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   test(
     'Failed original save blocks capture and survives a controller recreation',
     () async {

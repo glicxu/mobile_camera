@@ -45,11 +45,12 @@ dart test
 cd ../../apps/dali_camera
 flutter analyze
 flutter test
-flutter test integration_test/bridge_test.dart -d YOUR_DEVICE_ID
-flutter test integration_test/phone_test.dart -d YOUR_DEVICE_ID
+# For Android device tests, use the isolated Windows helper described below.
 ```
 
 The phone integration test takes real photos for timer/style, original/crop and a short burst, leaving the gallery copies in Pictures/Dali. It expects camera permission already granted. Flutter's test runner may uninstall the test app afterwards; reinstall the normal debug APK for manual use. The Windows helper prepares permissions and reinstalls the normal app after tests:
+
+Use a device whose private test data can be recreated for integration tests: Flutter may also uninstall after an installation failure, including a version downgrade. The Windows helper now uses a separate `com.dalicamera.dali_camera.test` app, verifies the actual APK package ID with aapt before invoking Flutter, and grants camera permission only to that test app. Normal app data is isolated from test-runner cleanup. Do not run raw Flutter integration commands against the normal Android app. The helper requires SDK build-tools 36.0.0 for identity validation. For a normal app update, use `adb install -r` and stop on failure; never resolve an update failure by uninstalling a user's app.
 
 Run the helper from the repo root with `./tools/test_android_camera.ps1 -DeviceId YOUR_DEVICE_ID -SoakSeconds 600` for a ten-minute live-analysis check. Use `-Flutter` to supply the Flutter executable when it is not on PATH. The test also checks supported exposure/lock controls and rejects settings from an old camera configuration.
 

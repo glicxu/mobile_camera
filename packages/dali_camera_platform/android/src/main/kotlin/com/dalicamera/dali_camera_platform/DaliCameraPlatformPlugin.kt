@@ -285,6 +285,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     .put("configurationId", config).put("aspectRatio", aspect).put("people", people).put("faces", faceBoxes)
                     .put("roll", roll).put("motion", motion).put("stable", motion < 0.22)
                     .put("backgroundLuminance", if (count > 0) sum / count else JSONObject.NULL)
+                    .put("peopleScope", "single").put("saliencyStatus", "unsupported").put("luminanceScale", 1)
                     .put("peopleStatus", if (poseTask.isSuccessful) "valid" else "unavailable")
                     .put("faceStatus", if (faceTask.isSuccessful) "valid" else "unavailable")
                     .put("horizonStatus", "unsupported").put("openAreaStatus", "unsupported").put("timestamp", System.currentTimeMillis())
@@ -477,6 +478,13 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         if (file.parentFile == photoFile().parentFile?.canonicalFile && file.extension in listOf("jpg", "jpeg", "png", "heic", "heif") && recover()?.id != photo.id) {
             if (file.exists()) check(file.delete()) { "Cannot release private copy" }
         }
+    }
+    override fun renderFilter(original: PhotoHandle, matrix: List<Double>, parameters: List<Double>, watermarkPath: String?, callback: (Result<PhotoHandle>) -> Unit) {
+        if (parameters.size != 7 || !parameters.all { it.isFinite() }) {
+            callback(Result.failure(IllegalArgumentException("Invalid filter parameters"))); return
+        }
+        // Android spatial/color parity remains subject to visual calibration.
+        renderStyle(original, matrix, parameters[4].coerceIn(0.0, 5.0), parameters[5].coerceIn(0.0, 5.0), watermarkPath, callback)
     }
     override fun renderStyle(original: PhotoHandle, matrix: List<Double>, softness: Double, detail: Double, watermarkPath: String?, callback: (Result<PhotoHandle>) -> Unit) {
         executor.execute {

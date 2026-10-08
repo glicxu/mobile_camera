@@ -27,13 +27,32 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   bool starting = false;
   bool foreground = true;
   bool front = false;
-  bool landscape = false;
-  bool food = false;
-  String get catalogKind => food
-      ? 'food'
-      : landscape
-      ? 'landscape'
-      : 'pose';
+  PhotographicSituation shootingMode = PhotographicSituation.auto;
+  final situationClassifier = SituationClassifier();
+  final subjectMotionTracker = SubjectMotionTracker();
+  PhotographicSituation get activeSituation =>
+      shootingMode == PhotographicSituation.auto
+      ? situationClassifier.recommendation
+      : shootingMode;
+  // Compatibility for existing capture tests and stored filter selection.
+  bool get landscape => activeSituation == PhotographicSituation.landscape;
+  set landscape(bool value) => setSituation(
+    value ? PhotographicSituation.landscape : PhotographicSituation.portrait,
+  );
+  bool get food => activeSituation == PhotographicSituation.food;
+  set food(bool value) => setSituation(
+    value ? PhotographicSituation.food : PhotographicSituation.portrait,
+  );
+  String get catalogKind => activeSituation.catalogKind ?? 'pose';
+  String guidanceDetail = '';
+  void setSituation(PhotographicSituation value) {
+    if (shootingMode == value) return;
+    shootingMode = value;
+    subjectMotionTracker.reset();
+    choose(null);
+    if (lastFrame != null) analysis(jsonEncode(lastFrame));
+  }
+
   int timerSeconds = 0;
   int countdown = 0;
   int _sequence = 0;
@@ -46,9 +65,26 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   bool watermark = false;
   bool styled = false;
   final List<PhotoHandle> history = [];
+  int get reviewIndex =>
+      history.indexWhere((photo) => photo.id == original?.id);
+  bool get canPreviousPhoto =>
+      !busy && original?.unsaved != true && reviewIndex > 0;
+  bool get canNextPhoto =>
+      !busy &&
+      original?.unsaved != true &&
+      reviewIndex >= 0 &&
+      reviewIndex < history.length - 1;
+  Future<void> previousPhoto() async {
+    if (canPreviousPhoto) await openHistory(history[reviewIndex - 1]);
+  }
+
+  Future<void> nextPhoto() async {
+    if (canNextPhoto) await openHistory(history[reviewIndex + 1]);
+  }
+
   PhotoStyle get style => filter == 'custom'
       ? PhotoStyle(customStyle)
-      : PhotoStyle.preset(catalog, filter, catalogKind);
+      : PhotoStyle.preset(catalog, filter, activeSituation.name);
   bool get sequenceActive => countdown > 0 || bursting;
   bool debug = false;
   bool voice = false;
@@ -99,6 +135,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     starting = true;
     cameraError = null;
     engine.reset();
+    subjectMotionTracker.reset();
     notifyListeners();
     try {
       snapshot = await host.start(front);
@@ -291,11 +328,12 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     busy = true;
     notifyListeners();
     try {
-      await _releaseVariant();
-      styled = false;
-      selected = rotation == 0 && !crop && strength == 0
+      final result = rotation == 0 && !crop && strength == 0
           ? original
           : await host.render(original!, rotation, crop, strength);
+      await _releaseVariant();
+      styled = false;
+      selected = result;
       message = null;
     } catch (e) {
       message = 'Could not prepare this version: $e';
@@ -373,12 +411,19 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   Future<void> openHistory(PhotoHandle photo) async {
     if (busy || (original?.unsaved == true && original?.id != photo.id)) return;
     cancelSequence();
-    await _releaseVariant();
-    original = photo;
-    selected = photo;
-    styled = false;
-    reviewing = true;
-    await pause();
+    busy = true;
+    notifyListeners();
+    try {
+      await _releaseVariant();
+      original = photo;
+      selected = photo;
+      styled = false;
+      reviewing = true;
+      await pause();
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
   }
 
   Future<void> applyStyle() async {
@@ -413,11 +458,12 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       markPath = file.path;
     }
     final selectedStyle = style;
-    return host.renderStyle(
+    return host.renderFilter(
       source,
       selectedStyle.matrix,
-      selectedStyle.value('softness').toDouble(),
-      selectedStyle.value('detail').toDouble(),
+      PhotoStyle.fields
+          .map((field) => selectedStyle.value(field).toDouble())
+          .toList(),
       markPath,
     );
   }
@@ -538,6 +584,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   void choose(CatalogEntry? entry) {
     cancelSequence();
+    guidanceDetail = '';
     guidance = CatalogSession(entry, catalog);
     engine.reset();
     advice =
@@ -629,24 +676,27 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       final packet = NativeFrame(data);
       lastFrame = data;
       aspectRatio = packet.aspectRatio;
-      final roll = packet.measurements.cameraRollDegrees;
-      if (landscape || food) {
-        advice = roll.abs() > 3
-            ? Advice(
-                type: 'camera_tilted',
-                recipient: 'Photographer',
-                instruction: roll > 0 ? 'Tilt left' : 'Tilt right',
-                tone: AdviceTone.warning,
-              )
-            : guidance.advice ??
-                  Advice(
-                    type: catalogKind,
-                    recipient: 'Photographer',
-                    instruction: food
-                        ? 'Choose a Food recipe or frame your dish.'
-                        : 'Choose a composition or frame your scene.',
-                    tone: AdviceTone.waiting,
-                  );
+      var signals = packet.situationSignals;
+      signals = signals.withSubjectMotion(
+        subjectMotionTracker.update(signals, packet.frame.timestamp),
+      );
+      if (shootingMode == PhotographicSituation.auto &&
+          !busy &&
+          !sequenceActive &&
+          !guidance.isActive) {
+        final previous = activeSituation;
+        situationClassifier.update(signals);
+        if (previous != activeSituation) {
+          cancelSequence();
+          guidance = CatalogSession(null, catalog);
+          engine.reset();
+        }
+      }
+      guidanceDetail = '';
+      if (!activeSituation.supportsPoseGuidance) {
+        final situation = situationGuidance(activeSituation, signals);
+        guidanceDetail = situation.detail;
+        advice = guidance.advice ?? situation.advice;
       } else if (data['peopleStatus'] == 'unavailable') {
         advice = const Advice(
           type: 'detector_unavailable',
@@ -668,6 +718,13 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           guidance.prioritize(issues),
           fallback: guidance.advice,
         );
+      }
+      if (activeSituation.supportsPoseGuidance) {
+        guidanceDetail = advice.recipient == 'Photographer'
+            ? 'Adjust the camera position or framing.'
+            : advice.recipient == 'Subject'
+            ? 'Ask the subject to make this adjustment.'
+            : 'Dali is analyzing the live camera view.';
       }
       if (log.isEmpty || log.last['instruction'] != advice.instruction) {
         log.add({

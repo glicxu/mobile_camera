@@ -1,5 +1,7 @@
 # Dali Camera Cross-Platform Implementation Plan
 
+For the current remaining work, follow the [remaining iOS-to-Flutter porting plan](cross_platform_remaining_port_plan.md). It supersedes this historical plan's remaining-work order and scope exclusions for features now implemented in the native reference.
+
 Date: October 7, 2026
 Status: Implementation in progress. Shared catalogs, Flutter screens and Android/iOS service adapters are implemented for the first capture/review/export milestone. Remaining parity and validation are tracked in [feature coverage](cross_platform_parity.md); install instructions are in [Android testing](android_testing.md).
 Original baseline: `da72a5d` on `main`. Remote main `d53a977` is now merged; see [the sync inventory](cross_platform_main_sync.md) for added Flutter features and native-only differences.

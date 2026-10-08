@@ -58,6 +58,17 @@ def identifiers(block):
     return re.findall(r'(\w+)\s*=\s*"([^"]+)"', header)
 
 
+def posture_descriptions():
+    view = (ROOT / 'DaliCamera/ContentView.swift').read_text(encoding='utf-8')
+    match = re.search(r'private func posturePackageDescription\([^\n]+\{(.*?)\n    \}', view, re.S)
+    if not match:
+        raise ValueError('Missing native posture descriptions')
+    values = {key: json.loads(value) for key, value in re.findall(r'case\s+\.(\w+):\s*return\s+("[^\n]+")', match.group(1))}
+    if values.keys() != property_cases(enum('GuidedPoseCollectionID'), 'title').keys():
+        raise ValueError('Posture description coverage changed')
+    return values
+
+
 def catalog(name, fields, landscape=False, food=False):
     block = enum(name)
     props = {field: property_cases(block, field) for field in fields}
@@ -138,7 +149,9 @@ def main():
     asset_bytes = {item['asset']: item.pop('_bytes') for item in poses + landscapes + foods}
     data = {'schemaVersion': 1, 'sourceSha256': hashlib.sha256(text.encode('utf-8')).hexdigest(),
             'posePackages': property_cases(enum('GuidedPoseCollectionID'), 'title'),
+            'posePackageDescriptions': posture_descriptions(),
             'landscapePackages': property_cases(enum('LandscapeCompositionPackageID'), 'title'),
+            'landscapePackageDescriptions': property_cases(enum('LandscapeCompositionPackageID'), 'description'),
             'angles': {key: {'title': value, 'instruction': property_cases(enum('CameraAngleChoice'), 'instruction')[key]}
                        for key, value in property_cases(enum('CameraAngleChoice'), 'title').items()},
             'poseLighting': {key: {'title': value, 'instruction': property_cases(enum('PoseLightingRecommendation'), 'instruction')[key]}

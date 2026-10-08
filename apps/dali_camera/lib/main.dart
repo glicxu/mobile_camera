@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'camera_controller.dart';
 import 'capture_settings.dart';
+import 'camera_selection_row.dart';
+import 'reference_chooser.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -152,6 +154,12 @@ class _CameraScreenState extends State<CameraScreen>
                     ],
                   ),
                 ],
+                CameraSelectionRow(
+                  camera: camera,
+                  onPackages: chooser,
+                  onEffects: effects,
+                ),
+                const SizedBox(height: 8),
                 Semantics(
                   liveRegion: true,
                   child: Card(
@@ -184,7 +192,10 @@ class _CameraScreenState extends State<CameraScreen>
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            camera.advice.recipient.toUpperCase(),
+                            (camera.shootingMode == PhotographicSituation.auto
+                                    ? 'Auto · ${camera.activeSituation.title}'
+                                    : camera.activeSituation.title)
+                                .toUpperCase(),
                             style: Theme.of(context).textTheme.labelLarge,
                           ),
                           const SizedBox(height: 8),
@@ -192,53 +203,14 @@ class _CameraScreenState extends State<CameraScreen>
                             camera.advice.instruction,
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
+                          if (camera.guidanceDetail.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(camera.guidanceDetail),
+                          ],
                         ],
                       ),
                     ),
                   ),
-                ),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('People'),
-                      selected: !camera.landscape && !camera.food,
-                      onSelected: (_) {
-                        camera.landscape = false;
-                        camera.food = false;
-                        camera.choose(null);
-                      },
-                    ),
-                    ChoiceChip(
-                      label: const Text('Landscape'),
-                      selected: camera.landscape,
-                      onSelected: (_) {
-                        camera.landscape = true;
-                        camera.food = false;
-                        camera.choose(null);
-                      },
-                    ),
-                    ChoiceChip(
-                      label: const Text('Food'),
-                      selected: camera.food,
-                      onSelected: (_) {
-                        camera.food = true;
-                        camera.landscape = false;
-                        camera.choose(null);
-                      },
-                    ),
-                    FilledButton.tonal(
-                      onPressed: () => chooser(),
-                      child: Text(
-                        camera.food
-                            ? 'Food recipes'
-                            : camera.landscape
-                            ? 'Landscape packages'
-                            : 'Posture packages',
-                      ),
-                    ),
-                  ],
                 ),
                 if (camera.guidance.isActive) ...[
                   const SizedBox(height: 8),
@@ -507,6 +479,33 @@ class _CameraScreenState extends State<CameraScreen>
             ),
           ],
         ),
+        if (camera.reviewIndex >= 0)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                tooltip: 'Previous photo',
+                onPressed: camera.canPreviousPhoto
+                    ? () {
+                        setState(() => compare = false);
+                        camera.previousPhoto();
+                      }
+                    : null,
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Text('${camera.reviewIndex + 1} / ${camera.history.length}'),
+              IconButton(
+                tooltip: 'Next photo',
+                onPressed: camera.canNextPhoto
+                    ? () {
+                        setState(() => compare = false);
+                        camera.nextPhoto();
+                      }
+                    : null,
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -515,6 +514,16 @@ class _CameraScreenState extends State<CameraScreen>
               children: [
                 if (photo != null)
                   GestureDetector(
+                    onHorizontalDragEnd: (details) {
+                      final speed = details.primaryVelocity ?? 0;
+                      if (speed.abs() < 200) return;
+                      setState(() => compare = false);
+                      if (speed < 0) {
+                        camera.nextPhoto();
+                      } else {
+                        camera.previousPhoto();
+                      }
+                    },
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => Scaffold(
@@ -645,76 +654,49 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> chooser() async {
-    final kind = camera.catalogKind;
-    await showModalBottomSheet<void>(
+    camera.cancelSequence();
+    final result = await showModalBottomSheet<Object>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (ctx) => SizedBox(
         height: MediaQuery.sizeOf(ctx).height * .85,
-        child: Column(
-          children: [
-            ListTile(
-              title: Text(
-                kind == 'food'
-                    ? 'Food recipes'
-                    : kind == 'pose'
-                    ? 'Posture packages'
-                    : 'Landscape packages',
+        child: ReferenceChooser(
+          catalog: camera.catalog,
+          kind: camera.catalogKind,
+          selected: camera.guidance.entry,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result == 'natural') camera.choose(null);
+    if (result is CatalogEntry) await details(result, select: true);
+  }
+
+  Future<void> effects() {
+    camera.cancelSequence();
+    return showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (ctx) => AnimatedBuilder(
+        animation: camera,
+        builder: (ctx, _) => SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Effects'),
+                trailing: IconButton(
+                  tooltip: 'Close effects',
+                  onPressed: () => Navigator.pop(ctx),
+                  icon: const Icon(Icons.close),
+                ),
               ),
-              trailing: IconButton(
-                tooltip: 'Close packages',
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(ctx),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                camera.choose(null);
-                Navigator.pop(ctx);
-              },
-              child: const Text('Natural'),
-            ),
-            Expanded(
-              child: ListView(
-                children: camera.catalog
-                    .packages(kind)
-                    .entries
-                    .map(
-                      (package) => ExpansionTile(
-                        title: Text(package.value),
-                        children: [
-                          ...camera.catalog.entries
-                              .where(
-                                (item) =>
-                                    item.kind == kind &&
-                                    item.package == package.key,
-                              )
-                              .map(
-                                (item) => ListTile(
-                                  leading: Image.asset(
-                                    item.asset,
-                                    width: 64,
-                                    height: 84,
-                                    fit: BoxFit.cover,
-                                  ),
-                                  title: Text(item.title),
-                                  subtitle: Text(
-                                    camera.catalog.angleTitle(item),
-                                  ),
-                                  onTap: () {
-                                    Navigator.pop(ctx);
-                                    details(item, select: true);
-                                  },
-                                ),
-                              ),
-                        ],
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
-          ],
+              CaptureStyleControls(camera: camera, initiallyExpanded: true),
+            ],
+          ),
         ),
       ),
     );

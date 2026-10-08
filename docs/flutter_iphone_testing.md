@@ -2,6 +2,8 @@
 
 Use `codex/cross-platform-20261007` for the new Flutter app. It uses a separate identifier from the native reference app and requires iOS 17 or later. The existing `DaliCamera.xcodeproj` remains the reference.
 
+For the current selection-row, situation and filter comparison, follow the [Mac/iPhone checkpoint](cross_platform_iphone_checkpoint.md). It lists the new behaviors and the physical evidence needed before calibration.
+
 ## Install on a physical iPhone
 
 On a Mac with Xcode 16.4 and Flutter 3.44.8:
@@ -33,6 +35,6 @@ Record the iPhone model, iOS version and source commit. Use the same scene and l
 
 Send the model/OS, commit, failing step and a preview/output comparison when alignment differs. This evidence is needed to accept M4 and set meaningful detector and enhancement tolerances for M5.
 
-The current Flutter build offers basic framing, tilt/stability, all 106 catalog references, recent originals, timer/burst, filters/watermark review copies, tap focus/zoom and supported manual shutter/ISO. Rich pose/face/horizon measurements, other situation modes, and native beautify/reframe/level parity remain tracked in [feature coverage](cross_platform_parity.md).
+The current Flutter build offers all eight situation choices, shared Auto classification, all 106 references, recent-photo navigation, timer/burst, filter/watermark copies, tap focus/zoom and supported manual shutter/ISO. Flutter iOS now requests full-body rectangles, saliency and optical horizon and renders the native filter operation sequence. Physical validation, the richer pose/face pipeline, Android detector/rendering parity, Beautifier/depth and full review treatments remain tracked in [feature coverage](cross_platform_parity.md).
 
 Follow the additional Food, timer/burst, filter/watermark and Manual checks in [main sync testing](cross_platform_main_sync.md#phone-test-additions).

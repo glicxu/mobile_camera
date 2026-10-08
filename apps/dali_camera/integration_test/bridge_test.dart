@@ -81,6 +81,39 @@ void main() {
     styleCodec.dispose();
     await host.releasePhoto(style);
     expect(await File(style.path).exists(), isFalse);
+    final preset = PhotoStyle.preset(SharedCatalog(), 'fresh', 'food');
+    final filtered = await host.renderFilter(
+      original,
+      preset.matrix,
+      PhotoStyle.fields.map((field) => preset.value(field).toDouble()).toList(),
+      null,
+    );
+    final filterCodec = await ui.instantiateImageCodec(
+      await File(filtered.path).readAsBytes(),
+    );
+    final filterImage = (await filterCodec.getNextFrame()).image;
+    expect(filterImage.width, input.width);
+    expect(filterImage.height, input.height);
+    expect(
+      pixelDifference(
+        originalPixels,
+        (await filterImage.toByteData())!,
+        input.width,
+        0,
+        0,
+        input.width,
+        input.height,
+      ),
+      greaterThan(1),
+    );
+    expect(await file.readAsBytes(), bytes);
+    filterImage.dispose();
+    filterCodec.dispose();
+    await host.releasePhoto(filtered);
+    await expectLater(
+      host.renderFilter(original, preset.matrix, [0], null),
+      throwsA(isA<PlatformException>()),
+    );
     await host.releasePhoto(original);
     expect(
       await file.exists(),

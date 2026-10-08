@@ -35,6 +35,8 @@ For the new iPhone app, use [`docs/flutter_iphone_testing.md`](docs/flutter_ipho
 
 The Flutter and native-adapter migration is tracked in
 [`docs/dali_camera_cross_platform_port_plan.md`](docs/dali_camera_cross_platform_port_plan.md).
+The remaining UI and feature parity work is planned in
+[`docs/cross_platform_remaining_port_plan.md`](docs/cross_platform_remaining_port_plan.md).
 
 ## Current Prototype Advice
 

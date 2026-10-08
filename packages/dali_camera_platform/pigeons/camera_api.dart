@@ -103,6 +103,13 @@ abstract class CameraHostApi {
     double detail,
     String? watermarkPath,
   );
+  @async
+  PhotoHandle renderFilter(
+    PhotoHandle original,
+    List<double> matrix,
+    List<double> parameters,
+    String? watermarkPath,
+  );
   void setVoicePhrase(String phrase);
   void releasePhoto(PhotoHandle photo);
   @async

@@ -249,6 +249,28 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
     }
+    func renderFilter(original: PhotoHandle, matrix: [Double], parameters: [Double], watermarkPath: String?, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
+        queue.async {
+            do {
+                guard matrix.count == 20, matrix.allSatisfy({ $0.isFinite }), parameters.count == 7, parameters.allSatisfy({ $0.isFinite }),
+                      var image = CIImage(contentsOf: URL(fileURLWithPath: original.path), options: [.applyOrientationProperty: true]) else { throw self.failure("Invalid style or photo") }
+                let extent = image.extent
+                image = ReferencePhotoFilter.apply(image, parameters: parameters)
+                if let watermarkPath {
+                    guard var mark = CIImage(contentsOf: URL(fileURLWithPath: watermarkPath)) else { throw self.failure("Cannot load watermark") }
+                    let scale = extent.width * 0.28 / mark.extent.width
+                    mark = mark.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                    let margin = max(18, extent.width * 0.025)
+                    mark = mark.transformed(by: CGAffineTransform(translationX: extent.maxX - mark.extent.maxX - margin, y: extent.minY - mark.extent.minY + margin))
+                    mark = mark.applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0.86)])
+                    image = mark.composited(over: image)
+                }
+                guard let output = self.ci.createCGImage(image, from: extent), let data = UIImage(cgImage: output).jpegData(compressionQuality: 0.95) else { throw self.failure("Cannot render style") }
+                let handle = try self.newPhoto(); try data.write(to: URL(fileURLWithPath: handle.path), options: .atomic)
+                DispatchQueue.main.async { completion(.success(handle)) }
+            } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+        }
+    }
     func setZoom(configurationId: String, zoom: Double, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
         queue.async {
             do {
@@ -311,21 +333,38 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         let now = CFAbsoluteTimeGetCurrent(); guard active, now - lastFrame > 0.15, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         lastFrame = now; let epoch = generation
-        let people = VNDetectHumanRectanglesRequest(); let faces = VNDetectFaceRectanglesRequest()
+        let people = VNDetectHumanRectanglesRequest(); people.upperBodyOnly = false
+        let faces = VNDetectFaceRectanglesRequest()
+        let saliency = VNGenerateObjectnessBasedSaliencyImageRequest()
+        let horizon = VNDetectHorizonRequest()
         do {
-            try VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up).perform([people, faces])
+            let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up)
+            try handler.perform([people, faces])
+            // Optional requests must not suppress working person/face analysis.
+            var saliencyStatus = "unavailable"
+            var horizonStatus = "unavailable"
+            do { try handler.perform([saliency]); saliencyStatus = "valid" } catch {}
+            do { try handler.perform([horizon]); horizonStatus = "valid" } catch {}
             func boxes(_ observations: [VNDetectedObjectObservation]) -> [[String: Any]] { observations.map { obs in
                 let r = obs.boundingBox
                 return ["x": r.minX, "y": 1-r.maxY, "width": r.width, "height": r.height, "confidence": obs.confidence, "label": "detection"]
             }}
             aspect = Double(CVPixelBufferGetWidth(buffer)) / Double(CVPixelBufferGetHeight(buffer))
-            let data: [String: Any] = ["schemaVersion": 1, "frameId": "\(epoch):\(now)",
+            var data: [String: Any] = ["schemaVersion": 1, "frameId": "\(epoch):\(now)",
                 "imageWidth": CVPixelBufferGetWidth(buffer), "imageHeight": CVPixelBufferGetHeight(buffer),
                 "displayRotationDegrees": Int(rotation), "front": front,
                 "motionStatus": motion.isDeviceMotionAvailable ? "valid" : "unsupported",
                 "timestamp": Int(Date().timeIntervalSince1970 * 1000), "configurationId": configuration, "aspectRatio": aspect,
                 "people": boxes(people.results ?? []), "faces": boxes(faces.results ?? []), "roll": currentRoll,
-                "motion": currentMotion, "stable": currentMotion < 0.22, "peopleStatus": "valid", "faceStatus": "valid", "horizonStatus": "unsupported", "openAreaStatus": "unsupported"]
+                "motion": currentMotion, "stable": currentMotion < 0.22, "peopleStatus": "valid", "faceStatus": "valid", "horizonStatus": horizonStatus, "openAreaStatus": "unsupported",
+                "peopleScope": "multiple", "saliencyStatus": saliencyStatus]
+            if let object = saliency.results?.first?.salientObjects?.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height }) {
+                data["salientObject"] = boxes([object]).first
+            }
+            if let observation = horizon.results?.first {
+                data["horizon"] = ["angleDegrees": Double(observation.angle) * 180 / .pi, "normalizedY": 0.5]
+                data["horizonConfidence"] = observation.confidence
+            }
             let json = String(data: try JSONSerialization.data(withJSONObject: data), encoding: .utf8)!
             DispatchQueue.main.async {
                 if epoch == self.generation && self.active {

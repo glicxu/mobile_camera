@@ -16,7 +16,8 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.dalicamera.dali_camera"
+        applicationId = if (System.getenv("DALI_ANDROID_TEST_APP") == "true")
+            "com.dalicamera.dali_camera.test" else "com.dalicamera.dali_camera"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 26

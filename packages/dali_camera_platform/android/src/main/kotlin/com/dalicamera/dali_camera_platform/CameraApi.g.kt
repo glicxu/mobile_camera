@@ -247,6 +247,7 @@ interface CameraHostApi {
   fun render(original: PhotoHandle, rotationDegrees: Double, crop: Boolean, strength: Double, callback: (Result<PhotoHandle>) -> Unit)
   fun setControls(configurationId: String, ev: Double, locked: Boolean, callback: (Result<CameraSnapshot>) -> Unit)
   fun renderStyle(original: PhotoHandle, matrix: List<Double>, softness: Double, detail: Double, watermarkPath: String?, callback: (Result<PhotoHandle>) -> Unit)
+  fun renderFilter(original: PhotoHandle, matrix: List<Double>, parameters: List<Double>, watermarkPath: String?, callback: (Result<PhotoHandle>) -> Unit)
   fun setVoicePhrase(phrase: String)
   fun releasePhoto(photo: PhotoHandle)
   fun setZoom(configurationId: String, zoom: Double, callback: (Result<CameraSnapshot>) -> Unit)
@@ -463,6 +464,29 @@ interface CameraHostApi {
             val detailArg = args[3] as Double
             val watermarkPathArg = args[4] as String?
             api.renderStyle(originalArg, matrixArg, softnessArg, detailArg, watermarkPathArg) { result: Result<PhotoHandle> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.renderFilter$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val originalArg = args[0] as PhotoHandle
+            val matrixArg = args[1] as List<Double>
+            val parametersArg = args[2] as List<Double>
+            val watermarkPathArg = args[3] as String?
+            api.renderFilter(originalArg, matrixArg, parametersArg, watermarkPathArg) { result: Result<PhotoHandle> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))

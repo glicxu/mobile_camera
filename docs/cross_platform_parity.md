@@ -4,6 +4,8 @@ Baseline: native iOS `d53a977` (merged from remote main). Updated October 8, 202
 
 The native app remains the reference for complete behavior. The new app is under `apps/dali_camera`; service code is in `packages/dali_camera_platform`. This inventory describes implemented code, with validation evidence recorded separately.
 
+Full UI and feature parity is **not complete**. Follow the [remaining porting plan](cross_platform_remaining_port_plan.md) and [initial UI inventory](cross_platform_ui_inventory.md). The first UI increment adds Situation/Effects/contextual reference controls and package-card/grid browsing; all eight situation modes now have shared behavior and explicit missing-signal fallbacks; Beautifier remains unavailable. The earlier validation below does not validate this new increment.
+
 | Feature | Flutter / shared implementation | Android service | Flutter iOS service |
 | --- | --- | --- | --- |
 | Complete-frame preview / rotation / mirroring | Shared geometry and debug overlay | CameraX preview, rotated analysis, capture mirroring | AVFoundation rotated/mirrored outputs and preview |
@@ -25,7 +27,7 @@ The native app remains the reference for complete behavior. The new app is under
 | Diagnostic log | Bounded instruction log, user copies it explicitly | No photos or speech transcripts in log | No photos or speech transcripts in log |
 | Advanced measurement parity | Pending calibration and port of derived measurements | Single-person pose extent is not a multi-person detector; no optical horizon or scenic estimator yet | Basic adapter does not yet expose original rich pose/face/saliency/horizon pipeline |
 | Full review enhancement parity | Pending | Native crop currently available; original beautify/reframe/level behavior remains to port | Native crop currently available; original beautify/reframe/level behavior remains to port |
-| Situation-specific controls | People/Landscape/Food currently available | Other native situations remain to port | Other native situations remain to port |
+| Situation-specific controls | All eight choices and shared Auto classifier; scene-specific rules with availability fallbacks | Multi-person, saliency and optical horizon detection remain pending | Full-body/group rectangles, saliency and optical horizon requests added; physical validation pending |
 
 ## Validation and limitations
 

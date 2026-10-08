@@ -57,8 +57,8 @@ void main() {
           'SOAK: ${soak.elapsed.inSeconds}s, $receivedUpdates fresh one-second samples',
         );
       }
-      await tester.ensureVisible(find.text('Posture packages'));
-      await tester.tap(find.text('Posture packages'));
+      await tester.ensureVisible(find.byKey(const Key('referenceMenu')));
+      await tester.tap(find.byKey(const Key('referenceMenu')));
       await tester.pumpAndSettle();
       expect(find.text('Male / Masculine'), findsOneWidget);
       await tester.tap(find.text('Male / Masculine'));
@@ -147,13 +147,13 @@ void main() {
         expect(camera.snapshot!.manualExposure, isFalse);
         expect(camera.snapshot!.currentEV, closeTo(0, .1));
       }
-      await tester.ensureVisible(find.text('Food'));
+      await tester.ensureVisible(find.byKey(const Key('situationMenu')));
+      await tester.tap(find.byKey(const Key('situationMenu')));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Food'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Food recipes'));
-      await tester.tap(find.text('Food recipes'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Food photography'));
+      await tester.ensureVisible(find.byKey(const Key('referenceMenu')));
+      await tester.tap(find.byKey(const Key('referenceMenu')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Hero plate'));
       await tester.pumpAndSettle();

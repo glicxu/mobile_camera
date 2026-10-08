@@ -146,11 +146,14 @@ class CaptureStyleControls extends StatelessWidget {
     super.key,
     required this.camera,
     this.review = false,
+    this.initiallyExpanded = false,
   });
   final CameraController camera;
   final bool review;
+  final bool initiallyExpanded;
   @override
   Widget build(BuildContext context) => ExpansionTile(
+    initiallyExpanded: initiallyExpanded,
     title: const Text('Filters and watermark'),
     subtitle: const Text(
       'Creates a separate review copy. Original stays unchanged.',

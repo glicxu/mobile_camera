@@ -57,6 +57,12 @@ jobs:
           cd packages/dali_camera_core
           dart pub get
           dart run tool/verify_swift_fixtures.dart ../../fixtures/swift-baseline.json
+      - name: Compare native situation transitions
+        run: |
+          swiftc -parse-as-library DaliCamera/Models.swift DaliCamera/CoachingEngine.swift tools/ExportSituationFixtures.swift -o /tmp/export-dali-situations
+          /tmp/export-dali-situations "$GITHUB_WORKSPACE/fixtures/swift-situations.json"
+          cd packages/dali_camera_core
+          dart run tool/verify_situation_fixtures.dart ../../fixtures/swift-situations.json
       - uses: actions/upload-artifact@v4
         with:
           name: swift-baseline-fixtures

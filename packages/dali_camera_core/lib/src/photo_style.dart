@@ -43,6 +43,10 @@ class PhotoStyle {
               ? 'fresh'
               : kind == 'landscape'
               ? 'blueSky'
+              : kind == 'action'
+              ? 'vivid'
+              : kind == 'closeUp'
+              ? 'bright'
               : 'natural'
         : name;
     final data = catalog.data['filters'][resolved]['settings'] as Map;

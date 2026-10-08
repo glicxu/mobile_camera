@@ -325,6 +325,7 @@ protocol CameraHostApi {
   func render(original: PhotoHandle, rotationDegrees: Double, crop: Bool, strength: Double, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func setControls(configurationId: String, ev: Double, locked: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
   func renderStyle(original: PhotoHandle, matrix: [Double], softness: Double, detail: Double, watermarkPath: String?, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
+  func renderFilter(original: PhotoHandle, matrix: [Double], parameters: [Double], watermarkPath: String?, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func setVoicePhrase(phrase: String) throws
   func releasePhoto(photo: PhotoHandle) throws
   func setZoom(configurationId: String, zoom: Double, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
@@ -521,6 +522,26 @@ class CameraHostApiSetup {
       }
     } else {
       renderStyleChannel.setMessageHandler(nil)
+    }
+    let renderFilterChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.renderFilter\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      renderFilterChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let originalArg = args[0] as! PhotoHandle
+        let matrixArg = args[1] as! [Double]
+        let parametersArg = args[2] as! [Double]
+        let watermarkPathArg: String? = nilOrValue(args[3])
+        api.renderFilter(original: originalArg, matrix: matrixArg, parameters: parametersArg, watermarkPath: watermarkPathArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      renderFilterChannel.setMessageHandler(nil)
     }
     let setVoicePhraseChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setVoicePhrase\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

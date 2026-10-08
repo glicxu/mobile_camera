@@ -17,6 +17,34 @@ Map<String, dynamic> packet() => {
   'motionStatus': 'unsupported',
 };
 void main() {
+  test('Optional scene signals preserve availability and luminance units', () {
+    final data = packet()
+      ..['saliencyStatus'] = 'valid'
+      ..['salientObject'] = {
+        'x': .2,
+        'y': .2,
+        'width': .5,
+        'height': .5,
+        'confidence': .8,
+        'label': 'object',
+      }
+      ..['horizonStatus'] = 'valid'
+      ..['horizon'] = {'angleDegrees': 5, 'normalizedY': .5}
+      ..['horizonConfidence'] = .8
+      ..['backgroundLuminance'] = .5
+      ..['luminanceScale'] = 1;
+    final value = NativeFrame(data);
+    expect(value.situationSignals.saliencyAvailable, isTrue);
+    expect(value.situationSignals.salientObject!.rect.area, .25);
+    expect(value.measurements.backgroundLuminance, 127.5);
+    expect(value.measurements.horizonAngleDegrees, 5);
+    expect(value.frame.groupAnalysis.status, MeasurementStatus.unsupported);
+    data['horizonStatus'] = 'unavailable';
+    expect(
+      NativeFrame(data).frame.horizon.status,
+      MeasurementStatus.unavailable,
+    );
+  });
   test(
     'Empty detection, unavailable detector and missing sensor remain distinct',
     () {
