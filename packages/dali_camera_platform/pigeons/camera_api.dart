@@ -95,6 +95,10 @@ abstract class CameraHostApi {
   @async
   PhotoImport pickPhotos(bool folder);
   @async
+  String analyzePhoto(PhotoHandle photo);
+  @async
+  PhotoHandle renderEffects(PhotoHandle original, String recipe);
+  @async
   PhotoHandle render(
     PhotoHandle original,
     double rotationDegrees,

@@ -60,6 +60,14 @@ Android filters approximate the native render using a color matrix and spatial p
 
 ## Ordered implementation phases
 
+### Full-parity implementation run (October 8, 2026)
+
+The user requested implementation of all remaining parity features before joint testing. Physical comparison is deferred to that joint test; it is not a reason to stop independent software work. Retain visible folder import by the accepted product decision above.
+
+Processing work has started: typed still-analysis and recipe-rendering commands, generated iOS reference models/coaching/measurement/Enhance/Beautify/Depth engines with drift validation, and Android full-resolution processing with bounded analysis and explicit memory-budget failure. The Android backend currently needs calibrated optical horizon/saliency, feature geometry, exact reframe rules and further render equivalence work. UI wiring and acceptance remain pending; the new backend is not yet advertised as completed parity.
+
+Source audit corrects the earlier P5 assumptions: native preview uses a material overlay around a subject region (`OverlayView.swift`, `DigitalDepthOfFocusOverlay`), and saved-photo depth uses a feathered rounded region (`BeautifyEngine.swift`, `DepthBlurEngine`). The baseline does not implement live semantic segmentation or live Filter/Beautify rendering. Match these actual behaviors; semantic segmentation is not an additional parity requirement.
+
 ### P0 — Freeze a screen and behavior inventory
 
 Dependencies: none.

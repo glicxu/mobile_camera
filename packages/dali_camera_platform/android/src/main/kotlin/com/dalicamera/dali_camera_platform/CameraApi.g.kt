@@ -285,6 +285,8 @@ interface CameraHostApi {
   fun share(photo: PhotoHandle, callback: (Result<Unit>) -> Unit)
   fun pickPhoto(callback: (Result<PhotoHandle?>) -> Unit)
   fun pickPhotos(folder: Boolean, callback: (Result<PhotoImport>) -> Unit)
+  fun analyzePhoto(photo: PhotoHandle, callback: (Result<String>) -> Unit)
+  fun renderEffects(original: PhotoHandle, recipe: String, callback: (Result<PhotoHandle>) -> Unit)
   fun render(original: PhotoHandle, rotationDegrees: Double, crop: Boolean, strength: Double, callback: (Result<PhotoHandle>) -> Unit)
   fun setControls(configurationId: String, ev: Double, locked: Boolean, callback: (Result<CameraSnapshot>) -> Unit)
   fun renderStyle(original: PhotoHandle, matrix: List<Double>, softness: Double, detail: Double, watermarkPath: String?, callback: (Result<PhotoHandle>) -> Unit)
@@ -456,6 +458,47 @@ interface CameraHostApi {
             val args = message as List<Any?>
             val folderArg = args[0] as Boolean
             api.pickPhotos(folderArg) { result: Result<PhotoImport> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.analyzePhoto$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val photoArg = args[0] as PhotoHandle
+            api.analyzePhoto(photoArg) { result: Result<String> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.renderEffects$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val originalArg = args[0] as PhotoHandle
+            val recipeArg = args[1] as String
+            api.renderEffects(originalArg, recipeArg) { result: Result<PhotoHandle> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))

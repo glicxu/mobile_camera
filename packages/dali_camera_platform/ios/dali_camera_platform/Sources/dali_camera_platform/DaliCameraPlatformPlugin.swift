@@ -15,6 +15,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     private let photoOutput = AVCapturePhotoOutput()
     private let motion = CMMotionManager()
     private let ci = CIContext()
+    private let stillProcessor = StillPhotoProcessor()
     private let speech = SpeechShutterService()
     private var events: CameraEvents!
     private var preview: CameraView?
@@ -265,6 +266,41 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             }
             if photos.isEmpty { self.finishImport(.failure(self.failure("No readable images were found"))) }
             else { self.finishImport(.success(PhotoImport(photos: photos, skipped: Int64(skipped)))) }
+        }
+    }
+    func analyzePhoto(photo: PhotoHandle, completion: @escaping (Result<String, Error>) -> Void) {
+        queue.async {
+            do {
+                let result = try autoreleasepool { try self.stillProcessor.analyze(photo) }
+                DispatchQueue.main.async { completion(.success(result)) }
+            } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+        }
+    }
+    func renderEffects(original: PhotoHandle, recipe: String, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
+        queue.async {
+            do {
+                let result = try autoreleasepool { () throws -> PhotoHandle in
+                    var image = try self.stillProcessor.render(original, recipe: recipe)
+                    let request = try JSONSerialization.jsonObject(with: Data(recipe.utf8)) as? [String: Any]
+                    if let path = request?["watermarkPath"] as? String,
+                       let mark = CIImage(contentsOf: URL(fileURLWithPath: path)), let input = CIImage(image: image) {
+                        let extent = input.extent
+                        let width = extent.width * 0.23
+                        let scale = width / mark.extent.width
+                        let margin = extent.width * 0.025
+                        let positioned = mark.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                            .transformed(by: CGAffineTransform(translationX: extent.maxX - width - margin, y: extent.minY + margin))
+                            .applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0.86)])
+                        guard let output = self.ci.createCGImage(positioned.composited(over: input), from: extent) else { throw self.failure("Cannot render watermark") }
+                        image = UIImage(cgImage: output)
+                    }
+                    guard let data = image.jpegData(compressionQuality: 0.95) else { throw self.failure("Cannot render effects") }
+                    let handle = try self.newPhoto()
+                    try data.write(to: URL(fileURLWithPath: handle.path), options: .atomic)
+                    return handle
+                }
+                DispatchQueue.main.async { completion(.success(result)) }
+            } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
     }
     func render(original: PhotoHandle, rotationDegrees: Double, crop: Bool, strength: Double, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {

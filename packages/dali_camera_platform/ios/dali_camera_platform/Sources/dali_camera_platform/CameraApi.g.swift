@@ -357,6 +357,8 @@ protocol CameraHostApi {
   func share(photo: PhotoHandle, completion: @escaping (Result<Void, Error>) -> Void)
   func pickPhoto(completion: @escaping (Result<PhotoHandle?, Error>) -> Void)
   func pickPhotos(folder: Bool, completion: @escaping (Result<PhotoImport, Error>) -> Void)
+  func analyzePhoto(photo: PhotoHandle, completion: @escaping (Result<String, Error>) -> Void)
+  func renderEffects(original: PhotoHandle, recipe: String, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func render(original: PhotoHandle, rotationDegrees: Double, crop: Bool, strength: Double, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func setControls(configurationId: String, ev: Double, locked: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
   func renderStyle(original: PhotoHandle, matrix: [Double], softness: Double, detail: Double, watermarkPath: String?, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
@@ -514,6 +516,41 @@ class CameraHostApiSetup {
       }
     } else {
       pickPhotosChannel.setMessageHandler(nil)
+    }
+    let analyzePhotoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.analyzePhoto\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      analyzePhotoChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let photoArg = args[0] as! PhotoHandle
+        api.analyzePhoto(photo: photoArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      analyzePhotoChannel.setMessageHandler(nil)
+    }
+    let renderEffectsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.renderEffects\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      renderEffectsChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let originalArg = args[0] as! PhotoHandle
+        let recipeArg = args[1] as! String
+        api.renderEffects(original: originalArg, recipe: recipeArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      renderEffectsChannel.setMessageHandler(nil)
     }
     let renderChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.render\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

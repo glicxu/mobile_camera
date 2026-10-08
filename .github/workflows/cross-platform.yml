@@ -17,6 +17,7 @@ jobs:
           cache: true
       - run: pip install Pillow==11.3.0
       - run: python tools/export_shared_catalog.py --check
+      - run: python tools/export_native_processing.py --check
       - run: dart pub get && dart analyze && dart test
         working-directory: packages/dali_camera_core
       - run: flutter pub get && flutter analyze && flutter test

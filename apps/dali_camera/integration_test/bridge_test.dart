@@ -33,6 +33,45 @@ void main() {
       id: 'fixture',
       unsaved: false,
     );
+    final analysis = jsonDecode(await host.analyzePhoto(original)) as Map;
+    expect(analysis['sourceId'], 'fixture');
+    expect(analysis['schemaVersion'], 1);
+    expect(analysis['poseKeypoints'], isA<Map>());
+    final enhanced = await host.renderEffects(
+      original,
+      jsonEncode({'version': 1, 'treatment': 'enhance', 'strength': 3}),
+    );
+    expect(enhanced.id, isNot(original.id));
+    expect(await File(enhanced.path).exists(), isTrue);
+    expect(await file.readAsBytes(), bytes);
+    final enhancedCodec = await ui.instantiateImageCodec(
+      await File(enhanced.path).readAsBytes(),
+    );
+    final enhancedImage = (await enhancedCodec.getNextFrame()).image;
+    final originalCodec = await ui.instantiateImageCodec(bytes);
+    final originalImage = (await originalCodec.getNextFrame()).image;
+    expect(enhancedImage.width, originalImage.width);
+    expect(enhancedImage.height, originalImage.height);
+    final effectOriginalPixels = await originalImage.toByteData();
+    final enhancedPixels = await enhancedImage.toByteData();
+    expect(
+      enhancedPixels!.buffer.asUint8List(),
+      isNot(effectOriginalPixels!.buffer.asUint8List()),
+    );
+    enhancedImage.dispose();
+    originalImage.dispose();
+    enhancedCodec.dispose();
+    originalCodec.dispose();
+    await host.releasePhoto(enhanced);
+    expect(await File(enhanced.path).exists(), isFalse);
+    await expectLater(
+      host.renderEffects(
+        original,
+        jsonEncode({'version': 1, 'treatment': 'unknown'}),
+      ),
+      throwsA(isA<PlatformException>()),
+    );
+    expect(await file.readAsBytes(), bytes);
     final derived = await host.render(original, 0, true, 0);
     expect(derived.id, isNot(original.id));
     expect(await file.readAsBytes(), bytes);

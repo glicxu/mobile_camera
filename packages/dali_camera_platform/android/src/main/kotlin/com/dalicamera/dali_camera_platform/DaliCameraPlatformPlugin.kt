@@ -79,6 +79,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private var lastVoice = 0L
     private var speechEpoch = 0L
     private val executor = Executors.newSingleThreadExecutor()
+    private val stillProcessor = StillPhotoProcessor()
     private val main = Handler(Looper.getMainLooper())
     private var lastAnalysis = 0L
     private var lastState = 0L
@@ -120,7 +121,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     }
     override fun onDetachedFromEngine(b: FlutterPlugin.FlutterPluginBinding) {
         stop(); CameraHostApi.setUp(b.binaryMessenger, null)
-        faceDetector.close(); poseDetector.close(); executor.shutdown()
+        faceDetector.close(); poseDetector.close(); stillProcessor.close(); executor.shutdown()
     }
     override fun onAttachedToActivity(b: ActivityPluginBinding) {
         binding = b; activity = b.activity
@@ -477,6 +478,35 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             }
         }
         return true
+    }
+    override fun analyzePhoto(photo: PhotoHandle, callback: (Result<String>) -> Unit) {
+        executor.execute {
+            try { val packet = stillProcessor.analyze(photo).toString(); main.post { callback(Result.success(packet)) } }
+            catch (error: Exception) { main.post { callback(Result.failure(error)) } }
+        }
+    }
+    override fun renderEffects(original: PhotoHandle, recipe: String, callback: (Result<PhotoHandle>) -> Unit) {
+        executor.execute {
+            var output: Bitmap? = null
+            var destination: File? = null
+            try {
+                val image = stillProcessor.render(original, recipe); output = image
+                val markPath = JSONObject(recipe).optString("watermarkPath", "")
+                if (markPath.isNotEmpty()) {
+                    val mark = BitmapFactory.decodeFile(markPath) ?: error("Cannot decode watermark")
+                    val width = image.width * .23f; val height = width * mark.height / mark.width; val margin = image.width * .025f
+                    Canvas(image).drawBitmap(mark, null, RectF(image.width - width - margin, image.height - height - margin,
+                        image.width - margin, image.height - margin), Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = 219 })
+                    mark.recycle()
+                }
+                val file = photoFile(); destination = file
+                file.outputStream().use { check(image.compress(Bitmap.CompressFormat.JPEG, 95, it)) }
+                main.post { callback(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false, "image/jpeg"))) }
+            } catch (error: Throwable) {
+                destination?.delete()
+                main.post { callback(Result.failure(if (error is OutOfMemoryError) IllegalStateException("Not enough memory to process this photo. Original retained.") else error)) }
+            } finally { output?.recycle() }
+        }
     }
     override fun render(original: PhotoHandle, rotationDegrees: Double, crop: Boolean, strength: Double, callback: (Result<PhotoHandle>) -> Unit) {
         executor.execute {
