@@ -1,6 +1,6 @@
 # Mac/iPhone parity candidate setup
 
-Status: baseline features connected; physical comparison required. Follow the complete [joint testing checklist](cross_platform_joint_testing.md) after installing.
+Status: deferred while Android development is prioritized. Reachable baseline features are audited and software corrections implemented; iOS bridge validation and physical comparison remain outstanding. Follow the complete [joint testing checklist](cross_platform_joint_testing.md) after installing.
 
 Use branch `codex/cross-platform-20261007`. The native comparison baseline is `d53a977`. Keep both apps installed and preserve any unsaved originals. Flutter uses a separate bundle ID, `com.dalicamera.daliCamera`.
 
@@ -30,6 +30,10 @@ Use the same iPhone, lens, lighting and scene in Flutter and the native referenc
 
 | Check | Expected / evidence needed |
 | --- | --- |
+| Header and Manual | Manual, coaching toggle, App Settings and switch match native order. Manual opens the right-hand Focus/Depth/Exposure/Auto rail inside the viewport, with one editor open at a time. Exposure enters Auto; disable it for supported ISO/shutter controls, adjust EV and Reset; Exposure Auto preserves focus while full Auto resets it. Check sensor behavior and large text. |
+| Posture and scene cards | Select a posture: its example, complete instructions, angle/light and Next/Natural step bar replace general scene advice. Urgent framing disables Next. Food/Landscape shows both recipe and scene advice. A slow horizontal swipe of more than 44 points changes the posture; tap opens its example. |
+| Photos library | Camera thumbnail browses all authorized/limited library assets, newest first, loading each lazily. Previous/next wraps; a 60-point image swipe navigates even when slow. The separate review-header Photos button opens the 20-photo picker. Denial/empty library has captured-history/import fallback. Verify limited selection, iCloud asset retrieval, cancellation and Settings recovery. |
+| Review treatment | Before/After/Split is above the image. Enhance/Portrait/Landscape levels 0-5 apply automatically; Reset sets all to zero. Fullscreen keeps comparison/zoom available. Export the chosen result and check the original is unchanged. |
 | Selection row | Situation, Effects and contextual Posture/Landscape/Food sit below the viewport. All eight situations can be selected. Close-up hides the reference control, following the native visibility rules. Report remaining layout/navigation differences. |
 | Auto | Hold a single-person scene steady, then a group and a clear close-up. Auto requires three consecutive candidate frames, retains an ambiguous scene, and pauses while creative reference guidance is active. Report native versus Flutter classification and transition differences. |
 | Group | Frame at least two people, then move one near an edge or obscure a face. Check visible-face, edge and spacing guidance against native. Single-person pose analysis is not accepted as group coverage. |
@@ -45,4 +49,4 @@ No private photos need to be committed to Git. For a visual discrepancy, share a
 
 ## Why this checkpoint needs physical input
 
-CI can verify compilation, classifier fixtures and simulator image rendering. It cannot verify the real Vision/camera/motion alignment, on-device performance or whether the new UI and effects match the native experience. Those results are the input for P3 detector calibration and P4 Android visual tolerances in the [remaining plan](cross_platform_remaining_port_plan.md). Software work remains explicitly pending there.
+CI can verify compilation, classifier fixtures and simulator image rendering. It cannot verify the real Vision/camera/motion alignment, on-device performance or whether the new UI and effects match the native experience. Those results are the input for P3 detector calibration and P4 Android visual tolerances in the [remaining plan](cross_platform_remaining_port_plan.md). The plan distinguishes completed software from physical acceptance. Use these results to close its remaining device checks.

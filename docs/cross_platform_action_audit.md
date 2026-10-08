@@ -2,7 +2,7 @@
 
 Reference: native iOS `d53a977`, including reachable `ContentView.swift` actions and their camera/processing services. Audited October 8, 2026. This is the current implementation contract for [the porting plan](cross_platform_remaining_port_plan.md); older aggregate coverage and historical checkpoints do not override it.
 
-Status: software corrections and validation in progress. An implemented action is not physical visual acceptance. No iPhone visual sign-off is recorded. Follow every destination and state transition below when comparing apps, rather than checking only whether a similarly named button exists.
+Status: reachable baseline software corrections implemented; final validation in progress. An implemented action is not physical visual acceptance. No iPhone visual sign-off is recorded. Follow every destination and state transition below when comparing apps, rather than checking only whether a similarly named button exists.
 
 ## Camera and Manual destinations (P0/P1/P6)
 
@@ -35,7 +35,7 @@ The reference's `proExposureControls`, `exposureMeter`, `assistedRecommendationC
 | Auto preview tap | AF+AE point with transient focus/exposure indicator | Two-second indicator; hardware gate |
 | Manual preview tap | AF-only persistent indicator and subject-depth focus point | Typed bridge distinguishes both paths |
 | Viewfinder | Complete oriented image; overlay geometry shares native preview coordinates | Independent Preview/ImageAnalysis geometry checks |
-| Person coaching overlay | Native person-context grid, status lights, directional circles and prompt; pulse respects reduced motion | Source audit and widget/device checks; visual acceptance pending |
+| Person coaching overlay | Portrait, Person + Scene, Group and Action retain the native person-context grid, status lights, directional circles and prompt; pulse respects reduced motion | Source audit and widget/device checks; visual acceptance pending |
 | Debug overlay | Face/person rectangles, pose landmarks and optical horizon from available signals | Shared schema/geometry checks |
 | Signature | Free native signature visible in preview and applied to processed captures | Asset + native rendering path; no invented free toggle |
 | Live effects | Only the reference's region-based depth path is live; Filters/Beautifier finalize captures | No baseline semantic segmentation or live cosmetics |
@@ -52,12 +52,13 @@ The reference's `proExposureControls`, `exposureMeter`, `assistedRecommendationC
 | Landscape options | Blue sky/cloud detail, rich landscape color | Separate saved capture settings |
 | Contextual reference control | Posture/Landscape/Food; Close-up hides reference choice; Natural removes creative reference | Widget and device flows |
 | Package card | Native description/count and montage; opens reference grid | Shared exported catalog |
-| Reference thumbnail | Selects immediately and dismisses chooser; no extra confirmation step | Widget/device selection tests |
+| Reference thumbnail | Native adaptive portrait grid (0.82 posture aspect, 3:4 recipes), category/angle/light metadata; selects immediately and dismisses chooser; no extra confirmation step | Widget/device selection tests |
 | Reference information | Separate example sheet with image, angle/light instructions, cues/safety and Done | Food safety device assertion; catalog export |
 | Pose example Prev/Next/swipe | Wraps within that package and updates active pose/example | `ReferenceDetails`, `adjacentReference` |
 | Active pose swipe | Native 86x96 example, category/setting, complete instruction and angle/light; drag 44 points or accessible previous/next action chooses an adjacent pose | Widget deliberate slow-swipe and hierarchy checks |
-| Creative Next/Natural | Native step bar exists only for a selected posture; Natural returns to scene guidance. Next advances manually; urgent framing can interrupt without completing a pose automatically | Widget hierarchy + 150 native coaching fixtures and nine baseline fixtures |
+| Creative Next/Natural | Native step bar exists only for a selected posture; Natural returns to scene guidance. Next advances manually and is disabled during urgent framing; no pose is automatically completed | Widget hierarchy + 150 native coaching fixtures and nine baseline fixtures |
 | Live advice panel | Selected posture replaces the scene card; selected Food/Landscape retains its recipe card plus scene advice. Recipe selection has no posture step bar | Native reachable `liveAdvicePanel`; widget checks |
+| Selected-posture sequence | Maps the recommended angle to native eye/waist/elevated/side camera steps before subject cues; preserves Couple/Family/Group/Child/Caregiver recipients and matching action symbols | Dedicated Swift-runtime comparison of all 76 postures in CI |
 | Composition instructions | Landscape/Food recipes and angles come from native catalog, not a new independent angle picker | Export drift validation |
 
 ## Review, library, imports and storage (P4/P7)
@@ -92,7 +93,7 @@ Seven tutorial pages now have distinct native-inspired illustrations and current
 
 The build record and source SHA must accompany validation. A passed build or an action marked implemented must never be reported as accepted visual parity. Final iPhone comparison is performed locally on the user's Mac; no SSH/signing information is required to finish independent software work.
 
-Simulator library validation uses a single public catalog fixture and a disposable erased simulator. Photos authorization is configured with Apple's [simctl privacy workflow](https://developer.apple.com/videos/play/wwdc2020/10647/), and fixture insertion uses [simctl addmedia](https://devstreaming-cdn.apple.com/videos/wwdc/2019/418o9bbtoe880sauh/418/418_getting_the_most_out_of_simulator.pdf). The bridge checks exact provider bytes, failed missing-asset lookup, private-copy deletion and retention of the original Photos asset. These checks are pending in the current CI run and do not establish physical picker/limited-access acceptance.
+Simulator library validation uses a single public catalog fixture and a disposable erased simulator. Photos authorization is configured with Apple's [simctl privacy workflow](https://developer.apple.com/videos/play/wwdc2020/10647/), and fixture insertion uses [simctl addmedia](https://devstreaming-cdn.apple.com/videos/wwdc/2019/418o9bbtoe880sauh/418/418_getting_the_most_out_of_simulator.pdf). The bridge checks exact provider bytes, failed missing-asset lookup, private-copy deletion and retention of the original Photos asset. The iOS run connected to the VM service but timed out awaiting results; stage diagnostics and bounded waits are retained. iOS validation is deferred while Android is the priority, and no iOS library pass is claimed. Android tablet library permission grant-to-review has been checked separately.
 
 ## Android detector and memory decision (P3/P4)
 

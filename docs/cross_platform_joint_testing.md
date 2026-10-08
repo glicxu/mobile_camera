@@ -1,6 +1,28 @@
-# Joint phone testing ? parity candidate
+# Joint phone testing - parity candidate
+
+## Comprehensive source/action candidate - October 8, 2026
+
+The comprehensive [action audit](cross_platform_action_audit.md) now covers the reachable native baseline, including Manual preview rail/exclusive editors, focus-only tapping, exposure/full-Auto reset differences, Capture controls disclosures, full Photos-library browsing, automatic review treatments, reference destinations and the live advice hierarchy. Full native camera-position sequences precede posture cues; Next is unavailable while urgent framing takes priority. Food/Landscape recipes retain measured scene advice. Group/Action uses the native person overlay and posture flow while preserving its contextual scene card when no posture is selected.
+
+Production UI source: `34784e7` (`49efcfe` chooser proportions plus the library/import Before default) on `codex/cross-platform-20261007`. Local core analysis/35 tests and Flutter analysis/27 tests pass. The dedicated native/runtime check covers every one of the 76 postures, including step count, instruction, recipient, action and completion. Android installed APK evidence follows below. iOS bridge validation is unresolved and deferred by the user's Android-first priority. The simulator reached the VM service but timed out awaiting test results in run [37847968212](https://github.com/glicxu/mobile_camera/actions/runs/37847968212); no Photos-library assertion pass is recorded. Stage diagnostics and bounded waits are committed for later investigation. Older checkpoint records below are historical.
+
+Tablet SM-T290 (Android 11) passed a 600-second debug camera soak at `e763a0c`: 538 fresh one-second analysis samples, then capture/export/library/burst checks; the complete flow took 719 seconds, 721 including teardown. During the middle of that run (sampling elapsed 200-700 seconds), 32 process PSS samples ranged from 397.8 to 430.2 MiB. Across all 47 samples, including startup and capture/processing, the observed range was 218.5-600.6 MiB. PSS was sampled about every 15 seconds, so this is not an exact peak or a release memory/thermal guarantee.
+
+The subsequent tablet camera flow at `12aabac` passed in 121 seconds (123 including teardown), and the native file suite at `1301504` passed in 65 seconds (67 including teardown). It verifies a 2400x1600 treatment output, immutable source bytes, native failure/recovery and private cleanup. Across that combined debug session, 86 process PSS samples (about two seconds apart while the isolated test app existed) ranged from 44.4 to 598.1 MiB. These are whole-process observations, including model/runtime allocations, not the processing allocator's estimated heap budget. Maximum-sensor-resolution, release and matched iPhone performance remain acceptance checks.
+
+Both Android devices are connected. Final Galaxy checks are blocked by the secure lock screen; the phone must be unlocked before rerunning them. The interrupted runs did not pass. Earlier Galaxy results remain historical. The tablet passed the preceding camera flow in 127 seconds (129 including teardown) and bounded native bridge checks in 74 seconds (76 including teardown) at `2f05e72`. Shared and Android CI pass in run [37851073897](https://github.com/glicxu/mobile_camera/actions/runs/37851073897). The normal tablet app also passed an actual Photos permission request: grant opens the full library review without restarting. That inspection found an incorrect After default, corrected to Before for new library/folder imports in `34784e7`; integration coverage now opens the actual gallery button and checks the selected comparison mode. The test helper at `3a8049c` detects a secure lock screen before building. The user will run the [Mac/iPhone steps](cross_platform_iphone_checkpoint.md) locally. Physical visual acceptance, real speech/audio/permission transitions, TalkBack/VoiceOver, destructive storage/process-death scenarios on disposable data and Android cross-engine visual tolerances remain joint acceptance work.
 
 Branch: `codex/cross-platform-20261007`. Native reference: `d53a977`. Follow the [comprehensive action audit](cross_platform_action_audit.md). Software corrections and validation are in progress; visual and hardware acceptance will happen together. Keep the native iOS app installed for comparison. Folder import remains intentionally available for session photos; future reference packages will need image instructions.
+
+## Final Android candidate - October 8, 2026
+
+Source: `3a8049c` (production UI `34784e7`), branch `codex/cross-platform-20261007`. Flutter analysis and all 27 tests pass. The tablet camera regression passed in 118 seconds, 121 including teardown, through the actual gallery button and Before-mode assertion. Native bridge checks passed at `2f05e72` in 74 seconds, 76 including teardown; no native backend changed afterward. The earlier ten-minute debug soak remains the endurance evidence above.
+
+The normal arm64 debug APK is installed on both SM-T290/Android 11 and SM-G975U/Android 12 using `adb install -r`, retaining user data. Independently pulled installed APKs on both devices match the built artifact's SHA-256:
+
+`20b4020c06d912354e964212744dcdb75253f2797a5f1dc4a4e155a59b82c499`
+
+Latest shared CI passes in [37852490911](https://github.com/glicxu/mobile_camera/actions/runs/37852490911); its Android build was still running at this checkpoint. Shared and Android build checks passed at `2f05e72`. The final Galaxy runtime checks are **blocked by its secure lock screen**. Installation is verified, but this revision has no Galaxy runtime pass. Unlock the Galaxy, then run `./tools/test_android_camera.ps1 -DeviceId R58M44F3BGJ -Flutter C:/dev/flutter/bin/flutter.bat` before accepting its camera/rendering checks. The helper detects the lock before building. The latest tablet normal-app Photos request was also checked: Allow opens the full library without restarting.
 
 ## Build and device evidence
 
@@ -11,6 +33,16 @@ Use `git rev-parse HEAD` to record the tested source. Android integration checks
 - Samsung SM-T290 / Android 11: 120-second analysis soak delivered 98 fresh one-second samples. Camera navigation/control/export flow passed in 105 seconds and expanded rendering/recovery passed in 42 seconds. A subsequent screenshot exposed preview/analysis aspect mismatch. The correction passed the independent native geometry check and the full camera flow in 99 seconds; final file suite passed in 45 seconds, including the tilted optical horizon and Level correction. The normal app was updated without clearing data.
 - Shared core: 35 tests; Flutter: 19 tests and analysis pass. Swift comparisons: 9 baseline coaching, 24 scene transitions, 150 rich coaching and 16 pose geometry cases pass. Final CI/device evidence is recorded below.
 - Physical iPhone and second Android vendor remain untested. Debug checks do not establish release speed, thermal behavior or exact rendering equality.
+
+## Android-first testing
+
+Use the normal Dali Camera app, not the disposable test app. Start on the Galaxy once unlocked; the tablet supplies a second screen size. Mac/iPhone comparison is deferred.
+
+1. Open Manual from the header. Try Focus, Depth and Exposure one at a time; return with Auto. Confirm editors remain inside the viewport and do not meter through their controls.
+2. Use Situation, Effects and Posture/Landscape/Food below the viewport. Select a reference and inspect its complete instructions, example, Next/Natural and deliberate swipes.
+3. Open the lower-left gallery button. Grant Photos access if requested; confirm full-library navigation and Before selected on first entry. Try After/Split, a treatment, Reset and fullscreen.
+4. Capture, timer and hold-burst; save/share a copy, return to camera, switch lenses and background/resume. Check original photos remain intact.
+5. Report any mismatch with device, source SHA, expected behavior and a screenshot you are comfortable sharing. Voice, TalkBack, newer Android permissions, release performance and a second vendor remain acceptance checks.
 
 ## Test together in this order
 
@@ -41,7 +73,7 @@ Source: `02f774dad14bfb573d45322c631a8b34aa762d14`. Normal ARM64 debug APK SHA-2
 
 The optical horizon fixture is generated in the test, not a private photo: a 480x360 two-tone scene with a roughly 15-degree edge. Detection and Level output must each parse through the shared native-frame contract; the corrected result must be within two degrees of horizontal. Both real-camera suites independently compare preview and analysis geometry. Local analyzer and all 18 Flutter tests pass after the final change.
 
-## Current header build and validation
+## Historical header build and validation
 
 The earlier inventory omitted native header behavior. The corrected header includes Manual, coaching toggle, App Settings and camera switch in native order with teal active states. Landscape places it above controls in the right sidebar. App Settings contains About/current app version, the seven-step tutorial and native Language/Display/Purchase placeholders. Help and import remain accessible. Camera controls are beside the shutter. Presented settings/tutorials block voice/timer capture. Analyzer and 19 Flutter tests pass, including 2.5? text portrait/landscape navigation. Tablet camera flow passed in 107 seconds (109 including teardown); header controls, coaching Off/On, App Settings/version, tutorial Skip, capture blocking and camera controls are exercised before reference/navigation/export checks. Normal app updated with `adb install -r`; installed APK independently matches SHA-256 `2a411fa7515e4fc4c7c1dc2680bc11237f0b8f7d79c7298dd434817617cadc9e`. Source: `1855df3dcd1ee5034725acc18b66a5ab27e7332f`; `1f7ce9e` changes CI only. Galaxy camera flow passed in 44 seconds (45 including teardown), with the same header/settings/tutorial checks. Both normal apps are updated without clearing data; installed base APK hashes independently match the checksum above.
 

@@ -1,15 +1,21 @@
 # Remaining iOS-to-Flutter Porting Plan
 
 Date: October 8, 2026
-Status: Comprehensive source/action audit and software corrections in progress. Parity is not complete.
+Status: Comprehensive source/action audit completed; software corrections implemented and final validation in progress. Physical parity acceptance is pending.
 Branch: `codex/cross-platform-20261007`
 Reference: native iOS app at `d53a977`. Starting Flutter source: `be9c765`.
 
-Current per-action contract: [comprehensive source/action audit](cross_platform_action_audit.md). Its destinations and state transitions supersede the historical aggregate checks below. Current software additions: lazy Photos library, native beautifier dropdown/disclosures, image labels/fullscreen, actual lens metadata and active pose swipes. Device and final iOS validation are running.
+Current per-action contract: [comprehensive source/action audit](cross_platform_action_audit.md). Its destinations and state transitions supersede the historical aggregate checks below. Current software additions: lazy Photos library, native beautifier dropdown/disclosures, image labels/fullscreen, actual lens metadata and active pose swipes. Final Android tablet validation passes; the same candidate is installed on the Galaxy, whose runtime validation needs an unlock. iOS validation is deferred by the current priority.
 
-## Comprehensive implementation run ? October 8, 2026
+## Current priority: Android first
 
-The user found that the Manual workspace still did not match iOS. The previous aggregate ?connected? status was insufficient: working services and passing tests did not establish complete screen/action parity. This run follows the complete P0?P8 plan below, using reachable native views and actions as the reference. Software omissions stay open until implemented and verified; physical comparison is a separate acceptance step.
+The user requested Android development first. Continue Android implementation and tablet/Galaxy validation against the native source/action contract; defer iOS simulator debugging and Mac/iPhone acceptance. The latest iOS run connected to its VM service but timed out before reporting bridge results. Bounded stage diagnostics are retained for later investigation; iOS bridge validation is not passed and is not part of the Android-ready claim.
+
+Android software checks currently pass core analysis/35 tests and Flutter analysis/27 tests. The tablet completed real camera/export/library/burst flows and native full-resolution rendering/recovery checks. Final UI regression at `34784e7` passed in 118 seconds (121 including teardown); normal APKs on both Android devices are independently verified, with source/checksum recorded in the joint testing document. The final chooser uses native portrait image ratios/adaptive columns. Shared checks and Android CI pass at `2f05e72`. The Galaxy has reconnected, but final checks are blocked by its secure lock screen; unlock is required. Interrupted attempts are not passes. Library and folder imports now start in Before (`34784e7`), matching native defaults. Remaining Android acceptance includes final Galaxy verification, a second vendor/newer Android permission behavior, actual speech/audio/accessibility, matched effects/detection and release performance on maximum-resolution photos. These device checks stay open.
+
+## Comprehensive implementation run - October 8, 2026
+
+The user found that the Manual workspace still did not match iOS. The previous aggregate "connected" status was insufficient: working services and passing tests did not establish complete screen/action parity. This run follows the complete P0-P8 plan below, using reachable native views and actions as the reference. Software omissions stay open until implemented and verified; physical comparison is a separate acceptance step.
 
 Current corrections: compact Focus/Depth/Exposure preview rail and mutually exclusive editors; focus-only Manual tapping and separate exposure-Auto/full-Auto resets; session-only depth; native Camera controls sections including Beautifier; named filter fine-tuning; automatic review treatment updates and Reset; review navigation/action hierarchy; native preview coaching light/direction cues, countdown/burst overlays and watermark; direct reference selection with separate examples and adjacent posture navigation; tutorial illustrations. Analyzer and 21 Flutter tests pass at the initial correction checkpoint. Device/build validation follows after the library work.
 
@@ -17,7 +23,7 @@ Additional audit gap: the lower-left native button browses all accessible system
 
 The remaining physical iPhone/screenshots, cross-engine rendering tolerances, permission/audio/accessibility scenarios, second Android vendor and ten-minute release performance sessions remain P8 acceptance work. Source helpers that are never called (`proExposureControls`, Auto-assistance card/lock bindings) do not establish an implemented reference screen; retain supported service capabilities without inventing reference UI.
 
-The final reachable-screen audit also corrected the live advice hierarchy: a selected posture replaces general scene advice, while Food/Landscape keeps both recipe and scene cards. Posture controls are Next/Natural with the native step counter. Reference and review navigation now uses drag distance (44/60 points), including slow swipes. Analyzer and 26 Flutter tests pass. Android stability and final iOS Photos-library validation are in progress; these results do not substitute for matched physical screenshots.
+The final reachable-screen audit also corrected the live advice hierarchy: a selected posture replaces general scene advice, while Food/Landscape keeps both recipe and scene cards. Posture controls are Next/Natural with the native step counter and urgent-advice guard. Selected angles now use the full native camera-position sequence, including two-step waist/elevated/side directions, followed by subject cues. A dedicated native/runtime comparison covers all 76 posture sequences. The chooser uses the native adaptive column sizing and portrait image ratios, preserving posture examples instead of cropping them to a short fixed-height strip. Reference and review navigation now uses drag distance (44/60 points), including slow swipes. Analyzer and 27 Flutter tests pass. Android stability checks pass; iOS Photos-library bridge validation remains unresolved and deferred; these results do not substitute for matched physical screenshots.
 
 | Phase | Implementation status | Verification / remaining acceptance |
 | --- | --- | --- |
@@ -129,7 +135,8 @@ Acceptance: every reference action has a tracked destination or an explicit pend
 
 Dependencies: P0 UI inventory. Implement this first; richer detection and rendering can follow.
 
-- [ ] Match the iOS hierarchy: viewport and overlays, selection row directly below the viewport, guidance/status, and capture controls. Match spacing, typography, selected values, icons, and menu behavior while retaining readable platform-appropriate controls.
+- [x] Implement the native hierarchy: viewport/overlays, selection row below the viewport, contextual reference/scene cards and capture controls; native Manual editors, menus and review destinations are covered by the action audit.
+- [ ] Accept spacing, typography, icons and selected states against matched physical iPhone screenshots.
 - [x] Replace the People/Landscape/Food chip arrangement with the three iOS-style controls described below.
 - [x] Match package browsing: package overview cards/montages, package detail reference grid, selected-reference indication, reference details, and return navigation. Preserve reference-driven camera angles, lighting, and safety notes.
 - [x] Match latest-photo access, settings/help placement, guidance Next/Skip/Natural actions, and Manual workspace visibility behavior.
@@ -177,7 +184,8 @@ Dependencies: P0 rendering inventory; P3 landmarks/masks for subject-aware opera
 - [x] Port General Enhance, Portrait Polish, and Landscape Polish with native strength levels/presets and individual settings. Include landmark-aware face brightness, skin/blemish processing, feature geometry, and landscape/sky treatment implemented by the reference.
 - [x] Match separate Filter and Beautifier Auto/Custom/Off state, Both Auto/Both Off actions, settings persistence, and capture-time application behavior.
 - [x] Define and preserve the native processing order between filters, polish, geometry adjustments, and watermark. Render from an immutable original; key results by source and settings so stale work cannot replace a newer selection.
-- [ ] Address the current Android derivative resolution limit. Test a full-resolution processing path within a measured memory budget; any remaining limitation must be visible and recorded rather than silently presented as parity.
+- [x] Remove the fixed Android derivative-resolution limit. A 2400x1600 treatment fixture preserves output dimensions and source bytes; allocation is checked against a conservative runtime heap estimate, with visible failure and original retention. Tablet process-memory sampling is recorded in the testing document.
+- [ ] Establish maximum-sensor-resolution and release memory/thermal budgets against the physical iPhone and Android device matrix.
 
 Acceptance: approved fixture images cover all presets and strengths, faces/no faces, sky/no sky, low light, and watermark on/off. Record visual tolerances before accepting Android equivalents; exact cross-engine bytes are not required. Off preserves original appearance, failed processing preserves the original, and save/share exports the selected result.
 
@@ -199,7 +207,8 @@ Dependencies: P0 control inventory; may run before P4/P5 once shared contracts a
 - [x] Match manual/Auto workspace layout, Auto entry state, shutter/ISO changes, lock interactions, reset behavior, and displayed actual camera values.
 - [x] Port reachable baseline Manual shutter/ISO/EV and aperture information; retain supported linked ISO service behavior. **Scope correction:** Tv/Av priority is behind the disabled iOS 27 compile gate; exposure-meter/recommendation UI helpers are not called by the baseline. Do not advertise them as working baseline hardware.
 - [ ] Verify EV, focus/exposure lock, tap metering, zoom, capture setting retention, and lens-specific capability refresh under concurrent actions and lifecycle interruptions.
-- [ ] Match voice preference versus actual listening state, foreground resumption policy, audio interruptions, custom phrase persistence, command deduplication, and permission/error messaging. Retain on-device-only availability behavior.
+- [x] Implement desired voice preference separately from actual listening, foreground resumption, custom phrase persistence, command deduplication and permission/error messaging; retain on-device-only availability.
+- [ ] Validate real speech, permission changes and audio interruptions on the physical iPhone and Android phones.
 - [x] Match remaining implemented settings/defaults and help text. Hardware focus distance, custom white balance, RAW, and other reference roadmap features enter this plan only if implemented in the frozen baseline.
 
 Acceptance: supported commands change actual sensor behavior, observed values agree with capture metadata, unsupported commands are unavailable, and stale commands are rejected. Both camera backends return completely to Auto. Voice/timer/burst cannot bypass pending-save or capture guards.
@@ -211,7 +220,8 @@ Dependencies: P3 still-image analysis and P4 processed variants; navigation can 
 - [x] Match native slideshow/swipe navigation, multiple-photo and folder import where supported, per-photo selection, global treatment settings, and comparison modes.
 - [x] Port complete original/reframe/level/enhance/beautify treatment selection, strength controls, analysis/status and diagnostic details reachable in the reference. **Scope correction:** the standalone `reviewAnalysisCard` / lighting-summary helper is not called by the baseline review screen.
 - [x] Preserve full-resolution originals, orientation and mirror semantics. Keep review progress and exports associated with the correct photo during rapid navigation and processing.
-- [ ] Harden interrupted save reconciliation, recent-history retention, pending-original recovery, derived-copy cleanup, and disk-full behavior. Document the iOS Photos crash window and tested duplicate-avoidance limits.
+- [x] Implement interrupted save reconciliation, bounded recent history, pending-original recovery, derived-copy cleanup and save-error guards. Controller failure/recreation tests and native recovery/cleanup bridge checks pass. The iOS Photos crash window and duplicate-avoidance limits are documented.
+- [ ] Validate real process death and disk-full failures on disposable physical-device data.
 - [x] Match save/share/copy output selection and cancellation/error/retry messaging. Folder access must use each platform's supported picker and permission model.
 
 Acceptance: review navigation, imports, comparisons, and selected exports match the reference. Injected processing/storage failures and process death do not lose originals, export another photo, or delete gallery content. Multi-photo work remains bounded in memory.
@@ -220,8 +230,10 @@ Acceptance: review navigation, imports, comparisons, and selected exports match 
 
 Dependencies: preceding phases complete or explicitly hardware-limited with accepted evidence.
 
-- [ ] Update onboarding/help, semantics, reading order, focus behavior, large text, and TalkBack/VoiceOver for the final UI.
-- [ ] Run meaningful core parity, geometry, rendering, widget, bridge, and failure/recovery checks in CI; continue building/testing the native iOS reference.
+- [x] Update onboarding/help, semantics, reading order and large-text layouts for the final UI; widget checks cover Manual editors, comparison and camera navigation.
+- [ ] Accept TalkBack/VoiceOver reading order and focus behavior on physical phones.
+- [x] Android/shared CI build, core/geometry/widget checks and real tablet camera/rendering/recovery checks pass.
+- [ ] Complete deferred iOS bridge validation and continue building/testing the native iOS reference.
 - [ ] Compare native iOS and Flutter iOS on the same physical iPhone using the Mac. Test Android on the attached Galaxy S10+ and tablet, plus a second vendor when available; record any device coverage still missing.
 - [ ] Exercise denied/re-enabled permissions, background/foreground and audio interruption, repeated lens changes, rapid captures, rotation, share cancellation, process death, and storage failures.
 - [ ] Measure startup, shutter feedback, capture/processing completion, preview/analysis throughput, memory, and thermal behavior in matched ten-minute sessions. Establish a physical iPhone baseline; the existing Android debug soak is not a release performance guarantee.
