@@ -16,6 +16,16 @@ void main() {
   runApp(const DaliApp());
 }
 
+bool canLevelHorizon(Map<String, dynamic>? analysis) {
+  final horizon = analysis?['horizon'];
+  if (horizon is! Map) return false;
+  final angle = horizon['angleDegrees'];
+  final confidence = horizon['confidence'];
+  return angle is num &&
+      angle.abs() > 3 &&
+      (confidence == null || (confidence is num && confidence > .55));
+}
+
 class DaliApp extends StatelessWidget {
   const DaliApp({super.key, this.controller, this.onboarding = true});
   final CameraController? controller;
@@ -47,8 +57,10 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen>
     with WidgetsBindingObserver {
   late final CameraController camera;
-  bool compare = false;
+  bool compare = true;
   bool splitComparison = false;
+  String? reviewSourceId;
+  String? reviewVersionId;
   bool initialized = false;
   bool manualToolsVisible = false;
   Orientation? orientation;
@@ -92,7 +104,21 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   void refresh() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {
+        final source = camera.original?.id;
+        final version = camera.selected?.id;
+        if (source != reviewSourceId) {
+          compare = true;
+          splitComparison = false;
+        } else if (version != reviewVersionId) {
+          compare = false;
+          splitComparison = false;
+        }
+        reviewSourceId = source;
+        reviewVersionId = version;
+      });
+    }
   }
 
   @override
@@ -600,7 +626,9 @@ class _CameraScreenState extends State<CameraScreen>
                                 camera.photoAnalysis?[treatment == 'reframe'
                                         ? 'reframe'
                                         : 'horizon'] ==
-                                    null
+                                    null ||
+                                (treatment == 'level' &&
+                                    !canLevelHorizon(camera.photoAnalysis))
                             ? null
                             : (_) => camera.applyTreatment(treatment),
                       ),
@@ -608,22 +636,15 @@ class _CameraScreenState extends State<CameraScreen>
                 ),
                 PhotoEffectControls(camera: camera, review: true),
                 PhotoAnalysisCard(camera: camera),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'before', label: Text('Before')),
-                    ButtonSegment(value: 'after', label: Text('After')),
-                    ButtonSegment(value: 'split', label: Text('Split')),
-                  ],
-                  selected: {
-                    splitComparison
-                        ? 'split'
-                        : compare
-                        ? 'before'
-                        : 'after',
-                  },
-                  onSelectionChanged: (values) => setState(() {
-                    compare = values.single == 'before';
-                    splitComparison = values.single == 'split';
+                ReviewModeControls(
+                  value: splitComparison
+                      ? 'split'
+                      : compare
+                      ? 'before'
+                      : 'after',
+                  onChanged: (value) => setState(() {
+                    compare = value == 'before';
+                    splitComparison = value == 'split';
                   }),
                 ),
                 if (camera.message != null)
@@ -634,17 +655,31 @@ class _CameraScreenState extends State<CameraScreen>
                   runSpacing: 8,
                   children: [
                     FilledButton(
-                      onPressed: camera.busy ? null : camera.saveSelected,
+                      onPressed: camera.busy
+                          ? null
+                          : () => camera.saveSelected(
+                              originalView: compare && !splitComparison,
+                            ),
                       child: Text(
                         camera.selected?.id == camera.original?.id &&
                                 camera.original?.unsaved == true
                             ? 'Retry save original'
+                            : compare && !splitComparison
+                            ? 'Save original copy'
                             : 'Save selected',
                       ),
                     ),
                     FilledButton.tonal(
-                      onPressed: camera.busy ? null : camera.shareSelected,
-                      child: const Text('Share selected'),
+                      onPressed: camera.busy
+                          ? null
+                          : () => camera.shareSelected(
+                              originalView: compare && !splitComparison,
+                            ),
+                      child: Text(
+                        compare && !splitComparison
+                            ? 'Share original'
+                            : 'Share selected',
+                      ),
                     ),
                     if (camera.original?.unsaved == true) ...[
                       TextButton(
@@ -704,7 +739,7 @@ class _CameraScreenState extends State<CameraScreen>
             children: [
               const Padding(
                 padding: EdgeInsets.all(16),
-                child: Text('Import up to 50 photos for review'),
+                child: Text('Import up to 20 photos, or 50 from a folder'),
               ),
               ListTile(
                 key: const Key('importPhotos'),
@@ -1021,7 +1056,7 @@ class _CameraScreenState extends State<CameraScreen>
       title: const Text('Take a photo with Dali'),
       content: const SingleChildScrollView(
         child: Text(
-          'Frame your subject and follow one short cue at a time. The shutter stays available while you try optional poses.\n\nChoose a posture, landscape, or Food reference for framing and light. Tap the shutter for one photo; hold for a paced burst. Timer and custom voice phrase are in Camera settings. Filters and watermark make a review copy; save it separately. Done / Next confirms a creative step; Dali does not verify the pose.\n\nTap your latest photo to review, save, or share it. Recent photos keeps up to 25 saved originals. Failed saves keep the original for retry.',
+          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Done / Next confirms a creative step; Dali does not verify the pose.\n\nTap the shutter for one photo; hold for a paced burst. Timer and custom voice phrase are in Camera settings. Voice runs on device where your phone supports it.\n\nEffects has separate Filter and Beautifier Auto, Custom, and Off choices. Depth of focus softens the background around the detected subject or your focus point. The original saves first; save the prepared copy separately.\n\nReview offers Original, Reframe, Level, General Enhance, Portrait Polish, and Landscape Polish when measurements are available. Before exports the original; After and Split export the selected version. Tap the photo to zoom and move the comparison split.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed original saves remain available for retry.',
         ),
       ),
       actions: [

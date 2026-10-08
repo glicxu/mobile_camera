@@ -52,6 +52,36 @@ class ReviewComparison extends StatelessWidget {
   );
 }
 
+class ReviewModeControls extends StatelessWidget {
+  const ReviewModeControls({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+  final String value;
+  final ValueChanged<String> onChanged;
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    alignment: WrapAlignment.center,
+    children: [
+      for (final mode in ['before', 'after', 'split'])
+        ChoiceChip(
+          label: Text(
+            mode == 'before'
+                ? 'Before'
+                : mode == 'after'
+                ? 'After'
+                : 'Split',
+          ),
+          selected: value == mode,
+          onSelected: (_) => onChanged(mode),
+        ),
+    ],
+  );
+}
+
 class _SplitClip extends CustomClipper<Rect> {
   const _SplitClip(this.fraction);
   final double fraction;
@@ -123,33 +153,23 @@ class _FullScreenReviewState extends State<FullScreenReview> {
             ),
           ),
         ),
-        SegmentedButton<String>(
-          segments: [
-            for (final value in ['before', 'after', 'split'])
-              ButtonSegment(
-                value: value,
-                label: Text(
-                  value == 'before'
-                      ? 'Before'
-                      : value == 'after'
-                      ? 'After'
-                      : 'Split',
-                ),
-              ),
-          ],
-          selected: {mode},
-          onSelectionChanged: (values) => setState(() {
-            mode = values.single;
+        ReviewModeControls(
+          value: mode,
+          onChanged: (value) => setState(() {
+            mode = value;
             transform.value = Matrix4.identity();
           }),
         ),
         if (mode == 'split')
-          Slider(
-            min: .04,
-            max: .96,
-            value: split,
+          Semantics(
             label: 'Comparison split',
-            onChanged: (value) => setState(() => split = value),
+            child: Slider(
+              min: .04,
+              max: .96,
+              value: split,
+              label: 'Comparison split',
+              onChanged: (value) => setState(() => split = value),
+            ),
           ),
         const SizedBox(height: 16),
       ],

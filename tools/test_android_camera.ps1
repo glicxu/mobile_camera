@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory = $true)][string]$DeviceId,
     [string]$Flutter = 'flutter',
     [string]$Adb = "$env:LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe",
-    [ValidateRange(0, 3600)][int]$SoakSeconds = 0
+    [ValidateRange(0, 3600)][int]$SoakSeconds = 0,
+    [ValidateSet('camera', 'bridge')][string[]]$Checks = @('camera', 'bridge')
 )
 $ErrorActionPreference = 'Stop'
 $appDirectory = Join-Path $PSScriptRoot '../apps/dali_camera'
@@ -23,7 +24,8 @@ try {
     }
     & $Adb -s $DeviceId install -r build/app/outputs/flutter-apk/app-debug.apk
     if ($LASTEXITCODE -ne 0) { throw 'Isolated test app install failed' }
-    foreach ($testTarget in @('integration_test/phone_test.dart', 'integration_test/bridge_test.dart')) {
+    foreach ($check in $Checks) {
+        $testTarget = if ($check -eq 'camera') { 'integration_test/phone_test.dart' } else { 'integration_test/bridge_test.dart' }
         $permissionJob = Start-Job -ArgumentList $Adb, $DeviceId, $testPackage -ScriptBlock {
             param($adbPath, $serial, $packageId)
             for ($attempt = 0; $attempt -lt 600; $attempt++) {

@@ -37,6 +37,36 @@ void main() {
     expect(analysis['sourceId'], 'fixture');
     expect(analysis['schemaVersion'], 1);
     expect(analysis['poseKeypoints'], isA<Map>());
+    if (Platform.isAndroid) {
+      expect((analysis['faces'] as List), isNotEmpty);
+      expect(
+        (analysis['poseKeypoints'] as Map).length,
+        greaterThanOrEqualTo(6),
+      );
+    }
+    // Exercise each new spatial processing path on a real, bundled portrait.
+    for (final recipe in [
+      {'version': 1, 'treatment': 'portrait', 'strength': 3},
+      {'version': 1, 'treatment': 'landscape', 'strength': 3},
+      {'version': 1, 'treatment': 'original', 'depth': 3},
+    ]) {
+      final copy = await host.renderEffects(original, jsonEncode(recipe));
+      final sourceCodec = await ui.instantiateImageCodec(bytes);
+      final sourceImage = (await sourceCodec.getNextFrame()).image;
+      final copyCodec = await ui.instantiateImageCodec(
+        await File(copy.path).readAsBytes(),
+      );
+      final copyImage = (await copyCodec.getNextFrame()).image;
+      expect(copyImage.width, sourceImage.width);
+      expect(copyImage.height, sourceImage.height);
+      expect(await file.readAsBytes(), bytes);
+      copyImage.dispose();
+      sourceImage.dispose();
+      copyCodec.dispose();
+      sourceCodec.dispose();
+      await host.releasePhoto(copy);
+      expect(await File(copy.path).exists(), isFalse);
+    }
     final enhanced = await host.renderEffects(
       original,
       jsonEncode({'version': 1, 'treatment': 'enhance', 'strength': 3}),

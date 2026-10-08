@@ -39,20 +39,23 @@ internal class StillPhotoProcessor : AutoCloseable {
         if (upright !== source) source.recycle()
         return upright
     }
-    private fun rect(box: Rect, image: Bitmap, label: String): JSONObject = JSONObject()
-        .put("x", (box.left.toDouble() / image.width).coerceIn(0.0, 1.0)).put("y", (box.top.toDouble() / image.height).coerceIn(0.0, 1.0))
-        .put("width", (box.width().toDouble() / image.width).coerceIn(0.0, 1.0)).put("height", (box.height().toDouble() / image.height).coerceIn(0.0, 1.0))
-        .put("label", label).put("confidence", 1.0).put("confidenceSource", "detectorPresence")
+    private fun rect(box: Rect, image: Bitmap, label: String): JSONObject {
+        val left = (box.left.toDouble() / image.width).coerceIn(0.0, 1.0); val top = (box.top.toDouble() / image.height).coerceIn(0.0, 1.0)
+        val right = (box.right.toDouble() / image.width).coerceIn(left, 1.0); val bottom = (box.bottom.toDouble() / image.height).coerceIn(top, 1.0)
+        return JSONObject().put("x", left).put("y", top).put("width", right - left).put("height", bottom - top)
+            .put("label", label).put("confidence", 1.0).put("confidenceSource", "detectorPresence")
+    }
     fun analyze(photo: PhotoHandle): JSONObject {
         val bitmap = load(photo.path, true)
         try { return analyzeBitmap(photo.id, bitmap) } finally { bitmap.recycle() }
     }
     private fun analyzeBitmap(id: String, bitmap: Bitmap): JSONObject {
         val input = InputImage.fromBitmap(bitmap, 0)
-        val faceTask = faces.process(input); val poseTask = poses.process(input); val contourTask = contours.process(input)
-        val found = runCatching { Tasks.await(faceTask, 15, TimeUnit.SECONDS) }.getOrNull()
-        val pose = runCatching { Tasks.await(poseTask, 15, TimeUnit.SECONDS) }.getOrNull()
-        val prominent = runCatching { Tasks.await(contourTask, 15, TimeUnit.SECONDS).maxByOrNull { it.boundingBox.width() * it.boundingBox.height() } }.getOrNull()
+        // The two face option sets share native model initialization. Serialize them;
+        // initializing both concurrently crashes the bundled SDK on the Galaxy S10+.
+        val found = runCatching { Tasks.await(faces.process(input), 15, TimeUnit.SECONDS) }.getOrNull()
+        val prominent = runCatching { Tasks.await(contours.process(input), 15, TimeUnit.SECONDS).maxByOrNull { it.boundingBox.width() * it.boundingBox.height() } }.getOrNull()
+        val pose = runCatching { Tasks.await(poses.process(input), 15, TimeUnit.SECONDS) }.getOrNull()
         val face = found?.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
         val points = JSONObject()
         val names = mapOf(PoseLandmark.NOSE to "nose", PoseLandmark.LEFT_SHOULDER to "leftShoulder", PoseLandmark.RIGHT_SHOULDER to "rightShoulder",
@@ -62,11 +65,10 @@ internal class StillPhotoProcessor : AutoCloseable {
         for (landmark in visible) names[landmark.landmarkType]?.let { name -> points.put(name, JSONObject().put("x", landmark.position.x / bitmap.width)
             .put("y", landmark.position.y / bitmap.height).put("confidence", landmark.inFrameLikelihood)) }
         val people = JSONArray()
-        if (visible.size >= 6) people.put(rect(Rect(visible.minOf { it.position.x }.toInt(), visible.minOf { it.position.y }.toInt(),
+        if (points.length() >= 6) people.put(rect(Rect(visible.minOf { it.position.x }.toInt(), visible.minOf { it.position.y }.toInt(),
             visible.maxOf { it.position.x }.toInt(), visible.maxOf { it.position.y }.toInt()), bitmap, "pose extent"))
         if (people.length() == 0 && face != null) {
-            val f = face.boundingBox; people.put(rect(Rect((f.left - f.width() * .75).toInt(), (f.top - f.height() * .15).toInt(),
-                (f.right + f.width() * .75).toInt(), (f.top + f.height() * 5.5).toInt()), bitmap, "face-based body estimate"))
+            people.put(PhotoGeometry.personFromFace(rect(face.boundingBox, bitmap, "face")))
         }
         val packet = JSONObject().put("schemaVersion", 1).put("sourceId", id).put("frameId", "still-$id").put("configurationId", "still-$id")
             .put("timestamp", System.currentTimeMillis()).put("imageWidth", bitmap.width).put("imageHeight", bitmap.height).put("displayRotationDegrees", 0).put("front", false)

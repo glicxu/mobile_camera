@@ -5,6 +5,7 @@ import 'package:dali_camera_platform/dali_camera_platform.dart';
 import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dali_camera/review_comparison.dart';
 
 class FakeHost extends CameraHostApi {
   bool failSave = false;
@@ -13,6 +14,7 @@ class FakeHost extends CameraHostApi {
   List<double>? filterParameters;
   Map<String, dynamic>? effectsRecipe;
   int captures = 0;
+  final List<String> savedIds = [];
   PhotoHandle? retained;
   int released = 0;
   final List<String> releasedIds = [];
@@ -61,6 +63,7 @@ class FakeHost extends CameraHostApi {
   @override
   Future<void> save(PhotoHandle photo) async {
     if (failSave) throw StateError('Denied');
+    savedIds.add(photo.id);
     retained = null;
   }
 
@@ -157,6 +160,67 @@ class ManualHost extends FakeHost {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('Filter application modes preserve the custom preset and settings', () {
+    final camera = CameraController(host: FakeHost(), register: false);
+    camera.filter = 'fresh';
+    final values = PhotoStyle.fields.map(camera.style.value).toList();
+    camera.useFilterMode('off');
+    expect(camera.style.active, isFalse);
+    camera.useFilterMode('auto');
+    camera.useFilterMode('custom');
+    expect(camera.filter, 'fresh');
+    expect(PhotoStyle.fields.map(camera.style.value).toList(), values);
+    camera.customStyle['exposure'] = 3;
+    camera.filter = 'custom';
+    camera.useFilterMode('off');
+    camera.useFilterMode('custom');
+    expect(camera.style.value('exposure'), 3);
+    camera.dispose();
+  });
+  testWidgets('Comparison choices remain usable at large text', (tester) async {
+    var mode = 'before';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: Scaffold(
+            body: SizedBox(
+              width: 280,
+              child: StatefulBuilder(
+                builder: (context, update) => ReviewModeControls(
+                  value: mode,
+                  onChanged: (value) => update(() => mode = value),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Split'));
+    await tester.pump();
+    expect(mode, 'split');
+    expect(tester.takeException(), isNull);
+  });
+  test(
+    'Before exports the original and a failed copy does not become pending',
+    () async {
+      final host = FakeHost();
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      await camera.capturePhoto();
+      await camera.applyTreatment('enhance');
+      await camera.saveSelected(originalView: true);
+      expect(host.savedIds.last, camera.original!.id);
+      await camera.saveSelected();
+      expect(host.savedIds.last, camera.selected!.id);
+      host.failSave = true;
+      await camera.saveSelected(originalView: true);
+      expect(camera.original!.unsaved, isFalse);
+      expect(camera.selectedTreatment, 'enhance');
+      camera.dispose();
+    },
+  );
   test('Linked ISO preserves exposure and resets in Auto', () async {
     final camera = CameraController(host: ManualHost(), register: false);
     await camera.initialize();

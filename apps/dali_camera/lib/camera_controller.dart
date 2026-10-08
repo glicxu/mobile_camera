@@ -62,7 +62,18 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   int burstCount = 0;
   String longPress = 'burst';
   String voicePhrase = '';
-  String filter = 'off';
+  String _filter = 'off';
+  String customFilter = 'natural';
+  String get filter => _filter;
+  set filter(String value) {
+    _filter = value;
+    if (value != 'auto' && value != 'off') customFilter = value;
+  }
+
+  void useFilterMode(String mode) {
+    filter = mode == 'custom' ? customFilter : mode;
+  }
+
   Map<String, int> customStyle = {};
   bool watermark = false;
   bool styled = false;
@@ -76,9 +87,10 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     'enhance': {'strength': 3, 'flags': <String, bool>{}},
     'portrait': {
       'strength': 3,
+      'preset': 'Polished',
       'flags': <String, bool>{'lipPlumping': false},
     },
-    'landscape': {'strength': 3, 'flags': <String, bool>{}},
+    'landscape': {'strength': 3, 'preset': 'Vivid', 'flags': <String, bool>{}},
   };
   final Map<String, Map<String, dynamic>> reviewTreatments = {
     'enhance': {'strength': 0, 'flags': <String, bool>{}},
@@ -294,23 +306,24 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   Future<void> _saveOriginal() async {
     final photo = original;
     if (photo == null) return;
+    final wasUnsaved = photo.unsaved;
     try {
       await host.save(photo);
       photo.unsaved = false;
       await _persistHistory();
       message = 'Original saved to Photos';
     } catch (e) {
-      photo.unsaved = true;
+      photo.unsaved = wasUnsaved;
       message = 'Original retained. Save failed: $e';
     }
   }
 
-  Future<void> saveSelected() async {
+  Future<void> saveSelected({bool originalView = false}) async {
     if (busy || selected == null) return;
     busy = true;
     notifyListeners();
     try {
-      if (selected?.id == original?.id) {
+      if (originalView || selected?.id == original?.id) {
         await _saveOriginal();
       } else {
         await host.save(selected!);
@@ -324,12 +337,17 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     }
   }
 
-  Future<void> shareSelected() async {
+  Future<void> shareSelected({bool originalView = false}) async {
     if (busy || selected == null) return;
+    busy = true;
+    notifyListeners();
     try {
-      await host.share(selected!);
+      await host.share(originalView ? original! : selected!);
     } catch (e) {
       message = 'Share failed: $e';
+      notifyListeners();
+    } finally {
+      busy = false;
       notifyListeners();
     }
   }
@@ -739,6 +757,14 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           ].contains(savedFilter)
           ? savedFilter
           : 'off';
+      final savedCustomFilter = prefs.getString('customFilter');
+      if (savedCustomFilter != null &&
+          [
+            'custom',
+            ...(catalog.data['filters'] as Map).keys,
+          ].contains(savedCustomFilter)) {
+        customFilter = savedCustomFilter;
+      }
       watermark = prefs.getBool('watermark') ?? false;
       final savedBeauty = prefs.getString('beautifier');
       beautifier = ['auto', 'custom', 'off'].contains(savedBeauty)
@@ -768,6 +794,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           final profile = saved[key];
           if (profile is Map) {
             entry.value[key] = {
+              'preset': profile['preset'] as String? ?? 'Custom',
               'strength': ((profile['strength'] as num?)?.toInt() ?? 0).clamp(
                 0,
                 5,
@@ -809,6 +836,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       await prefs.setInt('timerSeconds', timerSeconds);
       await prefs.setString('longPress', longPress);
       await prefs.setString('filter', filter);
+      await prefs.setString('customFilter', customFilter);
       await prefs.setString('voicePhrase', voicePhrase);
       await prefs.setBool('voicePreferred', voicePreferred);
       await prefs.setBool('watermark', watermark);

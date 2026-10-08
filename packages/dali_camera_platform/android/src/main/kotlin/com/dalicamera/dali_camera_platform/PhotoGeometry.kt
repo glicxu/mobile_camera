@@ -7,6 +7,13 @@ import kotlin.math.*
 
 /** Image measurements only: device attitude is deliberately never used as a horizon. */
 internal object PhotoGeometry {
+    fun personFromFace(face: JSONObject): JSONObject {
+        val width = min(.9, face.getDouble("width") * 3)
+        val height = min(.95, face.getDouble("height") * 6.2)
+        val x = (face.getDouble("x") + face.getDouble("width") / 2 - width / 2).coerceIn(0.0, 1 - width)
+        val y = (face.getDouble("y") - face.getDouble("height") * .45).coerceIn(0.0, 1 - height)
+        return JSONObject().put("x", x).put("y", y).put("width", width).put("height", height).put("confidence", face.getDouble("confidence") * .72).put("label", "person_estimated")
+    }
     fun scenic(image: Bitmap): JSONObject {
         val packet = JSONObject().put("openAreaStatus", "valid").put("saliencyStatus", "valid").put("horizonStatus", "valid").put("luminanceScale", 255)
         val w = min(120, image.width); val h = max(1, image.height * w / image.width)

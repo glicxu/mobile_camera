@@ -1,47 +1,33 @@
 # Native UI parity inventory
 
-Reference: `d53a977`, inspected October 8, 2026. This is the initial P0 audit; it is not a completed screen-by-screen acceptance report. Reference sources are `DaliCamera/ContentView.swift` and `DaliCamera/Models.swift`.
+Reference: native iOS `d53a977`, audited October 8, 2026. This records implementation coverage, not physical visual sign-off. Source behavior is in `DaliCamera/ContentView.swift`, `Models.swift`, `CameraModel.swift` and the native processing engines. Both Flutter backends are connected unless a limitation is stated.
 
-| Native area / source symbol | Flutter state after first P1 changes | Remaining acceptance/work |
+| Reference area | Implemented behavior | Acceptance / platform limits |
 | --- | --- | --- |
-| Viewport, overlays, coaching selection row | Full-frame preview; selection row now precedes guidance | Matched iPhone screenshots, overlays and visual styling |
-| `situationMenu`, `PhotographicSituation` | All eight choices connected | Physical iPhone comparison and Android detector calibration pending |
-| `activeSituation`, `SituationClassifier` | Auto uses three stable candidate frames, starts with Person + Scene, holds ambiguous scenes and pauses during creative guidance | Real Swift transition fixtures run in CI; physical calibration pending |
-| `effectsMenu` | Filter Auto/Custom/Off quick actions and settings entry | Both Auto/Both Off and independent Beautifier modes await P4; Beautifier visibly unavailable |
-| `selectionControlLabel` | Title/icon/chevron and selected value per control | Physical comparison of size, placement, colors and typography; no pixel parity claimed |
-| `postureMenu`, `landscapeMenu`, `foodMenu` | Contextual reference title and selected reference/Natural; hidden for Close-up | Physical active-situation and navigation comparison pending |
-| `posturePackageCard`, landscape package cards | Montage overview cards, counts, selected indicator, then reference grid | Descriptions exported from native Swift; physical styling comparison pending |
-| Reference detail and selection | Existing angle, light, cues and safety; selection feeds guidance | Match native detail/navigation transitions and selection persistence |
-| Natural, Next/Skip, recipient/status/direction | Existing manual creative progression preserved | Complete interruption/cooldown parity fixtures |
-| `situationGuidance` | Shared Group, Action, Close-up, Food and Landscape rules; explicit unavailable fallbacks | Android multi-person/saliency/horizon signals and full posture pipeline remain pending |
-| `controls`, latest photo, camera switch, settings/help | Existing controls retained | Matched layout and all native action/default checks |
-| Shutter timer, hold action | Off/3/5/10; Burst/Timer/Disabled | Native persisted defaults and edge-state comparison |
-| Voice shutter | Standard/custom commands and actual listening toggle | Persisted desired state versus active listening and interruption semantics |
-| `photoFilterDisplayValue`, filter settings | Named presets plus seven parameters and watermark | Native iOS Core Image filter order/coefficients ported; Auto also selects Vivid for Action and Bright for Close-up. Separate stored mode/preset state and Android render parity remain pending |
-| Beautifier settings | Not implemented | General Enhance, Portrait/Landscape Polish, native levels/presets and switches |
-| Live effect/depth controls | Not implemented | Processing/masking parity and measured device fallback |
-| Focus and Exposure / Manual workspace | Auto/manual M, shutter/ISO, tap/zoom/lock/EV where supported | Tv/Av, linked ISO, meter, recommendations; actual capability/SDK checks |
-| `reviewSlideshowView`, navigation | Recent originals grid, previous/next/swipe navigation and single-file import | Multi-photo/folder import and per-photo treatment persistence remain pending |
-| `reviewComparisonPicker`, review treatments | Original/crop/styled copy and zoom | Native comparison modes, reframe/level/enhance/beautify |
-| `reviewAnalysisCard`, metric/debug chips | Bounded instruction log | Rich photo analysis, lighting/pose summaries and diagnostics |
-| Review export/recovery controls | Original-safe save/share/retry/discard | Interrupted gallery insertion reconciliation and full derived-copy cleanup |
-| Tutor/help, permissions, accessibility | Existing welcome/help and basic semantics | Content alignment, TalkBack/VoiceOver and physical large-text acceptance |
+| Camera viewport / overlays | Complete oriented preview, normalized geometry, guidance/status and capture controls | Front/rear edge alignment, rotation and physical styling comparison |
+| Situation menu / classifier | Eight choices; Auto starts Person + Scene, uses three stable candidates, holds ambiguity and freezes during creative guidance | Native transition fixtures pass; matched Android scene calibration pending |
+| Effects menu | Independent Filter/Beautifier Auto, Custom, Off; Both Auto/Both Off; selected values and settings | Saved custom filter survives Off/Auto; capture applies from immutable original |
+| Posture / Landscape / Food menu | Context follows active situation; Close-up hides reference menu; selected reference/Natural labels | Joint menu/navigation comparison |
+| Packages / reference details | Montage overview, native descriptions/counts, reference grids, angles, lighting, cues and safety; selection feeds guidance | All shared catalog content exported; physical typography/spacing comparison |
+| Natural / Next / Skip / coaching | Manual progression, issue priority/cooldown/interruption, recipient/direction/status | 9 baseline and 150 rich native coaching cases; creative pose completion remains manual |
+| Detection | Face landmarks, pose geometry, luminance, scenic saliency/horizon, motion and explicit availability | Android multi-face groups + single-body pose; color-contrast saliency and gradient horizon differ from Vision; 16 native pose fixtures |
+| Camera settings | Timer Off/3/5/10; hold Burst/Timer/Disabled; voice preference/custom phrase; actual listening status | On-device recognition may be unavailable. Desired state survives pause independently from actual listening |
+| Filter settings | Named presets and seven parameters, Auto per situation, watermark; mode/preset/raw values persisted | iOS native Core Image sequence; Android corresponding spatial/color operations require visual tolerance acceptance |
+| Beautifier settings | General Enhance, Portrait Polish, Landscape Polish; native levels, presets, option switches and separate capture/review settings | Landmark-aware guarded eyes/lips, skin/blemishes and sky/color; strength-zero avoids cosmetics |
+| Depth | Reference rounded subject-region live overlay and feathered saved blur; subject/focus fallback | Baseline has no semantic segmentation or live Filter/Beautifier rendering. Android bounded preview blur needs physical edge/performance checks |
+| Focus / exposure / Manual | Auto/M, shutter/ISO, linked ISO, EV, lock, tap metering, zoom, actual aperture and supported metering | Hardware-gated. Android live exposure-offset unavailable; Tv/Av belongs to disabled native iOS 27 compile gate, outside Xcode 16.4 baseline |
+| Recent / review navigation | 25 saved originals, previous/next/swipe/wrap, source-isolated derived selections | Global treatment settings follow reference; no per-photo treatment persistence requirement |
+| Import | Up to 20 selected photos or 50 folder images; private byte-preserving copies, cancellation and bounded traversal | Folder import intentionally visible by product decision; session review only, not package installation |
+| Comparison / fullscreen | Before/After/Split, draggable split, pan/zoom; new source starts Before, processed selection shows After | Before exports original; After/Split export selected version |
+| Review treatments | Original, optional legacy tighter crop/filter, native Reframe/Level/Enhance/Portrait/Landscape, strengths and options | Missing measurements disable geometric treatments; originals retained on failure |
+| Analysis / diagnostics | Pose, face/group, lighting, composition, availability and debug measurements; coaching package choice | Physical confidence/calibration comparison |
+| Save / share / recovery | Save original first, explicit Save copy, selected exports, retry/discard, pending recovery and private cleanup | Android share uses cache copy; iOS retains busy state until share sheet finishes. iOS add-only Photos commit crash window can duplicate retry |
+| Help / welcome / accessibility | Current workflow help, semantic control labels, wrapping comparison choices and large-text/landscape navigation | Widget checks pass; TalkBack/VoiceOver, permission/audio interruptions and matched physical screenshots pending |
 
-## Defaults found in the reference
+## Defaults and persistence
 
-- Situation is initially Auto; its classifier recommendation is initially Person + Scene.
-- Timer is Off, long press is Burst, voice preference is false, and custom phrase is empty.
-- Filter application is Auto; Beautifier application is Off. Flutter currently retains its existing Off filter default until the full settings/state migration is implemented.
-- Capture polish strength is 3; Portrait preset is Polished/strength 3, Landscape preset is Vivid/strength 3.
-- Portrait brightness/smoothing/blemishes/eyes default on, lips off; landscape sky/color default on.
+Situation Auto; timer Off; hold Burst; voice false; custom phrase empty; filter Auto on fresh install; Beautifier Off. Existing saved choices are preserved. Capture polish strength 3, Portrait Polished and Landscape Vivid. Portrait brightness/smoothing/blemishes/eyes on and lips off; landscape sky/color on. Review settings follow separate native defaults. Mode switches retain the saved custom filter preset and parameter values.
 
-These findings are required follow-up work, not permission to silently overwrite existing user preferences. Preserve saved choices during migration.
+## Validation
 
-## Evidence for this checkpoint
-
-- Flutter navigation test exercises all three controls, package overview/back navigation, Food reference selection, filter Auto and Custom settings.
-- All eight situation choices are enabled. Missing detector measurements produce explicit waiting/fallback guidance rather than false ready states.
-- Existing recovery, stale-session, timer, burst, history retention and large-text checks are retained.
-- No physical iPhone screenshots or user visual sign-off have been recorded yet.
-
-Follow the [remaining porting plan](cross_platform_remaining_port_plan.md) for dependencies and completion rules.
+The pipeline compares native Swift coaching, situation transitions and pose geometry, builds Android and unsigned iOS, runs shared/widget checks, preserves native iOS unit validation and tests the Flutter native file bridge on an iPhone simulator. Android camera and file-processing checks use a separate test app so normal app settings are retained. See [joint testing](cross_platform_joint_testing.md) for current device evidence and physical acceptance tasks. No physical iPhone sign-off has been recorded.

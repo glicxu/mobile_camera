@@ -82,6 +82,9 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         }
         guard status == .authorized else { completion(.failure(failure("Camera permission denied. Open Settings to enable it."))); return }
         self.front = front
+        preview?.container.depthLevel = 0
+        preview?.container.subjectRect = nil
+        preview?.container.setNeedsLayout()
         let epoch = UUID(); generation = epoch
         let orientation = presenter?.view.window?.windowScene?.interfaceOrientation ?? .portrait
         rotation = orientation == .landscapeLeft ? 180 : orientation == .landscapeRight ? 0 : orientation == .portraitUpsideDown ? 270 : 90
@@ -180,13 +183,16 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         let sheet = UIActivityViewController(activityItems: [URL(fileURLWithPath: photo.path)], applicationActivities: nil)
         sheet.popoverPresentationController?.sourceView = presenter.view
         sheet.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
-        presenter.present(sheet, animated: true); completion(.success(()))
+        sheet.completionWithItemsHandler = { _, _, _, error in
+            if let error { completion(.failure(error)) } else { completion(.success(())) }
+        }
+        presenter.present(sheet, animated: true)
     }
     func pickPhoto(completion: @escaping (Result<PhotoHandle?, Error>) -> Void) {
         beginPicker(folder: false, limit: 1) { result in completion(result.map { $0.photos.first }) }
     }
     func pickPhotos(folder: Bool, completion: @escaping (Result<PhotoImport, Error>) -> Void) {
-        beginPicker(folder: folder, limit: 50, completion: completion)
+        beginPicker(folder: folder, limit: folder ? 50 : 20, completion: completion)
     }
     private func beginPicker(folder: Bool, limit: Int, completion: @escaping (Result<PhotoImport, Error>) -> Void) {
         guard let presenter, pickerCompletion == nil else { completion(.failure(failure("Photo picker unavailable"))); return }
@@ -223,7 +229,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     }
     public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         picker.dismiss(animated: true)
-        loadPickedPhotos(Array(results.prefix(50)), index: 0, photos: [], skipped: max(0, results.count - 50))
+        loadPickedPhotos(Array(results.prefix(20)), index: 0, photos: [], skipped: max(0, results.count - 20))
     }
     private func loadPickedPhotos(_ results: [PHPickerResult], index: Int, photos: [PhotoHandle], skipped: Int) {
         guard index < results.count else {

@@ -288,9 +288,13 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 val faces = if (faceTask.isSuccessful) faceTask.result else emptyList()
                 val landmarks = if (poseTask.isSuccessful) poseTask.result.allPoseLandmarks.filter { it.inFrameLikelihood > 0.65 } else emptyList()
                 val people = JSONArray()
-                if (landmarks.size >= 6) people.put(rect(Rect(landmarks.minOf { it.position.x }.toInt(), landmarks.minOf { it.position.y }.toInt(),
+                if (landmarks.count { it.landmarkType in setOf(0, 11, 12, 13, 14, 15, 16, 23, 24, 27, 28) } >= 6) people.put(rect(Rect(landmarks.minOf { it.position.x }.toInt(), landmarks.minOf { it.position.y }.toInt(),
                     landmarks.maxOf { it.position.x }.toInt(), landmarks.maxOf { it.position.y }.toInt()), "pose extent"))
                 val faceBoxes = JSONArray(); faces.forEach { faceBoxes.put(rect(it.boundingBox, "face")) }
+                if (people.length() == 0 && faces.isNotEmpty()) {
+                    val face = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }!!
+                    people.put(PhotoGeometry.personFromFace(rect(face.boundingBox, "face")))
+                }
                 val posePoints = JSONObject()
                 val jointNames = mapOf(0 to "nose", 11 to "leftShoulder", 12 to "rightShoulder", 13 to "leftElbow", 14 to "rightElbow", 15 to "leftWrist", 16 to "rightWrist", 23 to "leftHip", 24 to "rightHip", 27 to "leftAnkle", 28 to "rightAnkle")
                 for (landmark in landmarks) jointNames[landmark.landmarkType]?.let { name ->
@@ -310,7 +314,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     .put("backgroundLuminance", if (count > 0) sum / count else JSONObject.NULL)
                     .put("peopleScope", "single").put("groupScope", "faces").put("saliencyStatus", "unsupported").put("luminanceScale", 1)
                     .put("poseStatus", if (poseTask.isSuccessful) "valid" else "unavailable").put("poseKeypoints", posePoints)
-                    .put("peopleStatus", if (poseTask.isSuccessful) "valid" else "unavailable")
+                    .put("peopleStatus", if (poseTask.isSuccessful || faceTask.isSuccessful) "valid" else "unavailable")
                     .put("faceStatus", if (faceTask.isSuccessful) "valid" else "unavailable")
                     .put("horizonStatus", "unsupported").put("openAreaStatus", "unsupported").put("timestamp", System.currentTimeMillis())
                 val bitmap = analysisImage(proxy, front)
@@ -395,7 +399,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             var inserted: Uri? = null
             try {
                 val extension = File(photo.path).extension.ifEmpty { "jpg" }
-                val name = "Dali-${photo.id}.$extension"; val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                val name = "Dali-${photo.id}${if (photo.unsaved) "" else "-${UUID.randomUUID()}"}.$extension"; val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                 val existing = context.contentResolver.query(collection, arrayOf(MediaStore.Images.Media._ID),
                     "${MediaStore.Images.Media.DISPLAY_NAME} = ?", arrayOf(name), null)?.use { cursor ->
                     if (cursor.moveToFirst()) ContentUris.withAppendedId(collection, cursor.getLong(0)) else null }
@@ -415,12 +419,24 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         if (recover()?.id == photo.id) { check(pendingFile.delete()) { "Cannot remove recovery manifest" }; File(photo.path).delete() }
     }
     override fun share(photo: PhotoHandle, callback: (Result<Unit>) -> Unit) {
-        try {
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.dali.files", File(photo.path))
-            activity!!.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                type = photo.mimeType ?: "image/jpeg"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); clipData = ClipData.newRawUri("Dali photo", uri)
-            }, "Share photo")); callback(Result.success(Unit))
-        } catch (e: Exception) { callback(Result.failure(e)) }
+        executor.execute {
+            var destination: File? = null
+            try {
+                val folder = File(context.cacheDir, "DaliShares").apply { check(isDirectory || mkdirs()) }
+                for (old in folder.listFiles() ?: emptyArray()) if (old.isFile && System.currentTimeMillis() - old.lastModified() > 24 * 60 * 60 * 1000L) old.delete()
+                val source = File(photo.path)
+                val copy = File(folder, "share-${UUID.randomUUID()}.${source.extension.ifEmpty { "jpg" }}"); destination = copy
+                source.inputStream().use { input -> copy.outputStream().use { input.copyTo(it) } }
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.dali.files", copy)
+                main.post {
+                    try {
+                        activity!!.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = photo.mimeType ?: "image/jpeg"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); clipData = ClipData.newRawUri("Dali photo", uri)
+                        }, "Share photo")); callback(Result.success(Unit))
+                    } catch (error: Exception) { copy.delete(); callback(Result.failure(error)) }
+                }
+            } catch (error: Exception) { destination?.delete(); main.post { callback(Result.failure(error)) } }
+        }
     }
     override fun pickPhoto(callback: (Result<PhotoHandle?>) -> Unit) {
         launchPicker(false, false, callback, null)
@@ -496,8 +512,9 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     if (clip != null) (0 until clip.itemCount).map { clip.getItemAt(it).uri }.distinct()
                     else listOfNotNull(data.data)
                 }
-                skipped = (uris.size - 50).coerceAtLeast(0)
-                for (uri in uris.take(if (batch == null) 1 else 50)) {
+                val limit = if (batch == null) 1 else if (folder) 50 else 20
+                skipped = (uris.size - limit).coerceAtLeast(0)
+                for (uri in uris.take(limit)) {
                     try { photos.add(copyImportedPhoto(uri)) } catch (_: Exception) { skipped++ }
                 }
                 if ((uris.isNotEmpty() || (folder && resultCode == Activity.RESULT_OK)) && photos.isEmpty()) error("No readable images were found")

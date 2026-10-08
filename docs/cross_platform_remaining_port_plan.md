@@ -1,9 +1,31 @@
 # Remaining iOS-to-Flutter Porting Plan
 
-Date: October 8, 2026  
-Status: Implementation started; P0/P1/P2/P3/P4/P7 are in progress; physical iPhone comparison is the next acceptance dependency. Remaining work is not complete.  
-Branch: `codex/cross-platform-20261007`  
+Date: October 8, 2026
+Status: Baseline feature implementation connected; final automated validation and joint physical acceptance in progress.
+Branch: `codex/cross-platform-20261007`
 Reference: native iOS app at `d53a977`. Starting Flutter source: `be9c765`.
+
+## Current parity candidate ? October 8, 2026
+
+The baseline feature implementation is connected in Flutter and both native services. Joint physical acceptance is still required. The earlier checkpoints below are historical; this table supersedes their remaining-software lists. No pixel-identical Android rendering or physical iPhone acceptance is claimed.
+
+| Phase | Implementation status | Verification / remaining acceptance |
+| --- | --- | --- |
+| P0 | Reference behavior and defaults inventoried | Updated [UI inventory](cross_platform_ui_inventory.md); matched physical screenshots pending |
+| P1 | Three selection controls, contextual packages, montages, details, navigation and large-text layouts implemented | Widget navigation checks; physical typography/spacing comparison pending |
+| P2 | Eight situations, stable Auto classification, issue selection and creative guidance implemented | Nine baseline, 24 transition and 150 rich native coaching fixtures pass |
+| P3 | Face/pose/group geometry, luminance, saliency and optical horizon connected | 16 native pose fixtures pass; Android uses multi-face group coverage and single-body pose. Matched real-scene calibration pending |
+| P4 | Separate Filter/Beautifier modes, seven filter controls, Enhance/Portrait/Landscape, strengths/presets/options and capture sequence implemented | Immutable original/full-resolution bridge checks; Android cross-engine visual tolerances pending |
+| P5 | Reference subject-region depth preview and saved feathered blur implemented | Not semantic segmentation; front/rear depth edges and low-tier performance need joint testing |
+| P6 | Linked ISO, actual aperture, metering/locks/zoom, settings and persistent voice preference implemented | Capability-gated controls; Android live exposure-offset meter unavailable. Native Tv/Av requires the reference's disabled iOS 27 compile gate and is outside the Xcode 16.4 baseline |
+| P7 | Before/After/Split with zoom, analysis, reframe/level and polish, slideshow, imports, exports and cleanup implemented | Photos max 20; folder max 50 intentionally retained. Treatment settings are global in the reference, not persisted per photo. Save/share/recovery checks included |
+| P8 | Help, semantics, automated checks and test instructions updated | Physical iPhone, matched visual comparison, accessibility/audio/permission cases and longer thermal sessions remain acceptance work |
+
+Read [joint phone testing](cross_platform_joint_testing.md) for the acceptance order and [Mac/iPhone setup](cross_platform_iphone_checkpoint.md) for signing/install steps. External posture/landscape package loading with image instructions is a future product feature; folder import currently opens photos for this review session.
+
+Known limits: Android saliency is a color-contrast estimator, horizon is a gradient-line estimator and skin/blur/filter rendering differs from Core Image. Availability is explicit and manual capture remains available. iOS simulator body pose may be unavailable; independent detector failures do not disable the other treatments. An iOS Photos commit followed by process death before private pending-state completion can still produce a duplicate on retry because add-only permission cannot reconcile gallery identity; the original remains recoverable. No gallery deletion is used for private cleanup.
+
+### Historical implementation checkpoints
 
 ## Current checkpoint — October 8, 2026
 
@@ -64,9 +86,11 @@ This plan supersedes the remaining-work order and outdated scope exclusions in t
 
 Keep the working preview, capture/original recovery, save/share, basic coaching, catalogs, timer/burst, voice commands, recent originals, watermark, tap focus, zoom, and capability-gated manual shutter/ISO. The shared catalog already contains 76 people references in 11 packages, 24 landscape recipes in four packages, and six Food recipes. Catalog content being present does not mean its browsing UI matches iOS.
 
-Android filters approximate the native render using a color matrix and spatial processing. iOS now uses the native Core Image filter sequence; physical comparison is pending. Current effects appear in review copies. Advanced beautification, depth, complete situation guidance, and the full native review workflow are not ported.
+Android filters approximate the native render using a color matrix and spatial processing. iOS now uses the native Core Image filter sequence; physical comparison is pending. Current effects appear in review copies. Enhancement, beautification, subject-region depth and rich review are now connected; see the current table for acceptance limits.
 
 ## Ordered implementation phases
+
+The current table above records implementation completion. The original checklists below combine implementation with acceptance: an unchecked item remains open where matched physical evidence is still required; it does not override the current implemented-feature inventory.
 
 ### Full-parity implementation run (October 8, 2026)
 
@@ -122,7 +146,7 @@ Acceptance: identical normalized inputs produce the same advice and transitions 
 Dependencies: P0 contract and P2 rule requirements.
 
 - [ ] Reuse/extract the reference Vision/CoreMotion pipeline in the Flutter iOS service, preserving the separate native app and one camera-session owner.
-- [ ] Add Android equivalents for required multi-person/group signals, pose landmarks, face landmarks/analysis, face and background luminance/backlighting, scenic composition, optical horizon, and subject/saliency segmentation.
+- [ ] Add Android equivalents for required multi-person/group signals, pose landmarks, face landmarks/analysis, face and background luminance/backlighting, scenic composition, optical horizon, and subject bounds and saliency geometry (semantic segmentation is not in this baseline).
 - [ ] Evaluate Android detector coverage, offline operation, model size, licensing, and speed before pinning additional dependencies. Record per-signal limitations and tested fallbacks.
 - [ ] Extend the typed bridge with confidence, availability, timestamps, session/configuration IDs, and normalized geometry. Keep large frames and segmentation buffers native.
 - [ ] Calibrate against annotated images and matched physical scenes across front/rear cameras, rotation, skin tones, low light, groups, and partial subjects. Keep optical horizon distinct from device roll.
@@ -145,7 +169,7 @@ Acceptance: approved fixture images cover all presets and strengths, faces/no fa
 
 ### P5 — Port live effects and depth
 
-Dependencies: P3 segmentation/landmarks and P4 effect definitions.
+Dependencies: P3 subject-region geometry and P4 effect definitions. The native baseline does not require semantic segmentation.
 
 - [ ] Inventory the actual native live-preview effect path and match its supported effect/settings behavior in both services.
 - [ ] Implement subject-aware depth/background blur, masking, edge handling, and the reference's preview-versus-capture behavior. Avoid representing a whole-frame blur as depth.
@@ -170,7 +194,7 @@ Acceptance: supported commands change actual sensor behavior, observed values ag
 
 Dependencies: P3 still-image analysis and P4 processed variants; navigation can start after P1.
 
-- [ ] Match native slideshow/swipe navigation, multiple-photo and folder import where supported, per-photo selection/settings, and comparison modes.
+- [ ] Match native slideshow/swipe navigation, multiple-photo and folder import where supported, per-photo selection, global treatment settings, and comparison modes.
 - [ ] Port complete original/reframe/level/enhance/beautify treatment selection, strength controls, analysis/status cards, pose/lighting summaries, and diagnostic details from the reference.
 - [ ] Preserve full-resolution originals, orientation and mirror semantics. Keep review progress and exports associated with the correct photo during rapid navigation and processing.
 - [ ] Harden interrupted save reconciliation, recent-history retention, pending-original recovery, derived-copy cleanup, and disk-full behavior. Document the iOS Photos crash window and tested duplicate-avoidance limits.

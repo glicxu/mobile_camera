@@ -1,4 +1,5 @@
 import 'package:dali_camera/main.dart';
+import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:dali_camera/camera_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -57,6 +58,10 @@ void main() {
           'SOAK: ${soak.elapsed.inSeconds}s, $receivedUpdates fresh one-second samples',
         );
       }
+      // Auto can legitimately switch to Landscape during the camera soak.
+      // Pin the scene for this deterministic people-package navigation check.
+      camera.setSituation(PhotographicSituation.personScene);
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const Key('referenceMenu')));
       await tester.tap(find.byKey(const Key('referenceMenu')));
       await tester.pumpAndSettle();

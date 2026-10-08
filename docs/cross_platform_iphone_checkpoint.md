@@ -1,6 +1,6 @@
-# Mac/iPhone checkpoint: situations, selection row and filters
+# Mac/iPhone parity candidate setup
 
-Status: physical comparison required. This checkpoint validates the port foundation; it does not claim completed Beautifier/depth, advanced exposure, or rich review parity.
+Status: baseline features connected; physical comparison required. Follow the complete [joint testing checklist](cross_platform_joint_testing.md) after installing.
 
 Use branch `codex/cross-platform-20261007`. The native comparison baseline is `d53a977`. Keep both apps installed and preserve any unsaved originals. Flutter uses a separate bundle ID, `com.dalicamera.daliCamera`.
 
@@ -37,8 +37,8 @@ Use the same iPhone, lens, lighting and scene in Flutter and the native referenc
 | Landscape | Use a clear visible horizon and gently rotate the phone. Compare optical-horizon tilt direction with native; distinguish it from camera-roll guidance when no horizon is detected. Check front-camera mirroring. |
 | Close-up / Food | Use a clear object/dish, then remove it and move it near the frame edges. Compare saliency-dependent guidance. Camera measurement errors must not stop manual capture. |
 | Filters | Import the same photo into each app. Disable native Beautifier; choose matching named presets and the same seven filter settings. Compare Original, styled result and selected export. Flutter iOS now follows native Core Image operation order/coefficients; physical color comparison is still needed. Android remains an approximation. |
-| Review / capture | Capture at least three originals. Use previous/next buttons and swipe through recent photos, then save/share the selected copy. Originals remain intact. Per-photo treatment persistence remains pending. |
-| Imports | From Photos choose Select photos or Open folder. Import several JPEG/PNG/HEIC images, swipe through the selection, cancel a replacement picker, and return to camera. Confirm orientation, originals, selected export and captured history. Try an empty folder and one unreadable image. Imports are limited to 50 images; large folder scans stop at 4,096 entries / 16 nested levels. Per-photo treatment persistence remains pending. |
+| Review / capture | Capture at least three originals. Use previous/next buttons and swipe through recent photos, then save/share the selected copy. Originals remain intact. Treatment settings are global, matching the native baseline. |
+| Imports | From Photos choose Select photos or Open folder. Import several JPEG/PNG/HEIC images, swipe through the selection, cancel a replacement picker, and return to camera. Confirm orientation, originals, selected export and captured history. Try an empty folder and one unreadable image. Photo selection is limited to 20 images and folder import to 50 images; large folder scans stop at 4,096 entries / 16 nested levels. Treatment settings are global, matching the native baseline. |
 | Lifecycle / speed | Switch lenses, rotate, background/foreground and resume a short live session. Report stale advice, blank preview, slow capture/processing, or heat. Record startup time and a matched ten-minute session if possible. |
 
 No private photos need to be committed to Git. For a visual discrepancy, share a comparison you are comfortable providing, along with the settings and failing step. For a build failure, provide the first compiler error and its file/line plus Flutter/Xcode versions; omit signing secrets.

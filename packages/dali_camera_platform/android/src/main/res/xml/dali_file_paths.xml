@@ -1,1 +1,1 @@
-<paths xmlns:android="http://schemas.android.com/apk/res/android"><files-path name="photos" path="." /></paths>
+<paths xmlns:android="http://schemas.android.com/apk/res/android"><files-path name="photos" path="." /><cache-path name="shared_photos" path="DaliShares/" /></paths>

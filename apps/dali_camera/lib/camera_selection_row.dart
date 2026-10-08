@@ -71,7 +71,7 @@ class CameraSelectionRow extends StatelessWidget {
             camera.persistSettings();
           } else if (value == 'custom') {
             if (camera.filter == 'auto' || camera.filter == 'off') {
-              camera.filter = 'custom';
+              camera.useFilterMode('custom');
               camera.persistSettings();
             }
             onEffects();

@@ -125,11 +125,13 @@ class PhotoEffectControls extends StatelessWidget {
                     in treatment == 'portrait'
                         ? ['Natural', 'Polished', 'Glam', 'Custom']
                         : ['Natural', 'Vivid', 'Dramatic', 'Custom'])
-                  ActionChip(
+                  ChoiceChip(
                     label: Text(preset),
-                    onPressed: camera.busy
+                    selected: (settings['preset'] ?? 'Custom') == preset,
+                    onSelected: camera.busy
                         ? null
-                        : () {
+                        : (_) {
+                            settings['preset'] = preset;
                             if (preset != 'Custom') {
                               settings['strength'] = preset == 'Natural'
                                   ? 2
@@ -158,6 +160,7 @@ class PhotoEffectControls extends StatelessWidget {
                 ? null
                 : (value) {
                     settings['strength'] = value.round();
+                    settings['preset'] = 'Custom';
                     update();
                   },
           ),
@@ -171,6 +174,7 @@ class PhotoEffectControls extends StatelessWidget {
                   ? null
                   : (value) {
                       flags[entry.key] = value;
+                      settings['preset'] = 'Custom';
                       update();
                     },
             ),
