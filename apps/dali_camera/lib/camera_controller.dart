@@ -27,12 +27,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   bool busy = false;
   String? capturePreviewPath;
   String capturePreviewStatus = '';
-
-  void dismissCapturePreview() {
-    if (busy) return;
-    capturePreviewPath = null;
-    notifyListeners();
-  }
+  Timer? _capturePreviewTimer;
 
   bool takingPhoto = false;
   int capturedPhotoSequence = 0;
@@ -433,6 +428,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (fromSequence ? !_captureReady : !canCapture) return;
     busy = true;
     takingPhoto = true;
+    _capturePreviewTimer?.cancel();
     capturePreviewPath = null;
     _pendingCaptureRecipe = _captureRecipe();
     message = 'Taking photo...';
@@ -497,6 +493,13 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     } finally {
       takingPhoto = false;
       busy = false;
+      if (!reviewing && capturePreviewPath != null) {
+        message = null;
+        _capturePreviewTimer = Timer(const Duration(seconds: 1), () {
+          capturePreviewPath = null;
+          notifyListeners();
+        });
+      }
       notifyListeners();
     }
   }
@@ -694,6 +697,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   Future<void> returnToCamera() async {
     if (busy) return;
+    _capturePreviewTimer?.cancel();
     capturePreviewPath = null;
     busy = true;
     notifyListeners();
@@ -1614,6 +1618,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   @override
   void dispose() {
     cancelSequence();
+    _capturePreviewTimer?.cancel();
     _reviewUpdate?.cancel();
     _focusIndicator?.cancel();
     _disposed = true;

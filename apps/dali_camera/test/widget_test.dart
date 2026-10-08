@@ -280,6 +280,7 @@ void main() {
       host.finishSaving.complete();
       await capture;
       await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
       expect(find.text('Photo taken'), findsNothing);
     },
   );
@@ -373,16 +374,18 @@ void main() {
       expect(host.savedIds, isEmpty);
       host.finishRendering.complete();
       await capture;
-      await tester.pumpAndSettle();
+      await tester.pump();
       preview = tester.widget<CaptureResultPreview>(
         find.byKey(const Key('captureResultPreview')),
       );
       expect(preview.path, camera.selected!.path);
       expect(preview.path, isNot(camera.original!.path));
       expect(preview.complete, isTrue);
-      expect(find.text('Photo saved'), findsOneWidget);
-      await tester.tap(find.text('Back to camera'));
-      await tester.pumpAndSettle();
+      expect(find.text('Photo saved'), findsNothing);
+      expect(find.text('Back to camera'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 999));
+      expect(find.byKey(const Key('captureResultPreview')), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 1));
       expect(find.byKey(const Key('captureResultPreview')), findsNothing);
       expect(camera.canCapture, isTrue);
     },

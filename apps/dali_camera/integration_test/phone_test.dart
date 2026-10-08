@@ -265,9 +265,9 @@ void main() {
       expect(camera.styled, isTrue, reason: camera.message);
       expect(find.byKey(const Key('captureResultPreview')), findsOneWidget);
       expect(camera.capturePreviewPath, camera.selected!.path);
-      expect(find.text('Photo saved'), findsOneWidget);
-      await tester.tap(find.text('Back to camera'));
-      await tester.pumpAndSettle();
+      expect(find.text('Photo saved'), findsNothing);
+      expect(find.text('Back to camera'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 1100));
       expect(find.byKey(const Key('captureResultPreview')), findsNothing);
       expect(camera.selected!.id, isNot(camera.original!.id));
       expect(await camera.host.recover(), isNull);

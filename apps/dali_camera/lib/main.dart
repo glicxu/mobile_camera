@@ -491,7 +491,6 @@ class _CameraScreenState extends State<CameraScreen>
                       path: camera.capturePreviewPath!,
                       status: camera.capturePreviewStatus,
                       complete: !camera.busy,
-                      onDismiss: camera.dismissCapturePreview,
                     ),
                   CaptureFeedback(sequence: camera.capturedPhotoSequence),
                 ],

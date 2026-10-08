@@ -8,13 +8,11 @@ class CaptureResultPreview extends StatelessWidget {
     required this.path,
     required this.status,
     required this.complete,
-    required this.onDismiss,
   });
 
   final String path;
   final String status;
   final bool complete;
-  final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) => ColoredBox(
@@ -31,36 +29,30 @@ class CaptureResultPreview extends StatelessWidget {
           errorBuilder: (_, _, _) =>
               const Center(child: Icon(Icons.photo_outlined, size: 48)),
         ),
-        Positioned(
-          bottom: 12,
-          left: 12,
-          right: 12,
-          child: Semantics(
-            liveRegion: true,
-            child: Material(
-              color: Colors.black.withValues(alpha: .82),
-              borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(status, textAlign: TextAlign.center),
-                    if (!complete) ...[
+        if (!complete)
+          Positioned(
+            bottom: 12,
+            left: 12,
+            right: 12,
+            child: Semantics(
+              liveRegion: true,
+              child: Material(
+                color: Colors.black.withValues(alpha: .82),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(status, textAlign: TextAlign.center),
                       const SizedBox(height: 10),
                       const LinearProgressIndicator(),
-                    ] else
-                      TextButton.icon(
-                        onPressed: onDismiss,
-                        icon: const Icon(Icons.camera_alt_outlined),
-                        label: const Text('Back to camera'),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
       ],
     ),
   );
