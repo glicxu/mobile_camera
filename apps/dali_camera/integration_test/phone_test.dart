@@ -294,11 +294,20 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Open photo library'));
       await tester.pumpAndSettle();
-      for (var i = 0; i < 120 && !camera.reviewingLibrary; i++) {
+      for (
+        var i = 0;
+        i < 240 && (!camera.reviewingLibrary || camera.busy);
+        i++
+      ) {
         await Future<void>.delayed(const Duration(milliseconds: 250));
         await tester.pump();
       }
       expect(camera.reviewingLibrary, isTrue, reason: camera.message);
+      expect(
+        camera.busy,
+        isFalse,
+        reason: 'Library readiness: ${camera.message}',
+      );
       expect(
         tester
             .widget<ReviewModeControls>(find.byType(ReviewModeControls))
