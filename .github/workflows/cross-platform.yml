@@ -123,3 +123,19 @@ jobs:
         timeout-minutes: 10
         run: flutter test integration_test/bridge_test.dart -d "$DEVICE_ID" --dart-define=DALI_TEST_LIBRARY=true --verbose
         working-directory: apps/dali_camera
+      - name: Capture failed bridge diagnostics
+        if: failure()
+        run: |
+          mkdir -p bridge-diagnostics
+          CONTAINER=$(xcrun simctl get_app_container "$DEVICE_ID" com.dalicamera.daliCamera data 2>/dev/null || true)
+          if [ -n "$CONTAINER" ] && [ -f "$CONTAINER/tmp/dali-bridge-progress.txt" ]; then
+            cp "$CONTAINER/tmp/dali-bridge-progress.txt" bridge-diagnostics/progress.txt
+            cat bridge-diagnostics/progress.txt
+          fi
+          xcrun simctl io "$DEVICE_ID" screenshot bridge-diagnostics/simulator.png || true
+          xcrun simctl spawn "$DEVICE_ID" log show --last 10m --style compact --predicate 'process == "Runner" OR process == "tccd"' > bridge-diagnostics/runtime.log || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ios-bridge-diagnostics
+          path: bridge-diagnostics
