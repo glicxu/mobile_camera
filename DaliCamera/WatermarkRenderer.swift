@@ -3,7 +3,10 @@ import ImageIO
 import UIKit
 
 enum DaliWatermarkRenderer {
-    private static let context = CIContext(options: [.cacheIntermediates: false])
+    // Apple documents CIContext rendering as thread-safe. Keep one context without
+    // sharing mutable CIFilter instances; older SDKs omit its Sendable annotation.
+    // https://developer.apple.com/documentation/coreimage/cicontext
+    nonisolated(unsafe) private static let context = CIContext(options: [.cacheIntermediates: false])
 
     static func apply(
         to image: UIImage,
