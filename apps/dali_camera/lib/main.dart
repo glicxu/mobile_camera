@@ -8,6 +8,7 @@ import 'camera_controller.dart';
 import 'capture_settings.dart';
 import 'camera_selection_row.dart';
 import 'reference_chooser.dart';
+import 'photo_effect_controls.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -583,6 +584,30 @@ class _CameraScreenState extends State<CameraScreen>
                   ],
                 ),
                 CaptureStyleControls(camera: camera, review: true),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final treatment in ['reframe', 'level'])
+                      ChoiceChip(
+                        label: Text(
+                          treatment == 'reframe'
+                              ? 'Auto reframe'
+                              : 'Level horizon',
+                        ),
+                        selected: camera.selectedTreatment == treatment,
+                        onSelected:
+                            camera.busy ||
+                                camera.photoAnalysis?[treatment == 'reframe'
+                                        ? 'reframe'
+                                        : 'horizon'] ==
+                                    null
+                            ? null
+                            : (_) => camera.applyTreatment(treatment),
+                      ),
+                  ],
+                ),
+                PhotoEffectControls(camera: camera, review: true),
+                PhotoAnalysisCard(camera: camera),
                 SwitchListTile(
                   title: const Text('Compare with original'),
                   value: compare,
@@ -732,6 +757,7 @@ class _CameraScreenState extends State<CameraScreen>
                 ),
               ),
               CaptureStyleControls(camera: camera, initiallyExpanded: true),
+              PhotoEffectControls(camera: camera),
             ],
           ),
         ),
@@ -949,10 +975,8 @@ class _CameraScreenState extends State<CameraScreen>
                 ),
                 SwitchListTile(
                   title: const Text('Voice shutter'),
-                  subtitle: const Text(
-                    'On-device speech availability depends on your phone.',
-                  ),
-                  value: camera.voice,
+                  value: camera.voicePreferred,
+                  subtitle: Text(camera.voiceStatus),
                   onChanged: (v) async {
                     await camera.setVoice(v);
                   },

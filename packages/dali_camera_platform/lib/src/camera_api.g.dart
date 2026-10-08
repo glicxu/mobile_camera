@@ -875,6 +875,28 @@ class CameraHostApi {
       return (pigeonVar_replyList[0] as bool?)!;
     }
   }
+
+  Future<void> setDepthPreview(String configurationId, int level, String? subjectRect) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setDepthPreview$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[configurationId, level, subjectRect]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
 }
 
 abstract class CameraEvents {
@@ -887,6 +909,8 @@ abstract class CameraEvents {
   void error(String code, String message);
 
   void voiceShutter();
+
+  void voiceState(bool listening, String status);
 
   static void setUp(CameraEvents? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
@@ -978,6 +1002,34 @@ abstract class CameraEvents {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           try {
             api.voiceShutter();
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.dali_camera_platform.CameraEvents.voiceState$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.dali_camera_platform.CameraEvents.voiceState was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final bool? arg_listening = (args[0] as bool?);
+          assert(arg_listening != null,
+              'Argument for dev.flutter.pigeon.dali_camera_platform.CameraEvents.voiceState was null, expected non-null bool.');
+          final String? arg_status = (args[1] as String?);
+          assert(arg_status != null,
+              'Argument for dev.flutter.pigeon.dali_camera_platform.CameraEvents.voiceState was null, expected non-null String.');
+          try {
+            api.voiceState(arg_listening!, arg_status!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

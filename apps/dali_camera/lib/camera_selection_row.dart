@@ -62,6 +62,13 @@ class CameraSelectionRow extends StatelessWidget {
         onSelected: (value) {
           if (value == 'settings') {
             onEffects();
+          } else if (value.startsWith('beauty:')) {
+            camera.beautifier = value.split(':').last;
+            camera.persistSettings();
+            if (camera.beautifier == 'custom') onEffects();
+          } else if (value.startsWith('both:')) {
+            camera.filter = camera.beautifier = value.split(':').last;
+            camera.persistSettings();
           } else if (value == 'custom') {
             if (camera.filter == 'auto' || camera.filter == 'off') {
               camera.filter = 'custom';
@@ -88,13 +95,25 @@ class CameraSelectionRow extends StatelessWidget {
               ),
             ),
           const PopupMenuDivider(),
-          const PopupMenuItem(
-            enabled: false,
-            child: Text('Beautifier unavailable'),
-          ),
+          const PopupMenuItem(enabled: false, child: Text('Beautifier')),
+          for (final mode in ['auto', 'custom', 'off'])
+            CheckedPopupMenuItem(
+              value: 'beauty:$mode',
+              checked: camera.beautifier == mode,
+              child: Text(
+                mode == 'auto'
+                    ? 'Auto'
+                    : mode == 'custom'
+                    ? 'Custom'
+                    : 'Off',
+              ),
+            ),
+          const PopupMenuDivider(),
+          const PopupMenuItem(value: 'both:auto', child: Text('Both Auto')),
+          const PopupMenuItem(value: 'both:off', child: Text('Both Off')),
           const PopupMenuItem(
             value: 'settings',
-            child: Text('Filter settings and watermark'),
+            child: Text('Effects settings and watermark'),
           ),
         ],
         child: _SelectionLabel(

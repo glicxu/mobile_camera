@@ -94,6 +94,10 @@ internal class StillPhotoProcessor : AutoCloseable {
                 .put("eyeVisibilityScore", (if (left >= 3) .5 else 0.0) + (if (right >= 3) .5 else 0.0)).put("occlusionScore", if (left >= 3 && right >= 3) 0.0 else .6)
                 .put("yawEstimate", prominent.headEulerAngleY / 90.0).put("pitchEstimate", prominent.headEulerAngleX / 90.0))
         }
+        val horizon = PhotoGeometry.horizon(bitmap)
+        packet.put("horizonStatus", "valid")
+        if (horizon != null) packet.put("horizon", horizon)
+        PhotoGeometry.reframe(people.optJSONObject(0), bitmap.width < bitmap.height)?.let { packet.put("reframe", it) }
         return packet
     }
     private fun colorPass(image: Bitmap, brightness: Double = 0.0, saturation: Double = 1.0, contrast: Double = 1.0,
@@ -158,6 +162,38 @@ internal class StillPhotoProcessor : AutoCloseable {
         }
         blurred.recycle()
     }
+    private fun featureBounds(points: JSONArray?): RectF? {
+        if (points == null || points.length() < 3) return null
+        val xs = (0 until points.length()).map { points.getJSONObject(it).getDouble("x").toFloat() }
+        val ys = (0 until points.length()).map { points.getJSONObject(it).getDouble("y").toFloat() }
+        return RectF(xs.min(), ys.min(), xs.max(), ys.max())
+    }
+    private fun enlargeFeature(image: Bitmap, bounds: RectF, faceWidth: Double, strength: Double, lip: Boolean) {
+        val cx = bounds.centerX() * image.width; val cy = bounds.centerY() * image.height
+        val radius = max(faceWidth * image.width * (if (lip) .14 else .105), bounds.width() * image.width * (if (lip) .72 else .95))
+        val scale = (if (lip) .12 else .18) * strength.pow(if (lip) 1.25 else 1.2)
+        val left = max(0, floor(cx - radius).toInt()); val top = max(0, floor(cy - radius).toInt())
+        val right = min(image.width, ceil(cx + radius).toInt()); val bottom = min(image.height, ceil(cy + radius).toInt())
+        if (right <= left || bottom <= top || radius <= 0) return
+        // Local inverse radial mapping; only the feature neighborhood is allocated.
+        val region = Bitmap.createBitmap(image, left, top, right - left, bottom - top)
+        try {
+            val row = IntArray(right - left)
+            for (y in top until bottom) {
+                for (x in left until right) {
+                    val dx = x - cx; val dy = y - cy; val distance = hypot(dx.toDouble(), dy.toDouble()) / radius
+                    val factor = if (distance < 1) 1 - scale * (1 - distance * distance).pow(2) else 1.0
+                    val sx = (cx + dx * factor - left).coerceIn(0.0, region.width - 1.0); val sy = (cy + dy * factor - top).coerceIn(0.0, region.height - 1.0)
+                    val ix = sx.toInt(); val iy = sy.toInt(); val fx = sx - ix; val fy = sy - iy
+                    val a = region.getPixel(ix, iy); val b = region.getPixel(min(ix + 1, region.width - 1), iy)
+                    val c = region.getPixel(ix, min(iy + 1, region.height - 1)); val d = region.getPixel(min(ix + 1, region.width - 1), min(iy + 1, region.height - 1))
+                    fun channel(get: (Int) -> Int) = ((get(a) * (1 - fx) + get(b) * fx) * (1 - fy) + (get(c) * (1 - fx) + get(d) * fx) * fy).roundToInt()
+                    row[x - left] = Color.rgb(channel(Color::red), channel(Color::green), channel(Color::blue))
+                }
+                image.setPixels(row, 0, row.size, left, y, row.size, 1)
+            }
+        } finally { region.recycle() }
+    }
     fun render(original: PhotoHandle, recipe: String): Bitmap {
         check(recipe.length < 16384); val request = JSONObject(recipe); check(request.getInt("version") == 1) { "Unsupported photo recipe" }
         val treatment = request.optString("treatment", "original"); check(treatment in listOf("original", "reframe", "level", "enhance", "portrait", "landscape"))
@@ -165,7 +201,8 @@ internal class StillPhotoProcessor : AutoCloseable {
         val filter = request.optJSONArray("filter") ?: JSONArray(List(7) { 0 })
         check(filter.length() == 7); val p = DoubleArray(7) { index -> filter.getDouble(index).also { check(it.isFinite()) }.coerceIn(if (index in listOf(0, 1, 3)) -5.0 else 0.0, 5.0) / 5 }
         val analysis = analyze(original)
-        val source = load(original.path); var image = source.copy(Bitmap.Config.ARGB_8888, true); source.recycle()
+        val source = load(original.path)
+        var image = try { source.copy(Bitmap.Config.ARGB_8888, true) ?: error("Cannot allocate photo result") } finally { source.recycle() }
         fun flag(name: String) = flags.optBoolean(name, true)
         try {
             if (p[4] > 0) spatial(image, 1.5 + 3 * p[4], .16 + .28 * p[4])
@@ -181,13 +218,30 @@ internal class StillPhotoProcessor : AutoCloseable {
                     if (flag("subjectEmphasis")) colorPass(image, -.14 * strength, mask = { x, y -> (((x.toDouble() / image.width - .5).pow(2) + (y.toDouble() / image.height - .5).pow(2)) * 2).coerceIn(0.0, 1.0) })
                 }
                 "portrait" -> if (strength > 0) {
-                    val face = analysis.getJSONArray("faces").optJSONObject(0) ?: error("No face is available for Portrait Polish")
+                    val face = analysis.getJSONArray("faces").optJSONObject(0)
+                    if (face != null) {
                     val cx = face.getDouble("x") + face.getDouble("width") / 2; val cy = face.getDouble("y") + face.getDouble("height") / 2
                     val rx = face.getDouble("width") * .7; val ry = face.getDouble("height") * .74
-                    val skin: (Int, Int) -> Double = { x, y -> (1 - ((x.toDouble() / image.width - cx) / rx).pow(2) - ((y.toDouble() / image.height - cy) / ry).pow(2)).coerceIn(0.0, 1.0) }
+                    val geometry = analysis.optJSONObject("faceLandmarks")
+                    val features = listOf("leftEye", "rightEye", "outerLips").mapNotNull { featureBounds(geometry?.optJSONArray(it)) }
+                    val skin: (Int, Int) -> Double = { x, y ->
+                        val nx = x.toDouble() / image.width; val ny = y.toDouble() / image.height
+                        val base = (1 - ((nx - cx) / rx).pow(2) - ((ny - cy) / ry).pow(2)).coerceIn(0.0, 1.0)
+                        val cutout = features.maxOfOrNull { f -> (1 - ((nx - f.centerX()) / max(.001, f.width() * .8)).pow(2) - ((ny - f.centerY()) / max(.001, f.height() * 1.1)).pow(2)).coerceIn(0.0, 1.0) } ?: 0.0
+                        base * (1 - cutout)
+                    }
                     if (flag("faceBrightness")) colorPass(image, (.015 + .10 * strength.pow(1.2)) * (.35 + .55 * strength), 1 - .045 * strength, 1 + .025 * strength, mask = skin)
                     if (flag("blemishReduction")) spatial(image, 1.5 + 3 * strength, .10 + .40 * strength, mask = skin)
                     if (flag("skinSmoothing")) spatial(image, (face.getDouble("width") * image.width * (.008 + .024 * strength.pow(1.15))).coerceIn(1.2, 34.0), .08 + .52 * strength.pow(1.15), mask = skin)
+                    val reshape = ((strength - .2) / .8).coerceIn(0.0, 1.0)
+                    val faceAnalysis = analysis.optJSONObject("faceAnalysis")
+                    if (reshape > 0 && abs(faceAnalysis?.optDouble("yawEstimate") ?: 0.0) < .38 && (faceAnalysis?.optDouble("occlusionScore") ?: 0.0) < .55) {
+                        if (flag("eyeEnlargement") && (faceAnalysis?.optDouble("eyeVisibilityScore") ?: 0.0) >= .9) for (name in listOf("leftEye", "rightEye")) {
+                            featureBounds(geometry?.optJSONArray(name))?.let { enlargeFeature(image, it, face.getDouble("width"), reshape, false) }
+                        }
+                        if (flags.optBoolean("lipPlumping", false)) featureBounds(geometry?.optJSONArray("outerLips"))?.let { enlargeFeature(image, it, face.getDouble("width"), reshape, true) }
+                    }
+                    }
                 }
                 "landscape" -> if (strength > 0) {
                     val s = if (strength <= .6) strength / .6 else 1 + (strength - .6) * .875
@@ -198,14 +252,19 @@ internal class StillPhotoProcessor : AutoCloseable {
                     }
                 }
                 "reframe" -> {
-                    val subject = analysis.getJSONArray("people").optJSONObject(0) ?: error("No confident reframe is available")
-                    val x = (subject.getDouble("x") - subject.getDouble("width") * .42).coerceIn(0.0, .9)
-                    val y = (subject.getDouble("y") - subject.getDouble("height") * .18).coerceIn(0.0, .9)
-                    val w = (subject.getDouble("width") * 1.84).coerceIn(.1, 1 - x); val h = (subject.getDouble("height") * 1.36).coerceIn(.1, 1 - y)
+                    val crop = analysis.optJSONObject("reframe")?.getJSONObject("cropRect") ?: error("No confident reframe is available")
+                    val x = crop.getDouble("x"); val y = crop.getDouble("y"); val w = crop.getDouble("width"); val h = crop.getDouble("height")
                     val cropped = Bitmap.createBitmap(image, (x * image.width).toInt(), (y * image.height).toInt(), max(1, (w * image.width).toInt()), max(1, (h * image.height).toInt()))
                     if (cropped !== image) image.recycle(); image = cropped
                 }
-                "level" -> error("No calibrated optical horizon is available on this phone")
+                "level" -> {
+                    val horizon = analysis.optJSONObject("horizon") ?: error("No confident horizon correction is available")
+                    val angle = horizon.getDouble("angleDegrees")
+                    check(horizon.getDouble("confidence") > .55 && abs(angle) > 3) { "No horizon correction is needed" }
+                    val matrix = Matrix().apply { setRotate((-angle).toFloat()) }
+                    val rotated = Bitmap.createBitmap(image, 0, 0, image.width, image.height, matrix, true)
+                    if (rotated !== image) image.recycle(); image = rotated
+                }
             }
             val depth = request.optInt("depth", 0).coerceIn(0, 5)
             if (depth > 0) {

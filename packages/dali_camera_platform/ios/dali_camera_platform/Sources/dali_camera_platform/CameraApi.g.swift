@@ -370,6 +370,7 @@ protocol CameraHostApi {
   func setManualExposure(configurationId: String, seconds: Double?, iso: Double?, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
   func openSettings() throws
   func setVoiceEnabled(enabled: Bool, completion: @escaping (Result<Bool, Error>) -> Void)
+  func setDepthPreview(configurationId: String, level: Int64, subjectRect: String?) throws
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -748,6 +749,23 @@ class CameraHostApiSetup {
     } else {
       setVoiceEnabledChannel.setMessageHandler(nil)
     }
+    let setDepthPreviewChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setDepthPreview\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setDepthPreviewChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let configurationIdArg = args[0] as! String
+        let levelArg = args[1] as! Int64
+        let subjectRectArg: String? = nilOrValue(args[2])
+        do {
+          try api.setDepthPreview(configurationId: configurationIdArg, level: levelArg, subjectRect: subjectRectArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      setDepthPreviewChannel.setMessageHandler(nil)
+    }
   }
 }
 /// Generated protocol from Pigeon that represents Flutter messages that can be called from Swift.
@@ -756,6 +774,7 @@ protocol CameraEventsProtocol {
   func state(snapshot snapshotArg: CameraSnapshot, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func error(code codeArg: String, message messageArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func voiceShutter(completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func voiceState(listening listeningArg: Bool, status statusArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
 class CameraEvents: CameraEventsProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
@@ -825,6 +844,24 @@ class CameraEvents: CameraEventsProtocol {
     let channelName: String = "dev.flutter.pigeon.dali_camera_platform.CameraEvents.voiceShutter\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage(nil) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func voiceState(listening listeningArg: Bool, status statusArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.dali_camera_platform.CameraEvents.voiceState\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([listeningArg, statusArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

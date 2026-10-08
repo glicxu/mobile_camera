@@ -320,7 +320,7 @@ struct ReferenceMeasurementAlgorithms {
     func analyzeImage(
         cgImage: CGImage,
         orientation: CGImagePropertyOrientation
-    ) throws -> (measurements: Measurements, issues: [PhotoIssue]) {
+    ) throws -> (measurements: Measurements, issues: [PhotoIssue], availability: [String: String]) {
         let humanRequest = VNDetectHumanRectanglesRequest()
         humanRequest.upperBodyOnly = false
         let faceRequest = VNDetectFaceLandmarksRequest()
@@ -329,9 +329,11 @@ struct ReferenceMeasurementAlgorithms {
         let saliencyRequest = VNGenerateObjectnessBasedSaliencyImageRequest()
         let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
 
-        do {
-            try handler.perform([humanRequest, faceRequest, poseRequest, horizonRequest, saliencyRequest])
-        } catch { throw error }
+        var availability: [String: String] = [:]
+        for (name, request) in [("people", humanRequest as VNRequest), ("face", faceRequest as VNRequest), ("pose", poseRequest as VNRequest), ("horizon", horizonRequest as VNRequest), ("saliency", saliencyRequest as VNRequest)] {
+            do { try handler.perform([request]); availability[name] = "valid" }
+            catch { availability[name] = "unavailable" }
+        }
 
         let people = (humanRequest.results ?? [])
             .map {
@@ -381,7 +383,7 @@ struct ReferenceMeasurementAlgorithms {
             faceLandmarks: faceLandmarkGeometry(from: faceObservation, face: face)
         )
 
-        return (measurements, [])
+        return (measurements, [], availability)
     }
 
     func reframeSuggestion(for measurements: Measurements, imageSize: CGSize) -> ReframeSuggestion? {

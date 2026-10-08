@@ -64,6 +64,12 @@ jobs:
           /tmp/export-dali-situations "$GITHUB_WORKSPACE/fixtures/swift-situations.json"
           cd packages/dali_camera_core
           dart run tool/verify_situation_fixtures.dart ../../fixtures/swift-situations.json
+      - name: Compare native pose geometry
+        run: |
+          swiftc -parse-as-library DaliCamera/Models.swift packages/dali_camera_platform/ios/dali_camera_platform/Sources/dali_camera_platform/ReferencePoseGeometry.swift tools/ExportPoseFixtures.swift -o /tmp/export-dali-pose
+          /tmp/export-dali-pose "$GITHUB_WORKSPACE/fixtures/swift-pose.json"
+          cd packages/dali_camera_core
+          dart run tool/verify_pose_fixtures.dart ../../fixtures/swift-pose.json
       - uses: actions/upload-artifact@v4
         with:
           name: swift-baseline-fixtures

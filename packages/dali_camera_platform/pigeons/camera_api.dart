@@ -137,6 +137,7 @@ abstract class CameraHostApi {
   void openSettings();
   @async
   bool setVoiceEnabled(bool enabled);
+  void setDepthPreview(String configurationId, int level, String? subjectRect);
 }
 
 @FlutterApi()
@@ -145,4 +146,5 @@ abstract class CameraEvents {
   void state(CameraSnapshot snapshot);
   void error(String code, String message);
   void voiceShutter();
+  void voiceState(bool listening, String status);
 }

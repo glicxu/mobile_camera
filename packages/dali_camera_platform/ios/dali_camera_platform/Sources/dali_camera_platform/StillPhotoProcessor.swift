@@ -24,7 +24,7 @@ final class StillPhotoProcessor {
         result["confidence"] = value.confidence; result["label"] = value.label
         return [result]
     }
-    private func reflected(_ value: Any) -> [String: Any] {
+    func reflected(_ value: Any) -> [String: Any] {
         var result: [String: Any] = [:]
         for child in Mirror(reflecting: value).children {
             guard let label = child.label else { continue }
@@ -36,7 +36,8 @@ final class StillPhotoProcessor {
     }
     func analyze(_ photo: PhotoHandle) throws -> String {
         let image = try load(photo)
-        let measurements = try algorithms.analyzeImage(cgImage: image.cgImage!, orientation: .up).measurements
+        let analysis = try algorithms.analyzeImage(cgImage: image.cgImage!, orientation: .up)
+        let measurements = analysis.measurements
         var packet: [String: Any] = [
             "schemaVersion": 1, "sourceId": photo.id, "frameId": "still-\(photo.id)", "configurationId": "still-\(photo.id)",
             "timestamp": Int(Date().timeIntervalSince1970 * 1000), "imageWidth": image.cgImage!.width,
@@ -53,6 +54,7 @@ final class StillPhotoProcessor {
                 ["x": value.point.x, "y": value.point.y, "confidence": value.confidence]
             }
         ]
+        for (signal, state) in analysis.availability { packet[signal + "Status"] = state }
         if let group = measurements.groupAnalysis {
             var value = reflected(group); value["groupBounds"] = group.groupBounds.map(rect) ?? [:]
             packet["groupAnalysis"] = value
@@ -108,7 +110,6 @@ final class StillPhotoProcessor {
             settings.blemishReductionEnabled = portrait && (flags["blemishReduction"] ?? true)
             settings.eyeEnlargementEnabled = portrait && (flags["eyeEnlargement"] ?? true)
             settings.lipPlumpingEnabled = portrait && (flags["lipPlumping"] ?? false)
-            if portrait && measurements.faceBox == nil && strength > 0 { throw error("No face is available for Portrait Polish") }
             image = BeautifyEngine().apply(to: image, measurements: measurements, settings: settings).image
         default: break
         }

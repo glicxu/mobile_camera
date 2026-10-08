@@ -1,0 +1,233 @@
+import 'package:flutter/material.dart';
+import 'camera_controller.dart';
+
+const treatmentTitles = {
+  'enhance': 'General Enhance',
+  'portrait': 'Portrait Polish',
+  'landscape': 'Landscape Polish',
+};
+
+class PhotoEffectControls extends StatelessWidget {
+  const PhotoEffectControls({
+    super.key,
+    required this.camera,
+    this.review = false,
+  });
+  final CameraController camera;
+  final bool review;
+  @override
+  Widget build(BuildContext context) {
+    final treatment = review ? camera.reviewTreatment : camera.customBeautifier;
+    final profiles = review
+        ? camera.reviewTreatments
+        : camera.captureTreatments;
+    final settings = profiles[treatment]!;
+    final flags = settings['flags'] as Map;
+    final strength = (settings['strength'] as num).toInt().clamp(0, 5);
+    final names = treatment == 'enhance'
+        ? {
+            'autoTone': 'Auto tone',
+            'warmth': 'Warmth',
+            'vibrance': 'Vibrance',
+            'clarity': 'Clarity',
+            'noiseReduction': 'Noise reduction',
+            'subjectEmphasis': 'Subject emphasis',
+          }
+        : treatment == 'portrait'
+        ? {
+            'faceBrightness': 'Face brightness',
+            'skinSmoothing': 'Skin smoothing',
+            'blemishReduction': 'Blemish reduction',
+            'eyeEnlargement': 'Eye enlargement',
+            'lipPlumping': 'Lip plumping',
+          }
+        : {'sky': 'Sky enhancement', 'landscapeColor': 'Landscape color'};
+    void update() => camera.persistSettings();
+    return ExpansionTile(
+      initiallyExpanded: review,
+      title: Text(review ? 'Photo treatment' : 'Beautifier'),
+      children: [
+        if (!review)
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final mode in ['auto', 'custom', 'off'])
+                ChoiceChip(
+                  label: Text(
+                    mode == 'auto'
+                        ? 'Auto'
+                        : mode == 'custom'
+                        ? 'Custom'
+                        : 'Off',
+                  ),
+                  selected: camera.beautifier == mode,
+                  onSelected: camera.busy
+                      ? null
+                      : (_) {
+                          camera.beautifier = mode;
+                          update();
+                        },
+                ),
+            ],
+          ),
+        if (!review && camera.beautifier == 'auto')
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text(
+              'Auto uses ${treatmentTitles[camera.captureTreatment]} for ${camera.activeSituation.title}.',
+            ),
+          ),
+        if (!review) ...[
+          Text('Depth of focus: ${camera.depthLevel} / 5'),
+          Slider(
+            min: 0,
+            max: 5,
+            divisions: 5,
+            value: camera.depthLevel.toDouble(),
+            onChanged: camera.busy
+                ? null
+                : (value) {
+                    camera.depthLevel = value.round();
+                    camera.persistSettings();
+                    camera.updateDepthPreview();
+                  },
+          ),
+        ],
+        if (review || camera.beautifier != 'off') ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final entry in treatmentTitles.entries)
+                ChoiceChip(
+                  label: Text(entry.value),
+                  selected: treatment == entry.key,
+                  onSelected: camera.busy
+                      ? null
+                      : (_) {
+                          if (review) {
+                            camera.reviewTreatment = entry.key;
+                          } else {
+                            camera.customBeautifier = entry.key;
+                            camera.beautifier = 'custom';
+                          }
+                          update();
+                        },
+                ),
+            ],
+          ),
+          if (treatment != 'enhance')
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final preset
+                    in treatment == 'portrait'
+                        ? ['Natural', 'Polished', 'Glam', 'Custom']
+                        : ['Natural', 'Vivid', 'Dramatic', 'Custom'])
+                  ActionChip(
+                    label: Text(preset),
+                    onPressed: camera.busy
+                        ? null
+                        : () {
+                            if (preset != 'Custom') {
+                              settings['strength'] = preset == 'Natural'
+                                  ? 2
+                                  : (preset == 'Polished' || preset == 'Vivid')
+                                  ? 3
+                                  : 4;
+                              settings['flags'] = treatment == 'portrait'
+                                  ? <String, bool>{
+                                      'eyeEnlargement': preset != 'Natural',
+                                      'lipPlumping': preset == 'Glam',
+                                    }
+                                  : <String, bool>{'sky': preset != 'Natural'};
+                            }
+                            update();
+                          },
+                  ),
+              ],
+            ),
+          Text('Level $strength of 5'),
+          Slider(
+            min: 0,
+            max: 5,
+            divisions: 5,
+            value: strength.toDouble(),
+            onChanged: camera.busy
+                ? null
+                : (value) {
+                    settings['strength'] = value.round();
+                    update();
+                  },
+          ),
+          for (final entry in names.entries)
+            SwitchListTile(
+              title: Text(entry.value),
+              value:
+                  flags[entry.key] as bool? ??
+                  (entry.key != 'lipPlumping' || review),
+              onChanged: camera.busy
+                  ? null
+                  : (value) {
+                      flags[entry.key] = value;
+                      update();
+                    },
+            ),
+          if (review)
+            FilledButton.tonal(
+              onPressed: camera.busy
+                  ? null
+                  : () => camera.applyTreatment(treatment),
+              child: const Text('Prepare treatment'),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class PhotoAnalysisCard extends StatelessWidget {
+  const PhotoAnalysisCard({super.key, required this.camera});
+  final CameraController camera;
+  @override
+  Widget build(BuildContext context) {
+    final analysis = camera.photoAnalysis;
+    if (analysis == null) {
+      return Padding(
+        padding: const EdgeInsets.all(8),
+        child: Text(camera.analysisError ?? 'Analyzing photo…'),
+      );
+    }
+    final faces = analysis['faces'] as List? ?? [];
+    final points = analysis['poseKeypoints'] as Map? ?? {};
+    final luminance = analysis['backgroundLuminance'] as num?;
+    return ExpansionTile(
+      title: const Text('Photo analysis'),
+      subtitle: Text(
+        '${faces.length} ${faces.length == 1 ? 'face' : 'faces'} · ${points.length} pose landmarks',
+      ),
+      children: [
+        if (luminance != null)
+          Text(
+            'Background brightness: ${(luminance * (analysis['luminanceScale'] == 255 ? 1 : 255)).round()} / 255',
+          ),
+        if (analysis['reframe'] is Map)
+          Text(
+            (analysis['reframe'] as Map)['instruction'] as String? ??
+                'Reframe available',
+          ),
+        if (analysis['horizon'] is Map)
+          Text(
+            'Horizon tilt: ${((analysis['horizon'] as Map)['angleDegrees'] as num).toStringAsFixed(1)}°',
+          ),
+        for (final issue
+            in (analysis['issues'] as List? ?? []).whereType<Map>())
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text('${issue['recipient']}: ${issue['instruction']}'),
+          ),
+        if (camera.debug) SelectableText(analysis.toString()),
+      ],
+    );
+  }
+}

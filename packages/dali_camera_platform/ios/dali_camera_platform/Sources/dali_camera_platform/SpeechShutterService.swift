@@ -13,6 +13,7 @@ final class SpeechShutterService {
     private var lastCommand = Date.distantPast
     var customPhrase = ""
     var onShutter: (() -> Void)?
+    var onState: ((Bool, String) -> Void)?
 
     func setEnabled(_ value: Bool, completion: @escaping (Result<Bool, Error>) -> Void) {
         stop(); enabled = value
@@ -29,6 +30,7 @@ final class SpeechShutterService {
     }
     func stop() {
         enabled = false; token = UUID(); stopAudio()
+        onState?(false, "Paused")
     }
     private func stopAudio() {
         engine.stop()
@@ -45,6 +47,7 @@ final class SpeechShutterService {
         let input = engine.inputNode
         input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { buffer, _ in request.append(buffer) }
         tapInstalled = true; engine.prepare(); try engine.start()
+        onState?(true, "Listening on device")
         let epoch = token
         task = recognizer.recognitionTask(with: request) { result, error in
             let transcript = result?.bestTranscription.formattedString.lowercased() ?? ""
@@ -63,6 +66,7 @@ final class SpeechShutterService {
     }
     private func restart(after delay: Double) {
         stopAudio(); let epoch = token
+        onState?(false, "Waiting to listen")
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             guard self.enabled, self.token == epoch else { return }
             do { try self.listen() } catch { self.stop() }

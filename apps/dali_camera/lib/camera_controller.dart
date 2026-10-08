@@ -65,6 +65,37 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   Map<String, int> customStyle = {};
   bool watermark = false;
   bool styled = false;
+  String beautifier = 'off';
+  String customBeautifier = 'portrait';
+  int depthLevel = 0;
+  String selectedTreatment = 'original';
+  Map<String, dynamic>? photoAnalysis;
+  String? analysisError;
+  final Map<String, Map<String, dynamic>> captureTreatments = {
+    'enhance': {'strength': 3, 'flags': <String, bool>{}},
+    'portrait': {
+      'strength': 3,
+      'flags': <String, bool>{'lipPlumping': false},
+    },
+    'landscape': {'strength': 3, 'flags': <String, bool>{}},
+  };
+  final Map<String, Map<String, dynamic>> reviewTreatments = {
+    'enhance': {'strength': 0, 'flags': <String, bool>{}},
+    'portrait': {'strength': 0, 'flags': <String, bool>{}},
+    'landscape': {'strength': 0, 'flags': <String, bool>{}},
+  };
+  String reviewTreatment = 'enhance';
+  String get captureTreatment => beautifier == 'off'
+      ? 'original'
+      : beautifier == 'custom'
+      ? customBeautifier
+      : switch (activeSituation) {
+          PhotographicSituation.portrait ||
+          PhotographicSituation.group ||
+          PhotographicSituation.personScene => 'portrait',
+          PhotographicSituation.landscape => 'landscape',
+          _ => 'enhance',
+        };
   final List<PhotoHandle> history = [];
   final List<PhotoHandle> importedPhotos = [];
   bool get reviewingImport =>
@@ -101,6 +132,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   bool get sequenceActive => countdown > 0 || bursting;
   bool debug = false;
   bool voice = false;
+  bool voicePreferred = false;
+  String voiceStatus = 'Off';
+  bool _depthUpdating = false;
   bool controlBusy = false;
   bool manualWorkspace = false;
   double? focusX;
@@ -156,6 +190,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       focusX = null;
       focusY = null;
       aspectRatio = snapshot!.aspectRatio;
+      if (voicePreferred && foreground && !reviewing) await _resumeVoice();
       if (!foreground || reviewing) {
         await host.stop();
         snapshot = null;
@@ -205,22 +240,33 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       }
       selected = original;
       styled = false;
+      selectedTreatment = 'original';
+      photoAnalysis = null;
+      analysisError = null;
       message = 'Saving original…';
       notifyListeners();
       await _saveOriginal();
       history.removeWhere((photo) => photo.id == original!.id);
       history.insert(0, original!);
       await _persistHistory();
-      if ((style.active || watermark) && original?.unsaved != true) {
+      if ((style.active ||
+              watermark ||
+              beautifier != 'off' ||
+              depthLevel > 0) &&
+          original?.unsaved != true) {
         try {
           selected = await _renderStyle(original!);
           styled = true;
+          selectedTreatment = 'styled';
         } catch (e) {
           message = 'Original saved. Style could not be prepared: $e';
         }
       }
       reviewing = review || original?.unsaved == true;
-      if (reviewing) await pause();
+      if (reviewing) {
+        await pause();
+        await _analyzeStill();
+      }
     } catch (e) {
       message = 'Photo could not be completed: $e';
     } finally {
@@ -313,8 +359,10 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         original = importedPhotos.first;
         selected = original;
         styled = false;
+        selectedTreatment = 'original';
         reviewing = true;
         await pause();
+        await _analyzeStill();
         message = result.skipped > 0
             ? '${result.photos.length} photos opened; ${result.skipped} skipped. Imports are limited to 50 photos.'
             : '${result.photos.length} ${result.photos.length == 1 ? 'photo' : 'photos'} opened';
@@ -332,6 +380,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (original == null || busy) return;
     reviewing = true;
     await pause();
+    await _analyzeStill();
     notifyListeners();
   }
 
@@ -370,6 +419,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       await _releaseVariant();
       styled = false;
       selected = result;
+      selectedTreatment = crop ? 'crop' : 'original';
       message = null;
     } catch (e) {
       message = 'Could not prepare this version: $e';
@@ -454,9 +504,11 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       original = photo;
       selected = photo;
       styled = false;
+      selectedTreatment = 'original';
       if (!reviewingImport) await _clearImportedPhotos();
       reviewing = true;
       await pause();
+      await _analyzeStill();
     } finally {
       busy = false;
       notifyListeners();
@@ -472,6 +524,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       await _releaseVariant();
       selected = result;
       styled = true;
+      selectedTreatment = 'styled';
       message = 'Styled copy ready. Original retained.';
     } catch (e) {
       message = 'Could not style photo: $e';
@@ -495,6 +548,25 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       markPath = file.path;
     }
     final selectedStyle = style;
+    if (beautifier != 'off' || depthLevel > 0) {
+      final settings = captureTreatments[captureTreatment];
+      return host.renderEffects(
+        source,
+        jsonEncode({
+          'version': 1,
+          'treatment': captureTreatment,
+          'strength': settings?['strength'] ?? 0,
+          'flags': settings?['flags'] ?? {},
+          'filter': PhotoStyle.fields
+              .map((field) => selectedStyle.value(field).toDouble())
+              .toList(),
+          'depth': depthLevel,
+          if (focusX != null && focusY != null)
+            'focus': {'x': focusX, 'y': focusY},
+          'watermarkPath': ?markPath,
+        }),
+      );
+    }
     return host.renderFilter(
       source,
       selectedStyle.matrix,
@@ -503,6 +575,53 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           .toList(),
       markPath,
     );
+  }
+
+  Future<void> _analyzeStill() async {
+    final source = original;
+    photoAnalysis = null;
+    analysisError = null;
+    if (source == null) return;
+    try {
+      final result =
+          jsonDecode(await host.analyzePhoto(source)) as Map<String, dynamic>;
+      if (original?.id == source.id && result['sourceId'] == source.id) {
+        photoAnalysis = result;
+      }
+    } catch (error) {
+      if (original?.id == source.id) {
+        analysisError = 'Photo analysis unavailable: $error';
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> applyTreatment(String treatment) async {
+    if (busy || original == null) return;
+    busy = true;
+    notifyListeners();
+    try {
+      final settings = reviewTreatments[treatment];
+      final result = await host.renderEffects(
+        original!,
+        jsonEncode({
+          'version': 1,
+          'treatment': treatment,
+          'strength': settings?['strength'] ?? 0,
+          'flags': settings?['flags'] ?? {},
+        }),
+      );
+      await _releaseVariant();
+      selected = result;
+      selectedTreatment = treatment;
+      styled = false;
+      message = 'Selected version ready. Original retained.';
+    } catch (error) {
+      message = 'Could not prepare this version: $error';
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
   }
 
   Future<void> _release(PhotoHandle photo) async {
@@ -539,7 +658,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           : 0;
       longPress = prefs.getString('longPress') ?? 'burst';
       voicePhrase = prefs.getString('voicePhrase') ?? '';
-      final savedFilter = prefs.getString('filter') ?? 'off';
+      voicePreferred = prefs.getBool('voicePreferred') ?? false;
+      final savedFilter = prefs.getString('filter') ?? 'auto';
       filter =
           [
             'auto',
@@ -550,6 +670,37 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           ? savedFilter
           : 'off';
       watermark = prefs.getBool('watermark') ?? false;
+      final savedBeauty = prefs.getString('beautifier');
+      beautifier = ['auto', 'custom', 'off'].contains(savedBeauty)
+          ? savedBeauty!
+          : 'off';
+      customBeautifier = prefs.getString('customBeautifier') ?? 'portrait';
+      if (!captureTreatments.containsKey(customBeautifier)) {
+        customBeautifier = 'portrait';
+      }
+      reviewTreatment = prefs.getString('reviewTreatment') ?? 'enhance';
+      if (!reviewTreatments.containsKey(reviewTreatment)) {
+        reviewTreatment = 'enhance';
+      }
+      depthLevel = (prefs.getInt('depthLevel') ?? 0).clamp(0, 5);
+      for (final entry in {
+        'captureTreatments': captureTreatments,
+        'reviewTreatments': reviewTreatments,
+      }.entries) {
+        final saved = jsonDecode(prefs.getString(entry.key) ?? '{}') as Map;
+        for (final key in entry.value.keys) {
+          final profile = saved[key];
+          if (profile is Map) {
+            entry.value[key] = {
+              'strength': ((profile['strength'] as num?)?.toInt() ?? 0).clamp(
+                0,
+                5,
+              ),
+              'flags': Map<String, bool>.from(profile['flags'] as Map? ?? {}),
+            };
+          }
+        }
+      }
       final styleData =
           jsonDecode(prefs.getString('customStyle') ?? '{}') as Map;
       customStyle = styleData.map(
@@ -583,8 +734,15 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       await prefs.setString('longPress', longPress);
       await prefs.setString('filter', filter);
       await prefs.setString('voicePhrase', voicePhrase);
+      await prefs.setBool('voicePreferred', voicePreferred);
       await prefs.setBool('watermark', watermark);
       await prefs.setString('customStyle', jsonEncode(customStyle));
+      await prefs.setString('beautifier', beautifier);
+      await prefs.setString('customBeautifier', customBeautifier);
+      await prefs.setString('reviewTreatment', reviewTreatment);
+      await prefs.setInt('depthLevel', depthLevel);
+      await prefs.setString('captureTreatments', jsonEncode(captureTreatments));
+      await prefs.setString('reviewTreatments', jsonEncode(reviewTreatments));
       await host.setVoicePhrase(voicePhrase);
     } catch (e) {
       message = 'Could not save settings: $e';
@@ -701,14 +859,27 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   }
 
   Future<void> setVoice(bool value) async {
+    voicePreferred = value;
+    await persistSettings();
+    await _resumeVoice();
+  }
+
+  Future<void> _resumeVoice() async {
+    final value = voicePreferred && foreground && !reviewing;
     try {
       voice = await host.setVoiceEnabled(value);
+      voiceStatus = voice
+          ? 'Listening on device'
+          : value
+          ? 'Unavailable on this phone'
+          : 'Off';
       if (value && !voice) {
         message = 'On-device voice shutter is unavailable on this phone.';
       }
     } catch (e) {
       message = 'Voice shutter: $e';
       voice = false;
+      voiceStatus = 'Voice shutter unavailable';
     }
     notifyListeners();
   }
@@ -721,6 +892,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       if (data['configurationId'] != snapshot!.configurationId) return;
       final packet = NativeFrame(data);
       lastFrame = data;
+      unawaited(updateDepthPreview());
       aspectRatio = packet.aspectRatio;
       var signals = packet.situationSignals;
       signals = signals.withSubjectMotion(
@@ -808,6 +980,90 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   @override
   void voiceShutter() {
     if (voice && canCapture) requestShutter();
+  }
+
+  @override
+  void voiceState(bool listening, String status) {
+    voice = listening && foreground && !reviewing;
+    voiceStatus = status;
+    notifyListeners();
+  }
+
+  Future<void> updateDepthPreview() async {
+    final current = snapshot;
+    if (_depthUpdating || current == null || reviewing) return;
+    _depthUpdating = true;
+    try {
+      Map? subject;
+      final people = lastFrame?['people'] as List? ?? [];
+      final faces = lastFrame?['faces'] as List? ?? [];
+      final candidates = [
+        ...people.whereType<Map>(),
+        if (lastFrame?['salientObject'] is Map)
+          lastFrame!['salientObject'] as Map,
+        ...faces.whereType<Map>(),
+      ];
+      if (focusX != null && focusY != null) {
+        subject = candidates
+            .where(
+              (r) =>
+                  focusX! >= (r['x'] as num) - .04 &&
+                  focusX! <= (r['x'] as num) + (r['width'] as num) + .04 &&
+                  focusY! >= (r['y'] as num) - .04 &&
+                  focusY! <= (r['y'] as num) + (r['height'] as num) + .04,
+            )
+            .firstOrNull;
+      }
+      final focused = subject != null;
+      subject ??= people.whereType<Map>().firstOrNull;
+      final faceOnly = subject == null && faces.isNotEmpty;
+      subject ??= faces.whereType<Map>().firstOrNull;
+      Map<String, double>? rect;
+      if (subject != null) {
+        final x = (subject['x'] as num).toDouble();
+        final y = (subject['y'] as num).toDouble();
+        final w = (subject['width'] as num).toDouble();
+        final h = (subject['height'] as num).toDouble();
+        final dx = focused
+            ? .22
+            : faceOnly
+            ? 1.1
+            : .16;
+        final dy = focused
+            ? .18
+            : faceOnly
+            ? .45
+            : .10;
+        final left = (x - w * dx).clamp(0.0, 1.0);
+        final top = (y - h * dy).clamp(0.0, 1.0);
+        final right = (x + w * (faceOnly ? 2.1 : 1 + dx)).clamp(left, 1.0);
+        final bottom = (y + h * (faceOnly ? 4.25 : 1 + dy)).clamp(top, 1.0);
+        rect = {
+          'x': left,
+          'y': top,
+          'width': right - left,
+          'height': bottom - top,
+        };
+      } else if (focusX != null && focusY != null) {
+        final left = (focusX! - .18).clamp(0.0, 1.0);
+        final top = (focusY! - .24).clamp(0.0, 1.0);
+        rect = {
+          'x': left,
+          'y': top,
+          'width': .36.clamp(0.0, 1 - left),
+          'height': .48.clamp(0.0, 1 - top),
+        };
+      }
+      await host.setDepthPreview(
+        current.configurationId,
+        depthLevel,
+        rect == null ? null : jsonEncode(rect),
+      );
+    } catch (_) {
+      // Saved-photo processing remains available when a preview backend fails.
+    } finally {
+      _depthUpdating = false;
+    }
   }
 
   @override

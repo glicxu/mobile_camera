@@ -7,6 +7,14 @@ Reference: native iOS app at `d53a977`. Starting Flutter source: `be9c765`.
 
 ## Current checkpoint — October 8, 2026
 
+Active full-parity run: review analysis and Original/Reframe/Level/Enhance/Portrait/Landscape treatments are now connected to the file-backed backends. Separate Filter/Beautifier choices, Both actions, capture/review strength and option settings, capture processing order and preferences are implemented. Shared pose geometry has 35 passing tests; Flutter analysis and 13 tests pass locally. Android split APK compilation passes. A new Mac CI fixture comparison covers 16 native pose geometry cases; results are pending.
+
+Live iOS analysis now supplies face landmarks, pose measurements and luminance/open-area signals. Android live pose joints and multi-face group scope now reach shared coaching. Depth preview uses the reference's expanded subject region: iOS material overlay and a bounded Android blurred preview overlay. Voice preference persists independently from current listening state, resumes with the camera and receives native status events. These additions still require physical checks; they are not accepted parity yet.
+
+Android still processing now includes landmark-protected skin processing and guarded eye/lip geometry, native reframe crop dimensions and an image-gradient horizon estimator. Android rendering tolerances, saliency/scenic coverage, horizon calibration and depth edges remain outstanding. The original iOS backend CI compiled and passed the 51 native tests but its new bridge test failed because body-pose Vision cannot initialize on that simulator. Independent per-detector availability now prevents this optional failure from disabling all treatments; rerun is required.
+
+Source audit corrections: the reference keeps treatment settings globally, not per-photo, and its live depth is a rounded subject-region material overlay, not semantic segmentation. Tv/Av priority is behind `DALI_IOS27_EXPOSURE`; the pinned Xcode baseline does not enable it. Manual linked ISO and actual aperture/exposure metadata remain to be ported. Keep these distinctions in acceptance checks instead of advertising unavailable hardware capabilities.
+
 | Phase | Status | Evidence / next work |
 | --- | --- | --- |
 | P0 | In progress | [Initial UI/defaults audit](cross_platform_ui_inventory.md); physical reference screenshots and exhaustive action inventory still pending |

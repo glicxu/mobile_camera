@@ -31,13 +31,27 @@ def outputs():
     source = (ROOT / "DaliCamera/CameraModel.swift").read_text(encoding="utf-8")
     names = ["normalizedTopLeftRect", "salientObject", "estimatePersonFromFace", "groupAnalysis", "poseKeypoints", "poseAnalysis", "faceAnalysis", "faceLandmarkGeometry", "point", "normalizedJointName", "midpoint", "distance", "distanceFrom", "edgeDistance", "rectContaining", "rectContainingRects", "center", "landmarkPoints", "angleDegrees", "normalizedVerticalDelta", "zipValues", "analyzeImage", "reframeSuggestion", "reframeInstruction", "expand", "clamp", "croppedImage", "leveledImage", "rotatedImage", "stillMeasurements"]
     methods = [function(source, name) for name in names]
-    # Surface failed Vision analysis through the bridge instead of labelling empty measurements valid.
+    # Keep detector failures independent and expose per-signal availability.
     index = names.index("analyzeImage")
     analysis = methods[index].replace(") -> (measurements:", ") throws -> (measurements:")
-    begin = analysis.index("        } catch {")
+    begin = analysis.index("        do {")
     end = analysis.index("        let people =", begin)
-    methods[index] = analysis[:begin] + "        } catch { throw error }\n\n" + analysis[end:]
+    analysis = analysis.replace("issues: [PhotoIssue])", "issues: [PhotoIssue], availability: [String: String])")
+    # Recompute indices after changing the return type.
+    begin = analysis.index("        do {")
+    end = analysis.index("        let people =", begin)
+    analysis = analysis[:begin] + '''        var availability: [String: String] = [:]
+        for (name, request) in [("people", humanRequest as VNRequest), ("face", faceRequest as VNRequest), ("pose", poseRequest as VNRequest), ("horizon", horizonRequest as VNRequest), ("saliency", saliencyRequest as VNRequest)] {
+            do { try handler.perform([request]); availability[name] = "valid" }
+            catch { availability[name] = "unavailable" }
+        }
+
+''' + analysis[end:]
+    methods[index] = analysis.replace("return (measurements, [])", "return (measurements, [], availability)")
     methods += [function(source, "point", "namedAny"), function(source, "luminance", "cgImage"), function(source, "skyOrOpenAreaRatio", "cgImage")]
+    pure_names = ["poseAnalysis", "point", "normalizedJointName", "midpoint", "distance", "distanceFrom", "edgeDistance", "rectContaining", "angleDegrees", "normalizedVerticalDelta", "zipValues"]
+    pure = [function(source, name) for name in pure_names] + [function(source, "point", "namedAny")]
+    result["ReferencePoseGeometry.swift"] = HEADER + "import Foundation\nimport CoreGraphics\n\nstruct ReferencePoseGeometry {\n" + "\n\n".join(pure) + "\n}\n"
     result["ReferenceMeasurementAlgorithms.swift"] = HEADER + "import UIKit\nimport Vision\nimport CoreImage\n\nstruct ReferenceMeasurementAlgorithms {\n    private let coachingEngine = CoachingEngine()\n" + "\n\n".join(methods) + "\n}\n"
     return result
 

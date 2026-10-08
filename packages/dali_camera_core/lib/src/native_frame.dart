@@ -1,6 +1,7 @@
 import 'frame_analysis.dart';
 import 'models.dart';
 import 'situations.dart';
+import 'pose_measurements.dart';
 
 /// Compact bridge payload v1 is converted into the existing public contract.
 /// An unavailable detector is different from a successful empty detection.
@@ -27,10 +28,32 @@ class NativeFrame {
 
     final people = boxes('people', 'peopleStatus');
     final faces = boxes('faces', 'faceStatus');
-    final group =
-        json['peopleScope'] == 'multiple' && people.isUsable && faces.isUsable
-        ? analyzeGroup(people.value!, faces.value!)
+    final faceGroup = json['groupScope'] == 'faces';
+    final supportsGroup = json['peopleScope'] == 'multiple' || faceGroup;
+    final group = json['groupAnalysis'] != null
+        ? GroupAnalysis.fromJson(
+            (json['groupAnalysis'] as Map).cast<String, Object?>(),
+          )
+        : supportsGroup && (people.isUsable || faceGroup) && faces.isUsable
+        ? analyzeGroup(faceGroup ? [] : people.value!, faces.value!)
         : null;
+    final points =
+        (json['poseKeypoints'] as Map?)?.map(
+          (key, value) => MapEntry(
+            key as String,
+            DetectionPoint.fromJson((value as Map).cast<String, Object?>()),
+          ),
+        ) ??
+        <String, DetectionPoint>{};
+    poseAnalysis = json['poseAnalysis'] == null
+        ? analyzePose(
+            points,
+            people.value?.firstOrNull,
+            faces.value?.firstOrNull,
+          )
+        : PoseAnalysis.fromJson(
+            (json['poseAnalysis'] as Map).cast<String, Object?>(),
+          );
     double? luminance(String key) => json[key] == null
         ? null
         : (json[key] as num).toDouble() *
@@ -63,13 +86,25 @@ class NativeFrame {
       mirrored: json['front'] == true,
       people: people,
       faces: faces,
-      poseKeypoints: const Measured.unsupported(),
-      groupAnalysis: json['peopleScope'] != 'multiple'
+      poseKeypoints: json['poseStatus'] == 'valid'
+          ? Measured.valid(points)
+          : json['poseStatus'] == 'unavailable'
+          ? const Measured.unavailable()
+          : const Measured.unsupported(),
+      groupAnalysis: !supportsGroup
           ? const Measured.unsupported()
           : group == null
           ? const Measured.unavailable()
           : Measured.valid(group),
-      faceAnalysis: const Measured.unsupported(),
+      faceAnalysis: json['faceAnalysis'] != null
+          ? Measured.valid(
+              FaceAnalysis.fromJson(
+                (json['faceAnalysis'] as Map).cast<String, Object?>(),
+              ),
+            )
+          : json['faceStatus'] == 'valid'
+          ? const Measured.unavailable()
+          : const Measured.unsupported(),
       horizon: json['horizonStatus'] == 'valid' && json['horizon'] != null
           ? Measured.valid(
               HorizonAnalysis.fromJson(
@@ -109,9 +144,9 @@ class NativeFrame {
   late final FrameAnalysis frame;
   late final DetectionBox? salientObject;
   late final bool saliencyAvailable;
+  late final PoseAnalysis? poseAnalysis;
   bool get groupAvailable =>
       frame.groupAnalysis.status != MeasurementStatus.unsupported &&
-      frame.people.isUsable &&
       frame.faces.isUsable;
   SituationSignals get situationSignals => SituationSignals(
     person: frame.people.value?.firstOrNull,
@@ -132,6 +167,8 @@ class NativeFrame {
     personBox: frame.people.value?.firstOrNull,
     faceBox: frame.faces.value?.firstOrNull,
     groupAnalysis: frame.groupAnalysis.value,
+    faceAnalysis: frame.faceAnalysis.value,
+    poseAnalysis: poseAnalysis,
     faceLuminance: frame.luminance.value?.face,
     horizonAngleDegrees: frame.horizon.value?.angleDegrees,
     horizonConfidence: frame.horizon.confidence ?? 0,

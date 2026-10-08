@@ -11,3 +11,5 @@ export 'src/catalog.dart';
 export 'src/native_frame.dart';
 export 'src/photo_style.dart';
 export 'src/situations.dart';
+
+export 'src/pose_measurements.dart';

@@ -298,6 +298,7 @@ interface CameraHostApi {
   fun setManualExposure(configurationId: String, seconds: Double?, iso: Double?, callback: (Result<CameraSnapshot>) -> Unit)
   fun openSettings()
   fun setVoiceEnabled(enabled: Boolean, callback: (Result<Boolean>) -> Unit)
+  fun setDepthPreview(configurationId: String, level: Long, subjectRect: String?)
 
   companion object {
     /** The codec used by CameraHostApi. */
@@ -741,6 +742,26 @@ interface CameraHostApi {
           channel.setMessageHandler(null)
         }
       }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setDepthPreview$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val configurationIdArg = args[0] as String
+            val levelArg = args[1] as Long
+            val subjectRectArg = args[2] as String?
+            val wrapped: List<Any?> = try {
+              api.setDepthPreview(configurationIdArg, levelArg, subjectRectArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              CameraApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
     }
   }
 }
@@ -809,6 +830,23 @@ class CameraEvents(private val binaryMessenger: BinaryMessenger, private val mes
     val channelName = "dev.flutter.pigeon.dali_camera_platform.CameraEvents.voiceShutter$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(null) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(CameraApiPigeonUtils.createConnectionError(channelName)))
+      }
+    }
+  }
+  fun voiceState(listeningArg: Boolean, statusArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.dali_camera_platform.CameraEvents.voiceState$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(listeningArg, statusArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

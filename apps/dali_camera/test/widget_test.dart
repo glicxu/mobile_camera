@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dali_camera/main.dart';
 import 'package:dali_camera/camera_controller.dart';
 import 'package:dali_camera_platform/dali_camera_platform.dart';
@@ -9,6 +10,7 @@ class FakeHost extends CameraHostApi {
   bool failSave = false;
   bool failRender = false;
   List<double>? filterParameters;
+  Map<String, dynamic>? effectsRecipe;
   int captures = 0;
   PhotoHandle? retained;
   int released = 0;
@@ -31,6 +33,14 @@ class FakeHost extends CameraHostApi {
   );
   @override
   Future<void> stop() async {}
+  @override
+  Future<void> setVoicePhrase(String phrase) async {}
+  @override
+  Future<void> setDepthPreview(
+    String configurationId,
+    int level,
+    String? subjectRect,
+  ) async {}
   @override
   Future<bool> setVoiceEnabled(bool enabled) async => false;
   @override
@@ -73,6 +83,24 @@ class FakeHost extends CameraHostApi {
   @override
   Future<void> share(PhotoHandle photo) async {}
   @override
+  Future<String> analyzePhoto(PhotoHandle photo) async => jsonEncode({
+    'schemaVersion': 1,
+    'sourceId': photo.id,
+    'faces': [],
+    'poseKeypoints': {},
+  });
+  @override
+  Future<PhotoHandle> renderEffects(PhotoHandle original, String recipe) async {
+    if (failRender) throw StateError('Renderer unavailable');
+    effectsRecipe = jsonDecode(recipe) as Map<String, dynamic>;
+    return PhotoHandle(
+      path: 'effects.jpg',
+      id: 'effects-${original.id}',
+      unsaved: false,
+    );
+  }
+
+  @override
   Future<PhotoHandle> render(
     PhotoHandle original,
     double rotationDegrees,
@@ -106,6 +134,31 @@ class FakeHost extends CameraHostApi {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'Capture and review effects retain originals and use separate settings',
+    () async {
+      final host = FakeHost();
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      camera.beautifier = 'auto';
+      camera.setSituation(PhotographicSituation.landscape);
+      await camera.capturePhoto();
+      expect(host.effectsRecipe!['treatment'], 'landscape');
+      expect(host.effectsRecipe!['strength'], 3);
+      expect(camera.photoAnalysis!['sourceId'], camera.original!.id);
+      camera.reviewTreatments['portrait']!['strength'] = 4;
+      await camera.applyTreatment('portrait');
+      expect(host.effectsRecipe!['strength'], 4);
+      expect(camera.selectedTreatment, 'portrait');
+      final selected = camera.selected;
+      host.failRender = true;
+      await camera.applyTreatment('enhance');
+      expect(camera.selected, same(selected));
+      expect(camera.original!.id, 'original-1');
+      expect(camera.original!.unsaved, isFalse);
+      camera.dispose();
+    },
+  );
   test(
     'Imported selection wraps, preserves captures and cleans only copies',
     () async {
@@ -266,10 +319,12 @@ void main() {
     await tester.tap(find.byKey(const Key('effectsMenu')));
     await tester.pumpAndSettle();
     await tester.tap(
-      find.ancestor(
-        of: find.text('Auto'),
-        matching: find.byType(CheckedPopupMenuItem<String>),
-      ),
+      find
+          .ancestor(
+            of: find.text('Auto'),
+            matching: find.byType(CheckedPopupMenuItem<String>),
+          )
+          .first,
     );
     await tester.pumpAndSettle();
     expect(camera.filter, 'auto');
@@ -277,10 +332,12 @@ void main() {
     await tester.tap(find.byKey(const Key('effectsMenu')));
     await tester.pumpAndSettle();
     await tester.tap(
-      find.ancestor(
-        of: find.text('Custom'),
-        matching: find.byType(CheckedPopupMenuItem<String>),
-      ),
+      find
+          .ancestor(
+            of: find.text('Custom'),
+            matching: find.byType(CheckedPopupMenuItem<String>),
+          )
+          .first,
     );
     await tester.pumpAndSettle();
     expect(find.text('Filters and watermark'), findsOneWidget);

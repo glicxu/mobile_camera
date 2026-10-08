@@ -45,6 +45,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             plugin.events.voiceShutter { _ in }
         }
         CameraHostApiSetup.setUp(binaryMessenger: registrar.messenger(), api: plugin)
+        plugin.speech.onState = { [weak plugin] listening, status in plugin?.events.voiceState(listening: listening, status: status) { _ in } }
         registrar.register(CameraViewFactory(plugin: plugin), withId: "dali/camera")
     }
     private func failure(_ message: String) -> NSError { NSError(domain: "Dali", code: 1, userInfo: [NSLocalizedDescriptionKey: message]) }
@@ -126,7 +127,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             } catch { self.active = false; DispatchQueue.main.async { completion(.failure(error)) } }
         }
     }
-    func stop() throws { active = false; generation = UUID(); speech.stop(); motion.stopDeviceMotionUpdates(); queue.async { self.session.stopRunning() } }
+    func stop() throws { active = false; generation = UUID(); speech.stop(); preview?.container.depthLevel = 0; preview?.container.setNeedsLayout(); motion.stopDeviceMotionUpdates(); queue.async { self.session.stopRunning() } }
     func capture(completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
         do {
             guard active, !capturing, try recover() == nil else { throw failure("Save or discard the retained original first") }
@@ -439,16 +440,31 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     }
     func openSettings() throws { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
     func setVoiceEnabled(enabled: Bool, completion: @escaping (Result<Bool, Error>) -> Void) { speech.setEnabled(enabled, completion: completion) }
+    func setDepthPreview(configurationId: String, level: Int64, subjectRect: String?) throws {
+        guard configurationId == configuration else { return }
+        let value = subjectRect.flatMap { $0.data(using: .utf8) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Double] }
+        let rect = value.flatMap { data -> CGRect? in
+            guard let x = data["x"], let y = data["y"], let w = data["width"], let h = data["height"], [x,y,w,h].allSatisfy({ $0.isFinite }), w > 0, h > 0 else { return nil }
+            return CGRect(x: x, y: y, width: w, height: h)
+        }
+        preview?.container.depthLevel = Int(max(0, min(5, level)))
+        preview?.container.subjectRect = rect
+        preview?.container.setNeedsLayout()
+    }
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         let now = CFAbsoluteTimeGetCurrent(); guard active, now - lastFrame > 0.15, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         lastFrame = now; let epoch = generation
         let people = VNDetectHumanRectanglesRequest(); people.upperBodyOnly = false
-        let faces = VNDetectFaceRectanglesRequest()
+        let faces = VNDetectFaceLandmarksRequest()
+        let pose = VNDetectHumanBodyPoseRequest()
+        let geometry = ReferenceMeasurementAlgorithms()
         let saliency = VNGenerateObjectnessBasedSaliencyImageRequest()
         let horizon = VNDetectHorizonRequest()
         do {
             let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up)
             try handler.perform([people, faces])
+            var poseStatus = "unavailable"
+            do { try handler.perform([pose]); poseStatus = "valid" } catch {}
             // Optional requests must not suppress working person/face analysis.
             var saliencyStatus = "unavailable"
             var horizonStatus = "unavailable"
@@ -467,6 +483,22 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 "people": boxes(people.results ?? []), "faces": boxes(faces.results ?? []), "roll": currentRoll,
                 "motion": currentMotion, "stable": currentMotion < 0.22, "peopleStatus": "valid", "faceStatus": "valid", "horizonStatus": horizonStatus, "openAreaStatus": "unsupported",
                 "peopleScope": "multiple", "saliencyStatus": saliencyStatus]
+            let humanBoxes = (people.results ?? []).map { DetectionBox(rect: geometry.normalizedTopLeftRect($0.boundingBox), confidence: CGFloat($0.confidence), label: "person") }
+            let faceBoxes = (faces.results ?? []).map { DetectionBox(rect: geometry.normalizedTopLeftRect($0.boundingBox), confidence: CGFloat($0.confidence), label: "face") }
+            let humanBox = humanBoxes.max { $0.confidence < $1.confidence }
+            let faceBox = faceBoxes.max { $0.confidence < $1.confidence }
+            let points = geometry.poseKeypoints(from: pose.results ?? [])
+            data["poseStatus"] = poseStatus
+            data["poseKeypoints"] = points.mapValues { ["x": $0.point.x, "y": $0.point.y, "confidence": $0.confidence] }
+            if let value = geometry.poseAnalysis(from: points, person: humanBox, face: faceBox) { data["poseAnalysis"] = stillProcessor.reflected(value) }
+            if let value = geometry.faceAnalysis(from: faces.results?.max { $0.confidence < $1.confidence }, face: faceBox) { data["faceAnalysis"] = stillProcessor.reflected(value) }
+            if let cg = ci.createCGImage(CIImage(cvPixelBuffer: buffer), from: CIImage(cvPixelBuffer: buffer).extent) {
+                data["luminanceScale"] = 255
+                data["backgroundLuminance"] = geometry.luminance(in: cg, normalizedRect: nil)
+                data["faceLuminance"] = faceBox.flatMap { geometry.luminance(in: cg, normalizedRect: $0.rect) }
+                data["openAreaRatio"] = geometry.skyOrOpenAreaRatio(in: cg)
+                data["openAreaStatus"] = "valid"
+            }
             if let object = saliency.results?.first?.salientObjects?.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height }) {
                 data["salientObject"] = boxes([object]).first
             }
@@ -501,7 +533,24 @@ private extension Float { func clamped(_ low: Float, _ high: Float) -> Float { S
 private final class PreviewContainer: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
     var orientationChanged: ((UIInterfaceOrientation) -> Void)?
-    override func layoutSubviews() { super.layoutSubviews(); if let orientation = window?.windowScene?.interfaceOrientation { orientationChanged?(orientation) } }
+    var depthLevel = 0
+    var subjectRect: CGRect?
+    private let depth = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if let orientation = window?.windowScene?.interfaceOrientation { orientationChanged?(orientation) }
+        if depth.superview == nil { depth.isUserInteractionEnabled = false; depth.isAccessibilityElement = false; addSubview(depth) }
+        depth.frame = bounds
+        depth.isHidden = depthLevel == 0 || subjectRect == nil
+        depth.alpha = 0.30 + Double(depthLevel) * 0.09
+        guard let subjectRect, let preview = layer as? AVCaptureVideoPreviewLayer else { return }
+        let content = preview.layerRectConverted(fromMetadataOutputRect: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let subject = CGRect(x: content.minX + subjectRect.minX * content.width, y: content.minY + subjectRect.minY * content.height, width: subjectRect.width * content.width, height: subjectRect.height * content.height)
+        let path = UIBezierPath(rect: content)
+        path.append(UIBezierPath(roundedRect: subject, cornerRadius: min(subject.width, subject.height) * .28))
+        let mask = CAShapeLayer(); mask.frame = bounds; mask.path = path.cgPath; mask.fillRule = .evenOdd
+        depth.layer.mask = mask
+    }
 }
 private final class CameraView: NSObject, FlutterPlatformView {
     let container = PreviewContainer()

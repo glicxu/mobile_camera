@@ -15,6 +15,7 @@ import android.speech.*
 import android.util.Size
 import android.view.View
 import android.view.OrientationEventListener
+import android.widget.FrameLayout
 import androidx.camera.core.*
 import androidx.camera.camera2.interop.*
 import android.hardware.camera2.CameraCaptureSession
@@ -51,6 +52,10 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private var binding: ActivityPluginBinding? = null
     private var provider: ProcessCameraProvider? = null
     private var previewView: PreviewView? = null
+    private var depthView: DepthPreviewView? = null
+    private val depthExecutor = Executors.newSingleThreadExecutor()
+    private var depthPending = false
+    private var lastDepth = 0L
     private var camera: androidx.camera.core.Camera? = null
     private var captureUseCase: ImageCapture? = null
     private var analysisUseCase: ImageAnalysis? = null
@@ -111,17 +116,19 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 val view = PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FIT_CENTER
                     implementationMode = PreviewView.ImplementationMode.COMPATIBLE }
                 previewView = view
+                val overlay = DepthPreviewView(ctx); depthView = overlay
+                val container = FrameLayout(ctx).apply { addView(view, FrameLayout.LayoutParams(-1, -1)); addView(overlay, FrameLayout.LayoutParams(-1, -1)) }
                 previewUseCase?.setSurfaceProvider(view.surfaceProvider)
                 return object : PlatformView {
-                    override fun getView(): View = view
-                    override fun dispose() { if (previewView === view) previewView = null }
+                    override fun getView(): View = container
+                    override fun dispose() { if (previewView === view) { previewView = null; depthView = null }; overlay.replace(null) }
                 }
             }
         })
     }
     override fun onDetachedFromEngine(b: FlutterPlugin.FlutterPluginBinding) {
         stop(); CameraHostApi.setUp(b.binaryMessenger, null)
-        faceDetector.close(); poseDetector.close(); stillProcessor.close(); executor.shutdown()
+        faceDetector.close(); poseDetector.close(); stillProcessor.close(); executor.shutdown(); depthExecutor.shutdown()
     }
     override fun onAttachedToActivity(b: ActivityPluginBinding) {
         binding = b; activity = b.activity
@@ -187,6 +194,8 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         generation++; active = false; provider?.unbindAll(); camera = null; captureUseCase = null
         analysisUseCase = null; previewUseCase = null; orientationListener?.disable()
         speechEpoch++; listening = false; speech?.destroy(); speech = null
+        depthView?.level = 0; depthView?.replace(null)
+        events.voiceState(false, "Paused") {}
         (context.getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(this)
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray): Boolean {
@@ -279,6 +288,12 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 if (landmarks.size >= 6) people.put(rect(Rect(landmarks.minOf { it.position.x }.toInt(), landmarks.minOf { it.position.y }.toInt(),
                     landmarks.maxOf { it.position.x }.toInt(), landmarks.maxOf { it.position.y }.toInt()), "pose extent"))
                 val faceBoxes = JSONArray(); faces.forEach { faceBoxes.put(rect(it.boundingBox, "face")) }
+                val posePoints = JSONObject()
+                val jointNames = mapOf(0 to "nose", 11 to "leftShoulder", 12 to "rightShoulder", 13 to "leftElbow", 14 to "rightElbow", 15 to "leftWrist", 16 to "rightWrist", 23 to "leftHip", 24 to "rightHip", 27 to "leftAnkle", 28 to "rightAnkle")
+                for (landmark in landmarks) jointNames[landmark.landmarkType]?.let { name ->
+                    val x = landmark.position.x.toDouble() / width
+                    posePoints.put(name, JSONObject().put("x", if (front) 1 - x else x).put("y", landmark.position.y / height).put("confidence", landmark.inFrameLikelihood))
+                }
                 val y = proxy.planes[0]; val buf = y.buffer.duplicate(); var sum = 0.0; var count = 0
                 for (row in 0 until proxy.height step 16) for (col in 0 until proxy.width step 16) {
                     val index = row * y.rowStride + col * y.pixelStride
@@ -290,7 +305,8 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     .put("configurationId", config).put("aspectRatio", aspect).put("people", people).put("faces", faceBoxes)
                     .put("roll", roll).put("motion", motion).put("stable", motion < 0.22)
                     .put("backgroundLuminance", if (count > 0) sum / count else JSONObject.NULL)
-                    .put("peopleScope", "single").put("saliencyStatus", "unsupported").put("luminanceScale", 1)
+                    .put("peopleScope", "single").put("groupScope", "faces").put("saliencyStatus", "unsupported").put("luminanceScale", 1)
+                    .put("poseStatus", if (poseTask.isSuccessful) "valid" else "unavailable").put("poseKeypoints", posePoints)
                     .put("peopleStatus", if (poseTask.isSuccessful) "valid" else "unavailable")
                     .put("faceStatus", if (faceTask.isSuccessful) "valid" else "unavailable")
                     .put("horizonStatus", "unsupported").put("openAreaStatus", "unsupported").put("timestamp", System.currentTimeMillis())
@@ -644,18 +660,19 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         }
         speech = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         speech!!.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onReadyForSpeech(params: Bundle?) { if (epoch == speechEpoch && listening) events.voiceState(true, "Listening on device") {} }
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
+            override fun onEndOfSpeech() { if (epoch == speechEpoch) events.voiceState(false, "Processing voice command") {} }
             override fun onPartialResults(partialResults: Bundle?) {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
             override fun onError(error: Int) {
                 if (epoch != speechEpoch || !listening) return
                 if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED) {
                     listening = false; events.error("speech", "Voice shutter unavailable for this permission or language") {}
-                } else if (listening && active) main.postDelayed({ listen() }, 1000)
+                    events.voiceState(false, "Voice shutter unavailable for this permission or language") {}
+                } else if (listening && active) { events.voiceState(false, "Waiting to listen") {}; main.postDelayed({ if (epoch == speechEpoch) listen() }, 1000) }
             }
             override fun onResults(results: Bundle?) {
                 if (epoch != speechEpoch || !listening || !active) return
@@ -665,7 +682,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 val command = words.contains("cheese") || Regex("\\b(take|capture|snap) (a )?(photo|picture)\\b").containsMatchIn(text) ||
                     (custom.isNotEmpty() && (" " + words.joinToString(" ") + " ").contains(" " + custom.joinToString(" ") + " "))
                 if (command && SystemClock.elapsedRealtime() - lastVoice > 3000) { lastVoice = SystemClock.elapsedRealtime(); events.voiceShutter() {} }
-                if (listening && active) main.postDelayed({ listen() }, 500)
+                if (listening && active) main.postDelayed({ if (epoch == speechEpoch) listen() }, 500)
             }
         })
         listening = true; listen(); callback(Result.success(true))
@@ -675,5 +692,33 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
         })
+    }
+    override fun setDepthPreview(configurationId: String, level: Long, subjectRect: String?) {
+        if (configurationId != config || !active) return
+        val overlay = depthView ?: return
+        val rect = subjectRect?.let { JSONObject(it) }
+        overlay.level = level.toInt().coerceIn(0, 5); overlay.aspect = aspect
+        overlay.subject = rect?.let { val x = it.getDouble("x").toFloat(); val y = it.getDouble("y").toFloat(); RectF(x, y, x + it.getDouble("width").toFloat(), y + it.getDouble("height").toFloat()) }
+        if (overlay.level == 0 || rect == null) { overlay.replace(null); return }
+        overlay.invalidate()
+        val now = SystemClock.elapsedRealtime()
+        if (depthPending || now - lastDepth < 500) return
+        val source = previewView?.bitmap ?: return
+        depthPending = true; lastDepth = now; val epoch = generation
+        depthExecutor.execute {
+            var blurred: Bitmap? = null
+            try {
+                val scale = min(1.0, 320.0 / max(source.width, source.height))
+                val small = Bitmap.createScaledBitmap(source, max(1, (source.width * scale).toInt()), max(1, (source.height * scale).toInt()), true)
+                if (small !== source) source.recycle()
+                // Downsample/upsample supplies a bounded low-tier-device preview blur.
+                val tiny = Bitmap.createScaledBitmap(small, max(1, small.width / (3 + overlay.level)), max(1, small.height / (3 + overlay.level)), true)
+                blurred = Bitmap.createScaledBitmap(tiny, small.width, small.height, true)
+                if (tiny !== blurred && tiny !== small) tiny.recycle()
+                if (small !== blurred) small.recycle()
+            } catch (_: Throwable) { if (!source.isRecycled) source.recycle() }
+            val result = blurred
+            main.post { depthPending = false; if (epoch == generation && active && depthView === overlay && overlay.level > 0) overlay.replace(result) else result?.recycle() }
+        }
     }
 }

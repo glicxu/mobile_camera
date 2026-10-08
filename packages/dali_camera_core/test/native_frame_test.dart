@@ -17,6 +17,73 @@ Map<String, dynamic> packet() => {
   'motionStatus': 'unsupported',
 };
 void main() {
+  test(
+    'Multi-face group coverage remains separate from a single pose extent',
+    () {
+      final data = packet()
+        ..['faceStatus'] = 'valid'
+        ..['groupScope'] = 'faces'
+        ..['faces'] = [
+          {
+            'x': .2,
+            'y': .2,
+            'width': .1,
+            'height': .1,
+            'confidence': .9,
+            'label': 'face',
+          },
+          {
+            'x': .6,
+            'y': .2,
+            'width': .1,
+            'height': .1,
+            'confidence': .9,
+            'label': 'face',
+          },
+        ];
+      final frame = NativeFrame(data);
+      expect(frame.groupAvailable, isTrue);
+      expect(frame.measurements.groupAnalysis!.peopleCount, 2);
+      expect(frame.measurements.groupAnalysis!.faceCount, 2);
+      expect(
+        SituationClassifier.candidate(frame.situationSignals),
+        PhotographicSituation.group,
+      );
+      data['faceStatus'] = 'unavailable';
+      expect(
+        NativeFrame(data).frame.groupAnalysis.status,
+        MeasurementStatus.unavailable,
+      );
+    },
+  );
+  test('Normalized joints and facial analysis reach coaching measurements', () {
+    final data = packet()
+      ..['poseStatus'] = 'valid'
+      ..['poseKeypoints'] = {
+        'leftShoulder': {'x': .3, 'y': .3, 'confidence': .9},
+        'rightShoulder': {'x': .7, 'y': .4, 'confidence': .9},
+      }
+      ..['faceAnalysis'] = {
+        'confidence': .9,
+        'landmarkPointCount': 26,
+        'eyeVisibilityScore': 1,
+        'occlusionScore': 0,
+        'yawEstimate': .1,
+        'pitchEstimate': .2,
+      };
+    final frame = NativeFrame(data);
+    expect(frame.frame.poseKeypoints.value!.length, 2);
+    expect(
+      frame.measurements.poseAnalysis!.shoulderLineAngleDegrees,
+      closeTo(14.036243, 1e-6),
+    );
+    expect(
+      frame.measurements.poseAnalysis!.shoulderHeightAsymmetry,
+      closeTo(.1, 1e-9),
+    );
+    expect(frame.measurements.poseAnalysis!.wristToFaceDistance, isNull);
+    expect(frame.measurements.faceAnalysis!.yawEstimate, .1);
+  });
   test('Optional scene signals preserve availability and luminance units', () {
     final data = packet()
       ..['saliencyStatus'] = 'valid'
