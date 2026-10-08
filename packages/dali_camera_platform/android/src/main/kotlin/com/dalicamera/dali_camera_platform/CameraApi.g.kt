@@ -104,7 +104,9 @@ data class CameraSnapshot (
   val currentShutter: Double? = null,
   val manualExposure: Boolean? = null,
   val currentAperture: Double? = null,
-  val exposureOffset: Double? = null
+  val exposureOffset: Double? = null,
+  val cameraName: String? = null,
+  val lensName: String? = null
 )
  {
   companion object {
@@ -131,7 +133,9 @@ data class CameraSnapshot (
       val manualExposure = pigeonVar_list[19] as Boolean?
       val currentAperture = pigeonVar_list[20] as Double?
       val exposureOffset = pigeonVar_list[21] as Double?
-      return CameraSnapshot(ready, front, configurationId, aspectRatio, minimumEV, maximumEV, currentEV, supportsLock, locked, minimumZoom, maximumZoom, currentZoom, supportsTap, minimumISO, maximumISO, minimumShutter, maximumShutter, currentISO, currentShutter, manualExposure, currentAperture, exposureOffset)
+      val cameraName = pigeonVar_list[22] as String?
+      val lensName = pigeonVar_list[23] as String?
+      return CameraSnapshot(ready, front, configurationId, aspectRatio, minimumEV, maximumEV, currentEV, supportsLock, locked, minimumZoom, maximumZoom, currentZoom, supportsTap, minimumISO, maximumISO, minimumShutter, maximumShutter, currentISO, currentShutter, manualExposure, currentAperture, exposureOffset, cameraName, lensName)
     }
   }
   fun toList(): List<Any?> {
@@ -158,6 +162,8 @@ data class CameraSnapshot (
       manualExposure,
       currentAperture,
       exposureOffset,
+      cameraName,
+      lensName,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -239,6 +245,68 @@ data class PhotoImport (
 
   override fun hashCode(): Int = toList().hashCode()
 }
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class LibraryPhoto (
+  val id: String,
+  val title: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): LibraryPhoto {
+      val id = pigeonVar_list[0] as String
+      val title = pigeonVar_list[1] as String
+      return LibraryPhoto(id, title)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      id,
+      title,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is LibraryPhoto) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return CameraApiPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class PhotoLibrary (
+  val photos: List<LibraryPhoto>,
+  val status: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PhotoLibrary {
+      val photos = pigeonVar_list[0] as List<LibraryPhoto>
+      val status = pigeonVar_list[1] as String
+      return PhotoLibrary(photos, status)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      photos,
+      status,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is PhotoLibrary) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return CameraApiPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
 private open class CameraApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -257,6 +325,16 @@ private open class CameraApiPigeonCodec : StandardMessageCodec() {
           PhotoImport.fromList(it)
         }
       }
+      132.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          LibraryPhoto.fromList(it)
+        }
+      }
+      133.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PhotoLibrary.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -272,6 +350,14 @@ private open class CameraApiPigeonCodec : StandardMessageCodec() {
       }
       is PhotoImport -> {
         stream.write(131)
+        writeValue(stream, value.toList())
+      }
+      is LibraryPhoto -> {
+        stream.write(132)
+        writeValue(stream, value.toList())
+      }
+      is PhotoLibrary -> {
+        stream.write(133)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -292,6 +378,8 @@ interface CameraHostApi {
   fun pickPhoto(callback: (Result<PhotoHandle?>) -> Unit)
   fun pickPhotos(folder: Boolean, callback: (Result<PhotoImport>) -> Unit)
   fun analyzePhoto(photo: PhotoHandle, callback: (Result<String>) -> Unit)
+  fun listPhotoLibrary(callback: (Result<PhotoLibrary>) -> Unit)
+  fun loadLibraryPhoto(id: String, callback: (Result<PhotoHandle>) -> Unit)
   fun renderEffects(original: PhotoHandle, recipe: String, callback: (Result<PhotoHandle>) -> Unit)
   fun render(original: PhotoHandle, rotationDegrees: Double, crop: Boolean, strength: Double, callback: (Result<PhotoHandle>) -> Unit)
   fun setControls(configurationId: String, ev: Double, locked: Boolean, callback: (Result<CameraSnapshot>) -> Unit)
@@ -486,6 +574,44 @@ interface CameraHostApi {
             val args = message as List<Any?>
             val photoArg = args[0] as PhotoHandle
             api.analyzePhoto(photoArg) { result: Result<String> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.listPhotoLibrary$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.listPhotoLibrary{ result: Result<PhotoLibrary> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.loadLibraryPhoto$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val idArg = args[0] as String
+            api.loadLibraryPhoto(idArg) { result: Result<PhotoHandle> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))

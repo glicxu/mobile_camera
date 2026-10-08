@@ -5,6 +5,8 @@ Status: Comprehensive source/action audit and software corrections in progress. 
 Branch: `codex/cross-platform-20261007`
 Reference: native iOS app at `d53a977`. Starting Flutter source: `be9c765`.
 
+Current per-action contract: [comprehensive source/action audit](cross_platform_action_audit.md). Its destinations and state transitions supersede the historical aggregate checks below. Current software additions: lazy Photos library, native beautifier dropdown/disclosures, image labels/fullscreen, actual lens metadata and active pose swipes. Device and final iOS validation are running.
+
 ## Comprehensive implementation run ? October 8, 2026
 
 The user found that the Manual workspace still did not match iOS. The previous aggregate ?connected? status was insufficient: working services and passing tests did not establish complete screen/action parity. This run follows the complete P0?P8 plan below, using reachable native views and actions as the reference. Software omissions stay open until implemented and verified; physical comparison is a separate acceptance step.
@@ -27,7 +29,7 @@ The remaining physical iPhone/screenshots, cross-engine rendering tolerances, pe
 | P7 | **In progress:** system Photos browser plus Before/After/Split with zoom, analysis, reframe/level and polish, slideshow, imports, exports and cleanup implemented | Photos max 20; folder max 50 intentionally retained. Treatment settings are global in the reference, not persisted per photo. Save/share/recovery checks included |
 | P8 | App Settings/About/version/native placeholder sections, Help, semantics, automated checks and test instructions updated | Physical iPhone, matched visual comparison, accessibility/audio/permission cases and longer thermal sessions remain acceptance work |
 
-Header correction: the user identified an omitted native header flow in the earlier parity candidate. The implementation now includes the coaching toggle and App Settings/tutorial, keeps camera controls beside the shutter, and guards shutter/voice capture while these screens are presented. Local analyzer and 19 Flutter tests pass, including large-text portrait/landscape navigation. Tablet (107 seconds) and Galaxy (44 seconds) full camera flows pass with the corrected header. Both normal apps are updated without clearing data, with installed hashes verified. Shared checks and Android/unsigned iOS builds pass; clean-boot iOS native/bridge validation is in progress.
+Header correction: the user identified an omitted native header flow in the earlier parity candidate. The implementation now includes the coaching toggle and App Settings/tutorial, keeps camera controls beside the shutter, and guards shutter/voice capture while these screens are presented. Local analyzer and 19 Flutter tests pass, including large-text portrait/landscape navigation. Tablet (107 seconds) and Galaxy (44 seconds) full camera flows pass with the corrected header. Both normal apps are updated without clearing data, with installed hashes verified. Shared checks and Android/unsigned iOS builds pass; The clean-boot run subsequently failed at Flutter VM-service discovery; current CI validation is tracked below.
 
 Read [joint phone testing](cross_platform_joint_testing.md) for the acceptance order and [Mac/iPhone setup](cross_platform_iphone_checkpoint.md) for signing/install steps. External posture/landscape package loading with image instructions is a future product feature; folder import currently opens photos for this review session.
 

@@ -58,6 +58,29 @@ void main() {
       await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
       expect(camera.canCapture, isTrue);
+      await tester.tap(find.byKey(const Key('manualControlsButton')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('manualPreviewControls')), findsOneWidget);
+      for (final tool in ['focus', 'depth', 'exposure']) {
+        await tester.tap(
+          find.byKey(
+            Key('manualTool${tool[0].toUpperCase()}${tool.substring(1)}'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(Key('manualEditor_$tool')), findsOneWidget);
+      }
+      await tester.tap(find.byKey(const Key('returnToAutoFromPreview')));
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 80 && camera.manualWorkspace; i++) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      expect(
+        camera.manualWorkspace,
+        isFalse,
+        reason: '${camera.message}; controlBusy=${camera.controlBusy}',
+      );
+      expect(find.byKey(const Key('manualPreviewControls')), findsNothing);
       final previewSize = tester.getSize(find.byType(AspectRatio).first);
       expect(
         previewSize.width / previewSize.height,
@@ -248,6 +271,21 @@ void main() {
       await camera.saveSelected();
       await tester.pumpAndSettle();
       expect(camera.message, contains('copy saved'));
+      await camera.returnToCamera();
+      await tester.pumpAndSettle();
+      expect(await camera.openPhotoLibrary(), isTrue, reason: camera.message);
+      await tester.pumpAndSettle();
+      expect(camera.reviewingLibrary, isTrue, reason: camera.message);
+      expect(camera.reviewCount, greaterThan(0));
+      expect(File(camera.original!.path).existsSync(), isTrue);
+      if (camera.reviewCount > 1) {
+        await camera.previousPhoto();
+        await tester.pumpAndSettle();
+        expect(camera.reviewIndex, camera.reviewCount - 1);
+        await camera.nextPhoto();
+        await tester.pumpAndSettle();
+        expect(camera.reviewIndex, 0);
+      }
       await camera.returnToCamera();
       await tester.pumpAndSettle();
       final beforeBurst = camera.history.length;

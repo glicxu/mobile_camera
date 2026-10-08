@@ -156,6 +156,8 @@ struct CameraSnapshot: Hashable {
   var manualExposure: Bool? = nil
   var currentAperture: Double? = nil
   var exposureOffset: Double? = nil
+  var cameraName: String? = nil
+  var lensName: String? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -182,6 +184,8 @@ struct CameraSnapshot: Hashable {
     let manualExposure: Bool? = nilOrValue(pigeonVar_list[19])
     let currentAperture: Double? = nilOrValue(pigeonVar_list[20])
     let exposureOffset: Double? = nilOrValue(pigeonVar_list[21])
+    let cameraName: String? = nilOrValue(pigeonVar_list[22])
+    let lensName: String? = nilOrValue(pigeonVar_list[23])
 
     return CameraSnapshot(
       ready: ready,
@@ -205,7 +209,9 @@ struct CameraSnapshot: Hashable {
       currentShutter: currentShutter,
       manualExposure: manualExposure,
       currentAperture: currentAperture,
-      exposureOffset: exposureOffset
+      exposureOffset: exposureOffset,
+      cameraName: cameraName,
+      lensName: lensName
     )
   }
   func toList() -> [Any?] {
@@ -232,6 +238,8 @@ struct CameraSnapshot: Hashable {
       manualExposure,
       currentAperture,
       exposureOffset,
+      cameraName,
+      lensName,
     ]
   }
   static func == (lhs: CameraSnapshot, rhs: CameraSnapshot) -> Bool {
@@ -307,6 +315,64 @@ struct PhotoImport: Hashable {
   }
 }
 
+/// Generated class from Pigeon that represents data sent in messages.
+struct LibraryPhoto: Hashable {
+  var id: String
+  var title: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> LibraryPhoto? {
+    let id = pigeonVar_list[0] as! String
+    let title = pigeonVar_list[1] as! String
+
+    return LibraryPhoto(
+      id: id,
+      title: title
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      id,
+      title,
+    ]
+  }
+  static func == (lhs: LibraryPhoto, rhs: LibraryPhoto) -> Bool {
+    return deepEqualsCameraApi(lhs.toList(), rhs.toList())  }
+  func hash(into hasher: inout Hasher) {
+    deepHashCameraApi(value: toList(), hasher: &hasher)
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct PhotoLibrary: Hashable {
+  var photos: [LibraryPhoto]
+  var status: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PhotoLibrary? {
+    let photos = pigeonVar_list[0] as! [LibraryPhoto]
+    let status = pigeonVar_list[1] as! String
+
+    return PhotoLibrary(
+      photos: photos,
+      status: status
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      photos,
+      status,
+    ]
+  }
+  static func == (lhs: PhotoLibrary, rhs: PhotoLibrary) -> Bool {
+    return deepEqualsCameraApi(lhs.toList(), rhs.toList())  }
+  func hash(into hasher: inout Hasher) {
+    deepHashCameraApi(value: toList(), hasher: &hasher)
+  }
+}
+
 private class CameraApiPigeonCodecReader: FlutterStandardReader {
   override func readValue(ofType type: UInt8) -> Any? {
     switch type {
@@ -316,6 +382,10 @@ private class CameraApiPigeonCodecReader: FlutterStandardReader {
       return PhotoHandle.fromList(self.readValue() as! [Any?])
     case 131:
       return PhotoImport.fromList(self.readValue() as! [Any?])
+    case 132:
+      return LibraryPhoto.fromList(self.readValue() as! [Any?])
+    case 133:
+      return PhotoLibrary.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
     }
@@ -332,6 +402,12 @@ private class CameraApiPigeonCodecWriter: FlutterStandardWriter {
       super.writeValue(value.toList())
     } else if let value = value as? PhotoImport {
       super.writeByte(131)
+      super.writeValue(value.toList())
+    } else if let value = value as? LibraryPhoto {
+      super.writeByte(132)
+      super.writeValue(value.toList())
+    } else if let value = value as? PhotoLibrary {
+      super.writeByte(133)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -366,6 +442,8 @@ protocol CameraHostApi {
   func pickPhoto(completion: @escaping (Result<PhotoHandle?, Error>) -> Void)
   func pickPhotos(folder: Bool, completion: @escaping (Result<PhotoImport, Error>) -> Void)
   func analyzePhoto(photo: PhotoHandle, completion: @escaping (Result<String, Error>) -> Void)
+  func listPhotoLibrary(completion: @escaping (Result<PhotoLibrary, Error>) -> Void)
+  func loadLibraryPhoto(id: String, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func renderEffects(original: PhotoHandle, recipe: String, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func render(original: PhotoHandle, rotationDegrees: Double, crop: Bool, strength: Double, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func setControls(configurationId: String, ev: Double, locked: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
@@ -543,6 +621,38 @@ class CameraHostApiSetup {
       }
     } else {
       analyzePhotoChannel.setMessageHandler(nil)
+    }
+    let listPhotoLibraryChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.listPhotoLibrary\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      listPhotoLibraryChannel.setMessageHandler { _, reply in
+        api.listPhotoLibrary { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      listPhotoLibraryChannel.setMessageHandler(nil)
+    }
+    let loadLibraryPhotoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.loadLibraryPhoto\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      loadLibraryPhotoChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let idArg = args[0] as! String
+        api.loadLibraryPhoto(id: idArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      loadLibraryPhotoChannel.setMessageHandler(nil)
     }
     let renderEffectsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.renderEffects\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

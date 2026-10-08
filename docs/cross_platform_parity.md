@@ -1,3 +1,9 @@
+# Current coverage record
+
+The current implementation contract is the [comprehensive action audit](cross_platform_action_audit.md) and [remaining porting plan](cross_platform_remaining_port_plan.md). Software corrections and validation are in progress; visual parity is not signed off. The tables below record historical checkpoints and must not be interpreted as current missing implementation.
+
+## Historical coverage
+
 ﻿# Cross-platform implementation progress
 
 Baseline: native iOS `d53a977` (merged from remote main). Updated October 8, 2026.

@@ -257,8 +257,16 @@ class FocusExposureSettings extends StatelessWidget {
         if (state?.ready == true) ...[
           ListTile(
             title: const Text('Camera'),
-            subtitle: Text(state!.front ? 'Front camera' : 'Rear camera'),
+            subtitle: Text(
+              state!.cameraName ??
+                  (state.front ? 'Front camera' : 'Rear camera'),
+            ),
           ),
+          if (state.lensName != null)
+            ListTile(
+              title: const Text('Lens'),
+              subtitle: Text(state.lensName!),
+            ),
           if (state.currentShutter != null)
             ListTile(
               title: const Text('Tv'),

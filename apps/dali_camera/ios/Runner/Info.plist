@@ -3,6 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key><string>Dali uses the camera to take photos and offer on-device guidance.</string>
+	<key>NSPhotoLibraryUsageDescription</key><string>Browse and review the photos you allow.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key><string>Save your chosen photos to your library.</string>
 	<key>NSMicrophoneUsageDescription</key><string>Enable the optional voice shutter.</string>
 	<key>NSSpeechRecognitionUsageDescription</key><string>Recognize your optional shutter command.</string>

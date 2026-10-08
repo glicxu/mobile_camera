@@ -31,6 +31,7 @@ class _ManualPreviewControlsState extends State<ManualPreviewControls> {
                 maxHeight: math.max(0, bounds.maxHeight - 20),
               ),
               child: Container(
+                key: Key('manualEditor_${selected!.name}'),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: .78),
                   borderRadius: BorderRadius.circular(14),

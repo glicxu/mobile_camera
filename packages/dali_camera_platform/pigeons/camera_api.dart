@@ -37,6 +37,8 @@ class CameraSnapshot {
     this.manualExposure,
     this.currentAperture,
     this.exposureOffset,
+    this.cameraName,
+    this.lensName,
   });
   bool ready;
   bool front;
@@ -60,6 +62,8 @@ class CameraSnapshot {
   bool? manualExposure;
   double? currentAperture;
   double? exposureOffset;
+  String? cameraName;
+  String? lensName;
 }
 
 class PhotoHandle {
@@ -81,6 +85,18 @@ class PhotoImport {
   int skipped;
 }
 
+class LibraryPhoto {
+  LibraryPhoto({required this.id, required this.title});
+  String id;
+  String title;
+}
+
+class PhotoLibrary {
+  PhotoLibrary({required this.photos, required this.status});
+  List<LibraryPhoto> photos;
+  String status;
+}
+
 @HostApi()
 abstract class CameraHostApi {
   @async
@@ -100,6 +116,10 @@ abstract class CameraHostApi {
   PhotoImport pickPhotos(bool folder);
   @async
   String analyzePhoto(PhotoHandle photo);
+  @async
+  PhotoLibrary listPhotoLibrary();
+  @async
+  PhotoHandle loadLibraryPhoto(String id);
   @async
   PhotoHandle renderEffects(PhotoHandle original, String recipe);
   @async

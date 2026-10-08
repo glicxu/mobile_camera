@@ -36,13 +36,16 @@ class PhotoEffectControls extends StatelessWidget {
           }
         : treatment == 'portrait'
         ? {
-            'faceBrightness': 'Face brightness',
-            'skinSmoothing': 'Skin smoothing',
-            'blemishReduction': 'Blemish reduction',
-            'eyeEnlargement': 'Eye enlargement',
-            'lipPlumping': 'Lip plumping',
+            'faceBrightness': 'Brighten and even skin',
+            'skinSmoothing': 'Smooth skin',
+            'blemishReduction': 'Reduce blemishes',
+            'eyeEnlargement': 'Enlarge eyes',
+            'lipPlumping': 'Plump lips',
           }
-        : {'sky': 'Sky enhancement', 'landscapeColor': 'Landscape color'};
+        : {
+            'sky': 'Blue sky & cloud detail',
+            'landscapeColor': 'Rich landscape color',
+          };
     void update() => review
         ? camera.requestReviewTreatment(camera.reviewTreatment)
         : camera.persistSettings();
@@ -81,93 +84,146 @@ class PhotoEffectControls extends StatelessWidget {
             ),
           ),
         if (review || camera.beautifier == 'custom') ...[
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
+          DropdownButtonFormField<String>(
+            key: ValueKey('beautifierType_${review}_$treatment'),
+            initialValue: treatment,
+            decoration: const InputDecoration(labelText: 'Beautifier type'),
+            isExpanded: true,
+            items: [
               for (final entry in treatmentTitles.entries)
-                ChoiceChip(
-                  label: Text(entry.value),
-                  selected: treatment == entry.key,
-                  onSelected: camera.busy
-                      ? null
-                      : (_) {
-                          if (review) {
-                            camera.reviewTreatment = entry.key;
-                          } else {
-                            camera.customBeautifier = entry.key;
-                            camera.beautifier = 'custom';
-                          }
-                          update();
-                        },
-                ),
+                DropdownMenuItem(value: entry.key, child: Text(entry.value)),
             ],
+            onChanged: camera.busy && !review
+                ? null
+                : (value) {
+                    if (value == null) return;
+                    if (review) {
+                      camera.reviewTreatment = value;
+                    } else {
+                      camera.customBeautifier = value;
+                      camera.beautifier = 'custom';
+                    }
+                    update();
+                  },
           ),
-          if (treatment != 'enhance')
-            Wrap(
-              spacing: 8,
-              children: [
+          if (treatment != 'enhance') ...[
+            DropdownButtonFormField<String>(
+              key: ValueKey(
+                'beautifierPreset_${review}_${treatment}_${settings['preset']}',
+              ),
+              initialValue: settings['preset'] as String? ?? 'Custom',
+              decoration: InputDecoration(
+                labelText: treatment == 'portrait'
+                    ? 'Portrait preset'
+                    : 'Landscape preset',
+              ),
+              isExpanded: true,
+              items: [
                 for (final preset
                     in treatment == 'portrait'
                         ? ['Natural', 'Polished', 'Glam', 'Custom']
                         : ['Natural', 'Vivid', 'Dramatic', 'Custom'])
-                  ChoiceChip(
-                    label: Text(preset),
-                    selected: (settings['preset'] ?? 'Custom') == preset,
-                    onSelected: camera.busy
-                        ? null
-                        : (_) {
-                            settings['preset'] = preset;
-                            if (preset != 'Custom') {
-                              settings['strength'] = preset == 'Natural'
-                                  ? 2
-                                  : (preset == 'Polished' || preset == 'Vivid')
-                                  ? 3
-                                  : 4;
-                              settings['flags'] = treatment == 'portrait'
-                                  ? <String, bool>{
-                                      'eyeEnlargement': preset != 'Natural',
-                                      'lipPlumping': preset == 'Glam',
-                                    }
-                                  : <String, bool>{'sky': preset != 'Natural'};
-                            }
-                            update();
-                          },
-                  ),
+                  DropdownMenuItem(value: preset, child: Text(preset)),
               ],
-            ),
-          Text('Level $strength of 5'),
-          Slider(
-            min: 0,
-            max: 5,
-            divisions: 5,
-            value: strength.toDouble(),
-            onChanged: camera.busy
-                ? null
-                : (value) {
-                    settings['strength'] = value.round();
-                    settings['preset'] = 'Custom';
-                    update();
-                  },
-          ),
-          for (final entry in names.entries)
-            SwitchListTile(
-              title: Text(entry.value),
-              value:
-                  flags[entry.key] as bool? ??
-                  (entry.key != 'lipPlumping' || review),
-              onChanged: camera.busy
+              onChanged: camera.busy && !review
                   ? null
-                  : (value) {
-                      flags[entry.key] = value;
-                      settings['preset'] = 'Custom';
+                  : (preset) {
+                      if (preset == null) return;
+                      settings['preset'] = preset;
+                      if (preset != 'Custom') {
+                        settings['strength'] = preset == 'Natural'
+                            ? 2
+                            : (preset == 'Polished' || preset == 'Vivid')
+                            ? 3
+                            : 4;
+                        settings['flags'] = treatment == 'portrait'
+                            ? <String, bool>{
+                                'eyeEnlargement': preset != 'Natural',
+                                'lipPlumping': preset == 'Glam',
+                              }
+                            : <String, bool>{'sky': preset != 'Natural'};
+                      }
                       update();
                     },
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                "${settings['preset'] ?? 'Custom'} combines the settings below. Changing any individual setting creates Custom.",
+              ),
+            ),
+          ],
+          if (treatment != 'enhance')
+            ExpansionTile(
+              key: ValueKey('beautifierIndividual_${review}_$treatment'),
+              title: Text(
+                treatment == 'portrait'
+                    ? 'Portrait individual settings'
+                    : 'Landscape individual settings',
+              ),
+              children: [
+                ...individualControls(
+                  camera,
+                  settings,
+                  names,
+                  flags,
+                  strength,
+                  update,
+                ),
+              ],
+            )
+          else
+            ...individualControls(
+              camera,
+              settings,
+              names,
+              flags,
+              strength,
+              update,
             ),
         ],
       ],
     );
   }
+
+  List<Widget> individualControls(
+    CameraController camera,
+    Map<String, dynamic> settings,
+    Map<String, String> names,
+    Map flags,
+    int strength,
+    VoidCallback update,
+  ) => [
+    Text('Level $strength of 5'),
+    Slider(
+      min: review ? 0 : 1,
+      max: 5,
+      divisions: review ? 5 : 4,
+      value: strength.toDouble().clamp(review ? 0 : 1, 5),
+      onChanged: camera.busy && !review
+          ? null
+          : (value) {
+              settings['strength'] = value.round();
+              settings['preset'] = 'Custom';
+              update();
+            },
+    ),
+    if (review || settings != camera.captureTreatments['enhance'])
+      for (final entry in names.entries)
+        SwitchListTile(
+          title: Text(entry.value),
+          value:
+              flags[entry.key] as bool? ??
+              (entry.key != 'lipPlumping' || review),
+          onChanged: camera.busy && !review
+              ? null
+              : (value) {
+                  flags[entry.key] = value;
+                  settings['preset'] = 'Custom';
+                  update();
+                },
+        ),
+  ];
 }
 
 class PhotoAnalysisCard extends StatelessWidget {

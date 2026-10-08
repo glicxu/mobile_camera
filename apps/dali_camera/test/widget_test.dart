@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dali_camera/review_comparison.dart';
 import 'package:dali_camera/manual_preview_controls.dart';
+import 'package:dali_camera/review_treatment_controls.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 class FakeHost extends CameraHostApi {
@@ -99,6 +100,18 @@ class FakeHost extends CameraHostApi {
   Future<void> releasePhoto(PhotoHandle photo) async {
     released++;
     releasedIds.add(photo.id);
+  }
+
+  PhotoLibrary libraryResult = PhotoLibrary(photos: [], status: 'empty');
+  final List<String> loadedLibraryIds = [];
+  String? failedLibraryId;
+  @override
+  Future<PhotoLibrary> listPhotoLibrary() async => libraryResult;
+  @override
+  Future<PhotoHandle> loadLibraryPhoto(String id) async {
+    loadedLibraryIds.add(id);
+    if (failedLibraryId == id) throw StateError('iCloud offline');
+    return PhotoHandle(path: 'library-$id.jpg', id: 'copy-$id', unsaved: false);
   }
 
   @override
@@ -314,8 +327,68 @@ void main() {
     expect(camera.focusX, isNull);
     expect(host.lastResetFocus, isTrue);
     expect(find.byKey(const Key('manualPreviewControls')), findsNothing);
+    await tester.tap(find.byKey(const Key('manualControlsButton')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('manualPreviewControls')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'Manual editors and review treatment remain usable at large text',
+    (tester) async {
+      final camera = CameraController(host: ManualHost(), register: false);
+      await camera.initialize();
+      await camera.enterManual();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2.5)),
+            child: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: 400,
+                  height: 210,
+                  child: AnimatedBuilder(
+                    animation: camera,
+                    builder: (_, _) => ManualPreviewControls(camera: camera),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      for (final name in ['Focus', 'Depth', 'Exposure']) {
+        await tester.tap(find.byKey(Key('manualTool$name')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: name);
+        expect(
+          find.byKey(Key('manualEditor_${name.toLowerCase()}')),
+          findsOneWidget,
+        );
+      }
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2.5)),
+            child: Scaffold(
+              body: SingleChildScrollView(
+                child: SizedBox(
+                  width: 320,
+                  child: ReviewTreatmentControls(camera: camera),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('reviewTreatmentStrength')), findsOneWidget);
+      camera.dispose();
+    },
+  );
 
   test('Review edits automatically coalesce to the latest settings', () async {
     final host = FakeHost();
@@ -341,6 +414,82 @@ void main() {
     expect(host.effectsRecipe!['strength'], 0);
     camera.dispose();
   });
+
+  test(
+    'Library loads lazily, wraps, retains failed selection and releases copies',
+    () async {
+      final host = FakeHost()
+        ..libraryResult = PhotoLibrary(
+          status: 'limited',
+          photos: [
+            for (var i = 0; i < 8; i++)
+              LibraryPhoto(id: '$i', title: 'Photo $i'),
+          ],
+        );
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      expect(await camera.openPhotoLibrary(), isTrue);
+      expect(camera.reviewCount, 8);
+      expect(host.loadedLibraryIds, ['0']);
+      expect(camera.message, contains('allowed'));
+      await camera.previousPhoto();
+      expect(camera.reviewIndex, 7);
+      await camera.nextPhoto();
+      expect(camera.reviewIndex, 0);
+      expect(host.loadedLibraryIds, ['0', '7']);
+      host.failedLibraryId = '1';
+      await camera.nextPhoto();
+      expect(camera.reviewIndex, 0);
+      expect(camera.original!.id, 'copy-0');
+      expect(camera.message, contains('retained'));
+      host.failedLibraryId = '0';
+      expect(await camera.openPhotoLibrary(), isTrue);
+      expect(camera.original!.id, 'copy-0');
+      expect(camera.reviewCount, 8);
+      host.failedLibraryId = null;
+      await camera.nextPhoto();
+      await camera.nextPhoto();
+      await camera.nextPhoto();
+      expect(host.releasedIds.length, 2);
+      await camera.returnToCamera();
+      expect(camera.reviewingLibrary, isFalse);
+      expect(camera.libraryPhotos, isEmpty);
+      expect(host.releasedIds.toSet(), {
+        'copy-0',
+        'copy-7',
+        'copy-1',
+        'copy-2',
+        'copy-3',
+      });
+      camera.dispose();
+    },
+  );
+
+  test(
+    'Denied library falls back to history and cannot replace an unsaved original',
+    () async {
+      final host = FakeHost()
+        ..libraryResult = PhotoLibrary(photos: [], status: 'denied');
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      expect(await camera.openPhotoLibrary(), isFalse);
+      expect(camera.message, contains('denied'));
+      final saved = PhotoHandle(path: 'saved.jpg', id: 'saved', unsaved: false);
+      camera.history.add(saved);
+      expect(await camera.openPhotoLibrary(), isTrue);
+      expect(camera.original, saved);
+      await camera.returnToCamera();
+      camera.original = PhotoHandle(
+        path: 'pending.jpg',
+        id: 'pending',
+        unsaved: true,
+      );
+      expect(await camera.openPhotoLibrary(), isTrue);
+      expect(camera.original!.id, 'pending');
+      expect(host.loadedLibraryIds, isEmpty);
+      camera.dispose();
+    },
+  );
 
   test('Filter application modes preserve the custom preset and settings', () {
     final camera = CameraController(host: FakeHost(), register: false);
@@ -422,10 +571,15 @@ void main() {
       final host = FakeHost()..voiceAvailable = true;
       final camera = CameraController(host: host, register: false);
       await camera.initialize();
+      camera.watermark =
+          false; // Voice sequencing does not depend on asset/file rendering.
       await camera.setVoice(true);
       camera.voiceState(false, 'Processing voice command');
       camera.voiceShutter();
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      for (var i = 0; i < 100 && camera.busy; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(camera.busy, isFalse);
       expect(host.captures, 1);
       expect(camera.voicePreferred, isTrue);
       await camera.returnToCamera();
@@ -555,8 +709,12 @@ void main() {
         await camera.capturePhoto(review: false);
       }
       await camera.openHistory(camera.history.first);
-      expect(camera.canPreviousPhoto, isFalse);
+      expect(camera.canPreviousPhoto, isTrue);
       expect(camera.canNextPhoto, isTrue);
+      await camera.previousPhoto();
+      expect(camera.original!.id, 'original-1');
+      await camera.nextPhoto();
+      expect(camera.original!.id, 'original-3');
       await camera.nextPhoto();
       expect(camera.original!.id, 'original-2');
       await camera.variant(crop: true);
@@ -769,7 +927,7 @@ void main() {
     final camera = CameraController(host: host, register: false);
     await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Choose photo'));
+    await tester.tap(find.byTooltip('Open photo library'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('importFolder')));
     await tester.pumpAndSettle();

@@ -245,20 +245,29 @@ class _CameraScreenState extends State<CameraScreen>
                   ),
                   if (camera.guidance.isActive) ...[
                     const SizedBox(height: 8),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Image.asset(
-                        camera.guidance.entry!.asset,
-                        width: 52,
-                        height: 68,
-                        fit: BoxFit.cover,
+                    GestureDetector(
+                      onHorizontalDragEnd: (details) {
+                        if (camera.guidance.entry?.kind != 'pose') return;
+                        final speed = details.primaryVelocity ?? 0;
+                        if (speed.abs() > 200) {
+                          camera.adjacentReference(speed < 0 ? 1 : -1);
+                        }
+                      },
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Image.asset(
+                          camera.guidance.entry!.asset,
+                          width: 52,
+                          height: 68,
+                          fit: BoxFit.cover,
+                        ),
+                        title: Text(camera.guidance.entry!.title),
+                        subtitle: Text(
+                          camera.catalog.angleTitle(camera.guidance.entry!),
+                        ),
+                        onTap: () =>
+                            cameraSheet(() => details(camera.guidance.entry!)),
                       ),
-                      title: Text(camera.guidance.entry!.title),
-                      subtitle: Text(
-                        camera.catalog.angleTitle(camera.guidance.entry!),
-                      ),
-                      onTap: () =>
-                          cameraSheet(() => details(camera.guidance.entry!)),
                     ),
                     if (camera.guidance.entry!.kind == 'pose')
                       Row(
@@ -321,16 +330,27 @@ class _CameraScreenState extends State<CameraScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton.filledTonal(
-                tooltip: camera.original == null
-                    ? 'Choose photo'
-                    : 'Review latest photo',
-                icon: const Icon(Icons.photo_library_outlined),
+              IconButton(
+                tooltip: 'Open photo library',
+                icon: camera.original == null
+                    ? const Icon(Icons.photo_library_outlined, size: 26)
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          File(camera.original!.path),
+                          width: 52,
+                          height: 52,
+                          cacheWidth: 160,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, error, stack) => const Icon(
+                            Icons.photo_library_outlined,
+                            size: 26,
+                          ),
+                        ),
+                      ),
                 onPressed: camera.busy
                     ? null
-                    : camera.original == null
-                    ? () => cameraSheet(choosePhotos)
-                    : camera.openLatest,
+                    : () => cameraSheet(openPhotoLibrary),
               ),
               Semantics(
                 label: 'Take photo',
@@ -690,7 +710,7 @@ class _CameraScreenState extends State<CameraScreen>
                   children: [
                     Text(
                       camera.reviewIndex >= 0
-                          ? 'Photo ${camera.reviewIndex + 1} of ${camera.reviewPhotos.length}'
+                          ? 'Photo ${camera.reviewIndex + 1} of ${camera.reviewCount}'
                           : 'Captured photo',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
@@ -699,7 +719,7 @@ class _CameraScreenState extends State<CameraScreen>
                         fontSize: 12,
                       ),
                     ),
-                    const Text(
+                    Text(
                       'Photo review',
                       style: TextStyle(fontSize: 10, color: Colors.white60),
                     ),
@@ -715,7 +735,7 @@ class _CameraScreenState extends State<CameraScreen>
               HeaderAction(
                 tooltip: 'Choose photos from library',
                 selected: true,
-                onPressed: camera.busy ? null : choosePhotos,
+                onPressed: camera.busy ? null : () => camera.pick(),
                 child: const Icon(Icons.photo_library_outlined),
               ),
             ],
@@ -753,14 +773,82 @@ class _CameraScreenState extends State<CameraScreen>
                     onTap: openFullScreen,
                     child: SizedBox(
                       height: MediaQuery.sizeOf(context).height * .52,
-                      child: ReviewComparison(
-                        before: camera.original!.path,
-                        after: camera.selected!.path,
-                        mode: splitComparison
-                            ? 'split'
-                            : compare
-                            ? 'before'
-                            : 'after',
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ReviewComparison(
+                            before: camera.original!.path,
+                            after: camera.selected!.path,
+                            mode: splitComparison
+                                ? 'split'
+                                : compare
+                                ? 'before'
+                                : 'after',
+                          ),
+                          Positioned(
+                            top: 10,
+                            left: 12,
+                            right: 68,
+                            child: IgnorePointer(
+                              child: Align(
+                                alignment: Alignment.topLeft,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 9,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: .58),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        (compare && !splitComparison
+                                                ? 'Original'
+                                                : treatmentTitles[camera
+                                                          .selectedTreatment] ??
+                                                      {
+                                                        'original': 'Original',
+                                                        'crop': 'Tighter crop',
+                                                        'styled': 'Filtered',
+                                                        'reframe': 'Reframed',
+                                                        'level': 'Leveled',
+                                                      }[camera
+                                                          .selectedTreatment] ??
+                                                      'After')
+                                            .toUpperCase(),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        camera.reviewingLibrary
+                                            ? camera.reviewTitle
+                                            : camera.reviewingImport
+                                            ? 'Imported photo'
+                                            : 'Current capture',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 10,
+                            right: 12,
+                            child: IconButton.filledTonal(
+                              tooltip: 'Open full-screen photo',
+                              icon: const Icon(Icons.open_in_full),
+                              onPressed: openFullScreen,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -947,6 +1035,16 @@ class _CameraScreenState extends State<CameraScreen>
     ),
   );
 
+  Future<void> openPhotoLibrary() async {
+    final opened = await camera.openPhotoLibrary();
+    if (!mounted) return;
+    setState(() {
+      compare = false;
+      splitComparison = false;
+    });
+    if (!opened) await choosePhotos();
+  }
+
   Future<void> choosePhotos() async {
     final folder = await showModalBottomSheet<bool>(
       context: context,
@@ -955,10 +1053,19 @@ class _CameraScreenState extends State<CameraScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('Import up to 20 photos, or 50 from a folder'),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  camera.message ??
+                      'Import up to 20 photos, or 50 from a folder',
+                ),
               ),
+              if (camera.message?.contains('denied') == true)
+                ListTile(
+                  leading: const Icon(Icons.settings),
+                  title: const Text('Open Photos settings'),
+                  onTap: camera.host.openSettings,
+                ),
               ListTile(
                 key: const Key('importPhotos'),
                 leading: const Icon(Icons.photo_library_outlined),

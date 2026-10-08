@@ -69,7 +69,8 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             minimumShutter: device?.isExposureModeSupported(.custom) == true ? CMTimeGetSeconds(device!.activeFormat.minExposureDuration) : nil,
             maximumShutter: device?.isExposureModeSupported(.custom) == true ? min(0.5, CMTimeGetSeconds(device!.activeFormat.maxExposureDuration)) : nil,
             currentISO: Double(device?.iso ?? 100), currentShutter: device.map { CMTimeGetSeconds($0.exposureDuration) }, manualExposure: device?.exposureMode == .custom,
-            currentAperture: device.map { Double($0.lensAperture) }, exposureOffset: device.map { Double($0.exposureTargetOffset) })
+            currentAperture: device.map { Double($0.lensAperture) }, exposureOffset: device.map { Double($0.exposureTargetOffset) },
+            cameraName: device?.localizedName, lensName: device?.deviceType == .builtInWideAngleCamera ? "Wide Angle" : device?.localizedName)
     }
     func start(front: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
@@ -190,6 +191,45 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     }
     func pickPhoto(completion: @escaping (Result<PhotoHandle?, Error>) -> Void) {
         beginPicker(folder: false, limit: 1) { result in completion(result.map { $0.photos.first }) }
+    }
+    func listPhotoLibrary(completion: @escaping (Result<PhotoLibrary, Error>) -> Void) {
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+            guard status == .authorized || status == .limited else {
+                DispatchQueue.main.async { completion(.success(PhotoLibrary(photos: [], status: "denied"))) }; return
+            }
+            self.importQueue.async {
+                let options = PHFetchOptions()
+                options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+                let assets = PHAsset.fetchAssets(with: .image, options: options)
+                let formatter = DateFormatter(); formatter.dateStyle = .medium; formatter.timeStyle = .short
+                var photos: [LibraryPhoto] = []
+                assets.enumerateObjects { asset, _, _ in
+                    photos.append(LibraryPhoto(id: asset.localIdentifier, title: asset.creationDate.map { formatter.string(from: $0) } ?? "Photo"))
+                }
+                let access = photos.isEmpty ? "empty" : status == .limited ? "limited" : "authorized"
+                DispatchQueue.main.async { completion(.success(PhotoLibrary(photos: photos, status: access))) }
+            }
+        }
+    }
+    func loadLibraryPhoto(id: String, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
+            completion(.failure(failure("Photo is no longer accessible"))); return
+        }
+        let options = PHImageRequestOptions(); options.isNetworkAccessAllowed = true; options.version = .original; options.deliveryMode = .highQualityFormat
+        PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { data, _, _, info in
+            guard let data, info?[PHImageCancelledKey] as? Bool != true, info?[PHImageErrorKey] == nil else {
+                DispatchQueue.main.async { completion(.failure(self.failure("Could not load library photo; check iCloud connectivity"))) }; return
+            }
+            self.importQueue.async {
+                do {
+                    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+                    defer { try? FileManager.default.removeItem(at: temporary) }
+                    try data.write(to: temporary, options: .atomic)
+                    let photo = try self.copyImportedPhoto(temporary)
+                    DispatchQueue.main.async { completion(.success(photo)) }
+                } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+            }
+        }
     }
     func pickPhotos(folder: Bool, completion: @escaping (Result<PhotoImport, Error>) -> Void) {
         beginPicker(folder: folder, limit: folder ? 50 : 20, completion: completion)

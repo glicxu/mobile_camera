@@ -77,6 +77,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private var pendingStart: ((Result<CameraSnapshot>) -> Unit)? = null
     private var pendingPicker: ((Result<PhotoHandle?>) -> Unit)? = null
     private var pendingBatchPicker: ((Result<PhotoImport>) -> Unit)? = null
+    private var pendingLibrary: ((Result<PhotoLibrary>) -> Unit)? = null
     private var pickerIsFolder = false
     private var pendingSave: Pair<PhotoHandle, (Result<Unit>) -> Unit>? = null
     private var speech: SpeechRecognizer? = null
@@ -144,6 +145,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         pendingPicker?.invoke(Result.failure(IllegalStateException("Picker interrupted"))); pendingPicker = null
         pendingBatchPicker?.invoke(Result.failure(IllegalStateException("Picker interrupted"))); pendingBatchPicker = null
         pendingSave?.second?.invoke(Result.failure(IllegalStateException("Save interrupted; original retained"))); pendingSave = null
+        pendingLibrary?.invoke(Result.failure(IllegalStateException("Library interrupted"))); pendingLibrary = null
         binding = null; activity = null
     }
     override fun start(front: Boolean, callback: (Result<CameraSnapshot>) -> Unit) {
@@ -204,6 +206,11 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         (context.getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(this)
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray): Boolean {
+        if (requestCode == 705) {
+            val request = pendingLibrary; pendingLibrary = null
+            request?.let { queryPhotoLibrary(it) }
+            return true
+        }
         if (requestCode == 704) {
             val request = pendingSave; pendingSave = null
             if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) request?.let { save(it.first, it.second) }
@@ -236,7 +243,12 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             minimumISO = iso?.lower?.toDouble(), maximumISO = iso?.upper?.toDouble(),
             minimumShutter = time?.lower?.let { it / 1e9 }, maximumShutter = time?.upper?.let { min(it / 1e9, 0.5) },
             currentISO = meteredISO, currentShutter = meteredSeconds, manualExposure = manualExposure,
-            currentAperture = meteredAperture, exposureOffset = null)
+            currentAperture = meteredAperture, exposureOffset = null,
+            cameraName = if (front) "Front camera" else "Rear camera",
+            lensName = camera2?.let { info ->
+                val focal = info.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull()
+                if (focal != null) String.format(java.util.Locale.US, "%.1f mm ? Camera %s", focal, info.cameraId) else "Camera ${info.cameraId}"
+            })
     }
     override fun setControls(configurationId: String, ev: Double, locked: Boolean, callback: (Result<CameraSnapshot>) -> Unit) {
         try {
@@ -448,6 +460,52 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     }
     override fun pickPhoto(callback: (Result<PhotoHandle?>) -> Unit) {
         launchPicker(false, false, callback, null)
+    }
+    private fun libraryAccess(): String {
+        val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+        if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) return "authorized"
+        if (Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED) return "limited"
+        return "denied"
+    }
+    override fun listPhotoLibrary(callback: (Result<PhotoLibrary>) -> Unit) {
+        if (libraryAccess() != "denied") { queryPhotoLibrary(callback); return }
+        val host = activity ?: return callback(Result.failure(IllegalStateException("No activity")))
+        if (pendingLibrary != null) { callback(Result.failure(IllegalStateException("Library request in progress"))); return }
+        pendingLibrary = callback
+        val permissions = when {
+            Build.VERSION.SDK_INT >= 34 -> arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+            Build.VERSION.SDK_INT >= 33 -> arrayOf(Manifest.permission.READ_MEDIA_IMAGES)
+            else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+        host.requestPermissions(permissions, 705)
+    }
+    private fun queryPhotoLibrary(callback: (Result<PhotoLibrary>) -> Unit) {
+        val access = libraryAccess()
+        if (access == "denied") { callback(Result.success(PhotoLibrary(emptyList(), access))); return }
+        executor.execute {
+            try {
+                val photos = mutableListOf<LibraryPhoto>()
+                context.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME), null, null,
+                    "${MediaStore.Images.Media.DATE_ADDED} DESC, ${MediaStore.Images.Media._ID} DESC")?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0))
+                        photos.add(LibraryPhoto(uri.toString(), cursor.getString(1) ?: "Photo"))
+                    }
+                }
+                main.post { callback(Result.success(PhotoLibrary(photos, if (photos.isEmpty()) "empty" else access))) }
+            } catch (e: Exception) { main.post { callback(Result.failure(e)) } }
+        }
+    }
+    override fun loadLibraryPhoto(id: String, callback: (Result<PhotoHandle>) -> Unit) {
+        executor.execute {
+            try {
+                val uri = Uri.parse(id)
+                require(uri.scheme == "content" && uri.authority == MediaStore.AUTHORITY && uri.path?.startsWith("/external/images/media/") == true) { "Invalid library photo" }
+                val photo = copyImportedPhoto(uri)
+                main.post { callback(Result.success(photo)) }
+            } catch (e: Exception) { main.post { callback(Result.failure(e)) } }
+        }
     }
     override fun pickPhotos(folder: Boolean, callback: (Result<PhotoImport>) -> Unit) {
         launchPicker(folder, true, null, callback)

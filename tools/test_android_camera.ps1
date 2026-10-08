@@ -32,7 +32,12 @@ try {
                 $appPid = & $adbPath -s $serial shell pidof $packageId 2>$null
                 if ($appPid) {
                     & $adbPath -s $serial shell pm grant $packageId android.permission.CAMERA 2>$null | Out-Null
-                    if ($LASTEXITCODE -eq 0) { break }
+                    if ($LASTEXITCODE -eq 0) {
+                        $api = [int]((& $adbPath -s $serial shell getprop ro.build.version.sdk).Trim())
+                        $photosPermission = if ($api -ge 33) { 'android.permission.READ_MEDIA_IMAGES' } else { 'android.permission.READ_EXTERNAL_STORAGE' }
+                        & $adbPath -s $serial shell pm grant $packageId $photosPermission 2>$null | Out-Null
+                        break
+                    }
                 }
                 Start-Sleep -Milliseconds 500
             }

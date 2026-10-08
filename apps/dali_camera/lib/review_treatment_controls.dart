@@ -10,6 +10,30 @@ class ReviewTreatmentControls extends StatelessWidget {
     final treatment = camera.reviewTreatment;
     final settings = camera.reviewTreatments[treatment]!;
     final strength = (settings['strength'] as num).toInt();
+    final levelName = (treatment == 'enhance'
+        ? ['Original', 'Natural', 'Balanced', 'Vivid', 'Dramatic', 'Max']
+        : [
+            'Original',
+            'Natural',
+            'Fresh',
+            'Polished',
+            'Glam',
+            'Max',
+          ])[strength];
+    final faces = camera.photoAnalysis?['faces'] as List?;
+    final status = strength == 0
+        ? 'Original image unchanged'
+        : camera.busy
+        ? 'Updating...'
+        : treatment == 'enhance'
+        ? '$levelName - Whole-photo enhancement'
+        : treatment == 'portrait'
+        ? faces == null
+              ? 'Ready'
+              : faces.isEmpty
+              ? 'No face detected'
+              : '$levelName - Face-aware portrait polish'
+        : '$levelName - Landscape polish';
     return Card(
       color: Colors.white.withValues(alpha: .07),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -63,11 +87,7 @@ class ReviewTreatmentControls extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        strength == 0
-                            ? 'Original image unchanged'
-                            : camera.busy
-                            ? 'Updating…'
-                            : 'Ready',
+                        status,
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.white60,
@@ -77,7 +97,8 @@ class ReviewTreatmentControls extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '$strength · ${(treatment == 'enhance' ? ['Original', 'Natural', 'Balanced', 'Vivid', 'Dramatic', 'Max'] : ['Original', 'Natural', 'Fresh', 'Polished', 'Glam', 'Max'])[strength]}',
+                  '$strength \u00b7 $levelName',
+                  textScaler: TextScaler.noScaling,
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
