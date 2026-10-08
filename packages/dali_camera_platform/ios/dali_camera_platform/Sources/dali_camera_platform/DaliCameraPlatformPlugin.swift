@@ -398,7 +398,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
     }
-    func meter(configurationId: String, x: Double, y: Double, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
+    func meter(configurationId: String, x: Double, y: Double, focusOnly: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
         guard let layer = preview?.layer, x.isFinite, y.isFinite else { completion(.failure(failure("No preview or invalid focus point"))); return }
         let point = layer.captureDevicePointConverted(fromLayerPoint: CGPoint(x: min(1, max(0, x)) * layer.bounds.width, y: min(1, max(0, y)) * layer.bounds.height))
         queue.async {
@@ -407,7 +407,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 try device.lockForConfiguration(); defer { device.unlockForConfiguration() }
                 device.focusPointOfInterest = point
                 if device.isFocusModeSupported(.autoFocus) { device.focusMode = .autoFocus }
-                if device.exposureMode != .custom && device.isExposurePointOfInterestSupported {
+                if !focusOnly && device.exposureMode != .custom && device.isExposurePointOfInterestSupported {
                     device.exposurePointOfInterest = point
                     if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
                 }
@@ -415,7 +415,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
     }
-    func setManualExposure(configurationId: String, seconds: Double?, iso: Double?, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
+    func setManualExposure(configurationId: String, seconds: Double?, iso: Double?, resetFocus: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
         queue.async {
             do {
                 guard self.active, configurationId == self.configuration, let device = self.device else { throw self.failure("Camera changed; refresh controls") }
@@ -430,7 +430,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                         }
                     }
                 } else {
-                    if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
+                    if resetFocus && device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
                     if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
                     if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) { device.whiteBalanceMode = .continuousAutoWhiteBalance }
                     device.setExposureTargetBias(0, completionHandler: nil)

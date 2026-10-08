@@ -6,11 +6,13 @@ import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dali_camera/review_comparison.dart';
-import 'package:dali_camera/capture_settings.dart';
+import 'package:dali_camera/manual_preview_controls.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 class FakeHost extends CameraHostApi {
   bool failSave = false;
+  bool? lastFocusOnly;
+  bool? lastResetFocus;
   bool failRender = false;
   bool voiceAvailable = false;
   List<double>? filterParameters;
@@ -33,9 +35,28 @@ class FakeHost extends CameraHostApi {
     minimumEV: -2,
     maximumEV: 2,
     currentEV: 0,
+    supportsTap: true,
     supportsLock: false,
     locked: false,
   );
+  @override
+  Future<CameraSnapshot> setManualExposure(
+    String configurationId,
+    double? seconds,
+    double? iso,
+    bool resetFocus,
+  ) async => start(false);
+  @override
+  Future<CameraSnapshot> meter(
+    String configurationId,
+    double x,
+    double y,
+    bool focusOnly,
+  ) async {
+    lastFocusOnly = focusOnly;
+    return start(false);
+  }
+
   @override
   Future<void> stop() async {}
   @override
@@ -154,10 +175,14 @@ class ManualHost extends FakeHost {
     String configurationId,
     double? seconds,
     double? iso,
-  ) async => (await start(false))
-    ..manualExposure = seconds != null
-    ..currentISO = iso ?? 100
-    ..currentShutter = seconds ?? 1 / 125;
+    bool resetFocus,
+  ) async {
+    lastResetFocus = resetFocus;
+    return (await start(false))
+      ..manualExposure = seconds != null
+      ..currentISO = iso ?? 100
+      ..currentShutter = seconds ?? 1 / 125;
+  }
 }
 
 void main() {
@@ -196,10 +221,10 @@ void main() {
     await tester.tap(find.byKey(const Key('manualControlsButton')));
     await tester.pumpAndSettle();
     expect(camera.manualWorkspace, isTrue);
-    expect(find.byType(ManualCameraTools), findsOneWidget);
+    expect(find.byType(ManualPreviewControls), findsOneWidget);
     await tester.tap(find.byKey(const Key('manualControlsButton')));
     await tester.pumpAndSettle();
-    expect(find.byType(ManualCameraTools), findsNothing);
+    expect(find.byType(ManualPreviewControls), findsNothing);
     await tester.tap(find.byKey(const Key('coachingToggle')));
     await tester.pumpAndSettle();
     expect(camera.coachingEnabled, isFalse);
@@ -237,6 +262,86 @@ void main() {
     expect(find.text('Camera controls'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('Manual opens native rail and one live editor at a time', (
+    tester,
+  ) async {
+    final host = ManualHost();
+    final camera = CameraController(host: host, register: false);
+    await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('manualControlsButton')));
+    await tester.pumpAndSettle();
+    expect(camera.snapshot!.manualExposure, isFalse);
+    expect(find.byKey(const Key('manualToolFocus')), findsOneWidget);
+    expect(find.byKey(const Key('manualFocusPrompt')), findsNothing);
+    final preview = tester.getRect(find.byType(AspectRatio).first);
+    expect(
+      tester.getRect(find.byKey(const Key('manualToolFocus'))).right,
+      closeTo(preview.right - 8, .1),
+    );
+    await tester.tap(find.byKey(const Key('manualToolFocus')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Tap a point in the preview to focus there.'),
+      findsOneWidget,
+    );
+    await camera.meter(.4, .5);
+    await tester.pumpAndSettle();
+    expect(host.lastFocusOnly, isTrue);
+    await tester.tap(find.byKey(const Key('manualToolDepth')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('manualFocusPrompt')), findsNothing);
+    tester
+        .widget<Slider>(find.byKey(const Key('digitalDepthOfFocus')))
+        .onChanged!(3);
+    await tester.pumpAndSettle();
+    expect(camera.effectiveDepth, 3);
+    await tester.tap(find.byKey(const Key('manualToolExposure')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('digitalDepthOfFocus')), findsNothing);
+    await tester.tap(find.byKey(const Key('manualShutterAuto')));
+    await tester.pumpAndSettle();
+    expect(camera.snapshot!.manualExposure, isTrue);
+    expect(find.byKey(const Key('previewShutterSlider')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('manualShutterAuto')));
+    await tester.pumpAndSettle();
+    expect(camera.focusX, .4);
+    expect(host.lastResetFocus, isFalse);
+    await tester.tap(find.byKey(const Key('returnToAutoFromPreview')));
+    await tester.pumpAndSettle();
+    expect(camera.manualWorkspace, isFalse);
+    expect(camera.effectiveDepth, 0);
+    expect(camera.focusX, isNull);
+    expect(host.lastResetFocus, isTrue);
+    expect(find.byKey(const Key('manualPreviewControls')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('Review edits automatically coalesce to the latest settings', () async {
+    final host = FakeHost();
+    final camera = CameraController(host: host, register: false);
+    camera.original = PhotoHandle(
+      path: 'fixture.jpg',
+      id: 'source',
+      unsaved: false,
+    );
+    camera.selected = camera.original;
+    camera.reviewing = true;
+    camera.reviewTreatments['portrait']!['strength'] = 2;
+    camera.requestReviewTreatment('portrait');
+    camera.reviewTreatments['portrait']!['strength'] = 5;
+    camera.requestReviewTreatment('portrait');
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(host.effectsRecipe!['strength'], 5);
+    expect(camera.selectedTreatment, 'portrait');
+    expect(camera.original!.id, 'source');
+    camera.reviewTreatments['portrait']!['strength'] = 0;
+    camera.requestReviewTreatment('portrait');
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(host.effectsRecipe!['strength'], 0);
+    camera.dispose();
+  });
+
   test('Filter application modes preserve the custom preset and settings', () {
     final camera = CameraController(host: FakeHost(), register: false);
     camera.filter = 'fresh';
@@ -362,6 +467,8 @@ void main() {
       final host = FakeHost();
       final camera = CameraController(host: host, register: false);
       await camera.initialize();
+      camera.watermark =
+          false; // Isolate original/derived cleanup from capture styling.
       await camera.capturePhoto(review: false);
       final captured = camera.original;
       final first = PhotoHandle(path: 'one.png', id: 'one', unsaved: false);
@@ -442,6 +549,8 @@ void main() {
       final host = FakeHost();
       final camera = CameraController(host: host, register: false);
       await camera.initialize();
+      camera.watermark =
+          false; // Isolate original/derived cleanup from capture styling.
       for (var i = 0; i < 3; i++) {
         await camera.capturePhoto(review: false);
       }
@@ -508,9 +617,6 @@ void main() {
     expect(find.text('Hero plate'), findsOneWidget);
     await tester.tap(find.text('Hero plate'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Use this reference'));
-    await tester.tap(find.text('Use this reference'));
-    await tester.pumpAndSettle();
     expect(camera.guidance.entry!.kind, 'food');
 
     await tester.tap(find.byKey(const Key('effectsMenu')));
@@ -537,8 +643,9 @@ void main() {
           .first,
     );
     await tester.pumpAndSettle();
-    expect(find.text('Filters and watermark'), findsOneWidget);
-    expect(find.text('Dali watermark'), findsOneWidget);
+    expect(find.text('Filters'), findsOneWidget);
+    expect(find.text('Filter preset'), findsOneWidget);
+    expect(find.text('Individual settings'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   test(
@@ -578,6 +685,7 @@ void main() {
     final host = FakeHost();
     final camera = CameraController(host: host, register: false);
     await camera.initialize();
+    camera.watermark = false; // This check isolates capture sequencing/history.
     camera.timerSeconds = 3;
     final first = camera.requestShutter();
     await tester.pump(const Duration(seconds: 1));
@@ -608,6 +716,7 @@ void main() {
     final host = FakeHost();
     final camera = CameraController(host: host, register: false);
     await camera.initialize();
+    camera.watermark = false; // This check isolates capture sequencing/history.
     final burst = camera.beginLongPress();
     await tester.pump();
     expect(host.captures, 1);
@@ -634,6 +743,8 @@ void main() {
       final host = FakeHost();
       final camera = CameraController(host: host, register: false);
       await camera.initialize();
+      camera.watermark =
+          false; // This check isolates capture sequencing/history.
       for (var i = 0; i < 28; i++) {
         await camera.capturePhoto(review: false);
       }

@@ -13,6 +13,8 @@ void main() {
     'Real camera, references, controls and exports work',
     (tester) async {
       WidgetController.hitTestWarningShouldBeFatal = true;
+      tester.binding.platformDispatcher.accessibilityFeaturesTestValue =
+          FakeAccessibilityFeatures(disableAnimations: true);
       final camera = CameraController();
       await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
       for (var i = 0; i < 40; i++) {
@@ -111,8 +113,6 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Relaxed standing'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Use this reference'));
-      await tester.pumpAndSettle();
       expect(find.text('Done / Next'), findsOneWidget);
       await tester.ensureVisible(find.text('Natural'));
       await tester.tap(find.text('Natural'));
@@ -143,6 +143,7 @@ void main() {
           capabilities.configurationId,
           .5,
           .5,
+          false,
         );
         expect(result.ready, isTrue);
       }
@@ -178,6 +179,7 @@ void main() {
           capabilities.configurationId,
           seconds,
           iso,
+          false,
         );
         expect(
           applied.currentShutter,
@@ -201,10 +203,12 @@ void main() {
       await tester.ensureVisible(find.byKey(const Key('referenceMenu')));
       await tester.tap(find.byKey(const Key('referenceMenu')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Hero plate'));
+      await tester.tap(find.byTooltip('Photo example of Hero plate'));
       await tester.pumpAndSettle();
       expect(find.textContaining('steam and serving traffic'), findsOneWidget);
-      await tester.tap(find.text('Use this reference'));
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Hero plate'));
       await tester.pumpAndSettle();
       expect(camera.guidance.entry!.kind, 'food');
       camera.filter = 'fresh';

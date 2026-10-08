@@ -118,7 +118,7 @@ class _CameraTutorialState extends State<CameraTutorial> {
                               color: accent.withValues(alpha: .7),
                             ),
                           ),
-                          child: Icon(step.$3, size: 100, color: accent),
+                          child: TutorialIllustration(step: stepIndex),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -196,5 +196,114 @@ class _CameraTutorialState extends State<CameraTutorial> {
         ],
       ),
     ),
+  );
+}
+
+class TutorialIllustration extends StatelessWidget {
+  const TutorialIllustration({super.key, required this.step});
+  final int step;
+  Widget feature(IconData icon, String label, Color color) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 58, color: color),
+      Text(
+        label,
+        textScaler: TextScaler.noScaling,
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+    ],
+  );
+  @override
+  Widget build(BuildContext context) => Center(
+    child: switch (step) {
+      0 => const Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(Icons.crop_free, size: 122),
+          Icon(Icons.person, size: 44, color: Colors.yellow),
+        ],
+      ),
+      1 || 2 => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              feature(
+                step == 1 ? Icons.portrait : Icons.landscape,
+                step == 1 ? 'Portrait' : 'Landscape',
+                step == 1 ? Colors.teal : Colors.blue,
+              ),
+              const Padding(
+                padding: EdgeInsets.all(10),
+                child: Icon(Icons.chevron_right),
+              ),
+              feature(
+                step == 1 ? Icons.accessibility_new : Icons.view_agenda,
+                step == 1 ? 'Posture' : 'Composition',
+                step == 1 ? Colors.yellow : Colors.green,
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            step == 1
+                ? 'Choose package  ?  Choose pose'
+                : 'Choose scene  ?  Frame photo',
+            textScaler: TextScaler.noScaling,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+      3 => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              feature(Icons.circle, 'Ready', Colors.green),
+              const SizedBox(width: 24),
+              feature(Icons.circle, 'Adjust', Colors.orange),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const Icon(Icons.open_with, size: 56),
+        ],
+      ),
+      4 => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          feature(Icons.filter, 'Filters', Colors.teal),
+          feature(Icons.auto_awesome, 'Beautifier', Colors.yellow),
+        ],
+      ),
+      5 => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 90,
+            height: 90,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.grey, width: 4),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '? Timer     Voice     Burst',
+            textScaler: TextScaler.noScaling,
+          ),
+        ],
+      ),
+      _ => const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.chevron_left),
+          Icon(Icons.photo_library_outlined, size: 72),
+          Icon(Icons.chevron_right),
+        ],
+      ),
+    },
   );
 }

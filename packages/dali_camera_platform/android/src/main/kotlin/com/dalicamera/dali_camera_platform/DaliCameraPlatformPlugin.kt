@@ -600,18 +600,18 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             future.addListener({ try { future.get(); check(config == configurationId && active); callback(Result.success(snapshot())) } catch (e: Exception) { callback(Result.failure(e)) } }, ContextCompat.getMainExecutor(context))
         } catch (e: Exception) { callback(Result.failure(e)) }
     }
-    override fun meter(configurationId: String, x: Double, y: Double, callback: (Result<CameraSnapshot>) -> Unit) {
+    override fun meter(configurationId: String, x: Double, y: Double, focusOnly: Boolean, callback: (Result<CameraSnapshot>) -> Unit) {
         try {
             check(config == configurationId && active && x.isFinite() && y.isFinite()) { "Camera changed or invalid focus point" }
             val cam = camera!!; val view = previewView ?: error("No preview")
             val point = view.meteringPointFactory.createPoint(x.coerceIn(0.0, 1.0).toFloat() * view.width, y.coerceIn(0.0, 1.0).toFloat() * view.height)
-            val action = FocusMeteringAction.Builder(point, if (manualExposure) FocusMeteringAction.FLAG_AF else FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE).disableAutoCancel().build()
+            val action = FocusMeteringAction.Builder(point, if (focusOnly || manualExposure) FocusMeteringAction.FLAG_AF else FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE).disableAutoCancel().build()
             check(cam.cameraInfo.isFocusMeteringSupported(action)) { "Focus point unavailable" }
             val future = cam.cameraControl.startFocusAndMetering(action)
             future.addListener({ try { future.get(); check(config == configurationId && active); callback(Result.success(snapshot())) } catch (e: Exception) { callback(Result.failure(e)) } }, ContextCompat.getMainExecutor(context))
         } catch (e: Exception) { callback(Result.failure(e)) }
     }
-    override fun setManualExposure(configurationId: String, seconds: Double?, iso: Double?, callback: (Result<CameraSnapshot>) -> Unit) {
+    override fun setManualExposure(configurationId: String, seconds: Double?, iso: Double?, resetFocus: Boolean, callback: (Result<CameraSnapshot>) -> Unit) {
         try {
             check(config == configurationId && active) { "Camera changed; refresh controls" }
             val cam = camera!!; val state = snapshot()
@@ -627,16 +627,16 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             } else {
                 options.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
                     .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, false)
-                    .setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
                     .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
             }
+            if (!enabling && resetFocus) options.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
             val future = Camera2CameraControl.from(cam.cameraControl).setCaptureRequestOptions(options.build())
             future.addListener({
                 try {
                     future.get(); check(config == configurationId && active)
                     manualExposure = enabling; lockedState = false
                     if (!enabling) {
-                        cam.cameraControl.cancelFocusAndMetering()
+                        if (resetFocus) cam.cameraControl.cancelFocusAndMetering()
                         val reset = cam.cameraControl.setExposureCompensationIndex(0)
                         reset.addListener({ try { reset.get(); check(config == configurationId && active); callback(Result.success(snapshot())) } catch (e: Exception) { callback(Result.failure(e)) } }, ContextCompat.getMainExecutor(context))
                     } else callback(Result.success(snapshot()))

@@ -43,7 +43,9 @@ class PhotoEffectControls extends StatelessWidget {
             'lipPlumping': 'Lip plumping',
           }
         : {'sky': 'Sky enhancement', 'landscapeColor': 'Landscape color'};
-    void update() => camera.persistSettings();
+    void update() => review
+        ? camera.requestReviewTreatment(camera.reviewTreatment)
+        : camera.persistSettings();
     return ExpansionTile(
       initiallyExpanded: review,
       title: Text(review ? 'Photo treatment' : 'Beautifier'),
@@ -78,23 +80,7 @@ class PhotoEffectControls extends StatelessWidget {
               'Auto uses ${treatmentTitles[camera.captureTreatment]} for ${camera.activeSituation.title}.',
             ),
           ),
-        if (!review) ...[
-          Text('Depth of focus: ${camera.depthLevel} / 5'),
-          Slider(
-            min: 0,
-            max: 5,
-            divisions: 5,
-            value: camera.depthLevel.toDouble(),
-            onChanged: camera.busy
-                ? null
-                : (value) {
-                    camera.depthLevel = value.round();
-                    camera.persistSettings();
-                    camera.updateDepthPreview();
-                  },
-          ),
-        ],
-        if (review || camera.beautifier != 'off') ...[
+        if (review || camera.beautifier == 'custom') ...[
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -177,13 +163,6 @@ class PhotoEffectControls extends StatelessWidget {
                       settings['preset'] = 'Custom';
                       update();
                     },
-            ),
-          if (review)
-            FilledButton.tonal(
-              onPressed: camera.busy
-                  ? null
-                  : () => camera.applyTreatment(treatment),
-              child: const Text('Prepare treatment'),
             ),
         ],
       ],

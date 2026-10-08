@@ -6,11 +6,15 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'camera_controller.dart';
 import 'capture_settings.dart';
+import 'manual_preview_controls.dart';
 import 'camera_selection_row.dart';
 import 'reference_chooser.dart';
+import 'reference_details.dart';
 import 'photo_effect_controls.dart';
 import 'review_comparison.dart';
+import 'review_treatment_controls.dart';
 import 'camera_header.dart';
+import 'coaching_overlay.dart';
 import 'app_settings.dart';
 import 'camera_tutorial.dart';
 
@@ -253,8 +257,30 @@ class _CameraScreenState extends State<CameraScreen>
                       subtitle: Text(
                         camera.catalog.angleTitle(camera.guidance.entry!),
                       ),
-                      onTap: () => details(camera.guidance.entry!),
+                      onTap: () =>
+                          cameraSheet(() => details(camera.guidance.entry!)),
                     ),
+                    if (camera.guidance.entry!.kind == 'pose')
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            tooltip: 'Previous pose',
+                            onPressed: () => camera.adjacentReference(-1),
+                            icon: const Icon(Icons.chevron_left),
+                          ),
+                          const Flexible(
+                            child: Text(
+                              'Swipe the pose, or use the arrow buttons.',
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Next pose',
+                            onPressed: () => camera.adjacentReference(1),
+                            icon: const Icon(Icons.chevron_right),
+                          ),
+                        ],
+                      ),
                     Wrap(
                       spacing: 8,
                       children: [
@@ -278,20 +304,6 @@ class _CameraScreenState extends State<CameraScreen>
                     ),
                   ],
                 ],
-                if (camera.countdown > 0) ...[
-                  Text(
-                    'Photo in ${camera.countdown}s',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  TextButton(
-                    onPressed: camera.cancelSequence,
-                    child: const Text('Cancel timer'),
-                  ),
-                ],
-                if (camera.bursting)
-                  Text(
-                    '${camera.burstCount} burst photos saved. Release to stop.',
-                  ),
                 if (camera.message != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -317,7 +329,7 @@ class _CameraScreenState extends State<CameraScreen>
                 onPressed: camera.busy
                     ? null
                     : camera.original == null
-                    ? choosePhotos
+                    ? () => cameraSheet(choosePhotos)
                     : camera.openLatest,
               ),
               Semantics(
@@ -337,11 +349,36 @@ class _CameraScreenState extends State<CameraScreen>
                           : null,
                       style: FilledButton.styleFrom(
                         shape: const CircleBorder(),
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
                         padding: EdgeInsets.zero,
                       ),
                       child: camera.busy
                           ? const CircularProgressIndicator()
-                          : const Icon(Icons.camera, size: 36),
+                          : SizedBox(
+                              width: 60,
+                              height: 60,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.black.withValues(alpha: .35),
+                                    width: 3,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: camera.timerSeconds > 0
+                                      ? Text(
+                                          '${camera.timerSeconds}',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                              ),
+                            ),
                     ),
                   ),
                 ),
@@ -394,39 +431,150 @@ class _CameraScreenState extends State<CameraScreen>
                     const UiKitView(viewType: 'dali/camera')
                   else
                     const Center(child: Text('Use an Android or iOS phone.')),
+                  if (camera.coachingEnabled &&
+                      camera.activeSituation.supportsPoseGuidance)
+                    CoachingOverlay(
+                      advice: camera.advice,
+                      guided: camera.guidance.isActive,
+                      animate: camera.livePreviewEnabled,
+                      frame: camera.debug ? camera.lastFrame : null,
+                    ),
+                  if (camera.watermark)
+                    Positioned(
+                      right: 14,
+                      bottom: 14,
+                      child: IgnorePointer(
+                        child: Opacity(
+                          opacity: .86,
+                          child: Image.asset(
+                            'assets/branding/dali-cam-watermark.png',
+                            width: 150,
+                            semanticLabel: 'Dali Cam watermark preview',
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (camera.countdown > 0)
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: .72),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.timer, size: 32),
+                            Text(
+                              '${camera.countdown}',
+                              textScaler: TextScaler.noScaling,
+                              style: const TextStyle(
+                                fontSize: 88,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: camera.cancelSequence,
+                              child: const Text('Cancel timer'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (camera.bursting)
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: .82),
+                          borderRadius: BorderRadius.circular(40),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('BURST'),
+                            Text(
+                              '${camera.burstCount}',
+                              style: const TextStyle(
+                                fontSize: 42,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   if (camera.focusX != null && camera.focusY != null)
                     Positioned(
-                      left: camera.focusX! * previewBounds.maxWidth - 16,
-                      top: camera.focusY! * previewBounds.maxHeight - 16,
-                      child: const IgnorePointer(
-                        child: Icon(
-                          Icons.center_focus_strong,
-                          size: 32,
-                          color: Colors.amber,
+                      left: camera.focusX! * previewBounds.maxWidth - 36,
+                      top: camera.focusY! * previewBounds.maxHeight - 36,
+                      child: IgnorePointer(
+                        child: SizedBox(
+                          width: 72,
+                          height: 72,
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: cameraTeal,
+                                      width: 3,
+                                    ),
+                                    borderRadius: BorderRadius.circular(7),
+                                  ),
+                                ),
+                              ),
+                              if (!camera.manualWorkspace)
+                                const Align(
+                                  alignment: Alignment.bottomRight,
+                                  child: Icon(
+                                    Icons.wb_sunny,
+                                    size: 20,
+                                    color: Colors.yellow,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  if (camera.manualWorkspace && manualToolsVisible)
+                  if (camera.snapshot?.locked == true ||
+                      camera.snapshot?.manualExposure == true)
                     Positioned(
-                      right: 8,
-                      top: 8,
-                      bottom: 8,
-                      width: previewBounds.maxWidth.clamp(0, 240).toDouble(),
-                      child: Card(
-                        color: const Color(0xee080b0f),
-                        child: SingleChildScrollView(
-                          child: ManualCameraTools(camera: camera),
+                      top: 10,
+                      right: 10,
+                      child: IgnorePointer(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: .68),
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: Text(
+                            camera.snapshot?.manualExposure == true
+                                ? 'M'
+                                : 'AF-L  AE-L',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  if (camera.coachingEnabled)
-                    IgnorePointer(
-                      child: CustomPaint(
-                        painter: FramePainter(
-                          camera.debug ? camera.lastFrame : null,
-                        ),
-                      ),
-                    ),
+                  if (camera.manualWorkspace &&
+                      manualToolsVisible &&
+                      camera.countdown == 0 &&
+                      !camera.bursting)
+                    ManualPreviewControls(camera: camera),
                 ],
               ),
             ),
@@ -440,16 +588,14 @@ class _CameraScreenState extends State<CameraScreen>
         manualVisible: manualToolsVisible,
         manualMode: camera.manualWorkspace,
         coachingEnabled: camera.coachingEnabled,
-        onManual: camera.busy
+        onManual: camera.busy || camera.controlBusy
             ? null
-            : () => setState(() {
-                if (camera.manualWorkspace) {
-                  manualToolsVisible = !manualToolsVisible;
-                } else {
-                  camera.manualWorkspace = true;
-                  manualToolsVisible = true;
+            : () async {
+                if (!camera.manualWorkspace) await camera.enterManual();
+                if (mounted && camera.manualWorkspace) {
+                  setState(() => manualToolsVisible = !manualToolsVisible);
                 }
-              }),
+              },
         onCoaching: () => camera.setCoachingEnabled(!camera.coachingEnabled),
         onSettings: () => cameraSheet(
           () => showAppSettings(context, onHelp: help, onImport: choosePhotos),
@@ -511,58 +657,87 @@ class _CameraScreenState extends State<CameraScreen>
     final photo = compare ? camera.original : camera.selected;
     return Column(
       children: [
-        Row(
-          children: [
-            IconButton(
-              tooltip: 'Back to camera',
-              onPressed: camera.busy ? null : camera.returnToCamera,
-              icon: const Icon(Icons.arrow_back),
-            ),
-            const Expanded(child: Text('Photo review')),
-            IconButton(
-              tooltip: 'Recent photos',
-              onPressed: camera.busy ? null : recentPhotos,
-              icon: const Icon(Icons.collections),
-            ),
-            TextButton(
-              onPressed: camera.busy ? null : choosePhotos,
-              child: const Text('Photos'),
-            ),
-          ],
-        ),
-        if (camera.reviewIndex >= 0)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          child: Row(
             children: [
-              IconButton(
+              HeaderAction(
+                tooltip: 'Back to camera',
+                selected: true,
+                onPressed: camera.busy ? null : camera.returnToCamera,
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.camera_alt_outlined, size: 20),
+                    Text(
+                      'Camera',
+                      textScaler: TextScaler.noScaling,
+                      style: TextStyle(fontSize: 9),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              HeaderAction(
                 tooltip: 'Previous photo',
                 onPressed: camera.canPreviousPhoto
-                    ? () {
-                        setState(() => compare = false);
-                        camera.previousPhoto();
-                      }
+                    ? camera.previousPhoto
                     : null,
-                icon: const Icon(Icons.chevron_left),
+                child: const Icon(Icons.chevron_left),
               ),
-              Text('${camera.reviewIndex + 1} / ${camera.reviewPhotos.length}'),
-              IconButton(
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      camera.reviewIndex >= 0
+                          ? 'Photo ${camera.reviewIndex + 1} of ${camera.reviewPhotos.length}'
+                          : 'Captured photo',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: cameraTeal,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const Text(
+                      'Photo review',
+                      style: TextStyle(fontSize: 10, color: Colors.white60),
+                    ),
+                  ],
+                ),
+              ),
+              HeaderAction(
                 tooltip: 'Next photo',
-                onPressed: camera.canNextPhoto
-                    ? () {
-                        setState(() => compare = false);
-                        camera.nextPhoto();
-                      }
-                    : null,
-                icon: const Icon(Icons.chevron_right),
+                onPressed: camera.canNextPhoto ? camera.nextPhoto : null,
+                child: const Icon(Icons.chevron_right),
+              ),
+              const SizedBox(width: 8),
+              HeaderAction(
+                tooltip: 'Choose photos from library',
+                selected: true,
+                onPressed: camera.busy ? null : choosePhotos,
+                child: const Icon(Icons.photo_library_outlined),
               ),
             ],
           ),
+        ),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                ReviewModeControls(
+                  value: splitComparison
+                      ? 'split'
+                      : compare
+                      ? 'before'
+                      : 'after',
+                  onChanged: (value) => setState(() {
+                    compare = value == 'before';
+                    splitComparison = value == 'split';
+                  }),
+                ),
                 if (photo != null)
                   GestureDetector(
                     onHorizontalDragEnd: (details) {
@@ -575,21 +750,9 @@ class _CameraScreenState extends State<CameraScreen>
                         camera.previousPhoto();
                       }
                     },
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => FullScreenReview(
-                          before: camera.original!.path,
-                          after: camera.selected!.path,
-                          initialMode: splitComparison
-                              ? 'split'
-                              : compare
-                              ? 'before'
-                              : 'after',
-                        ),
-                      ),
-                    ),
+                    onTap: openFullScreen,
                     child: SizedBox(
-                      height: MediaQuery.sizeOf(context).height * .42,
+                      height: MediaQuery.sizeOf(context).height * .52,
                       child: ReviewComparison(
                         before: camera.original!.path,
                         after: camera.selected!.path,
@@ -602,73 +765,6 @@ class _CameraScreenState extends State<CameraScreen>
                     ),
                   ),
                 const SizedBox(height: 16),
-                Text(
-                  'Choose a version',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('Original'),
-                      selected: camera.selected?.id == camera.original?.id,
-                      onSelected: camera.busy
-                          ? null
-                          : (_) {
-                              camera.variant();
-                            },
-                    ),
-                    ChoiceChip(
-                      label: const Text('Tighter crop'),
-                      selected:
-                          !camera.styled &&
-                          camera.selected?.id != camera.original?.id,
-                      onSelected: camera.busy
-                          ? null
-                          : (_) {
-                              camera.variant(crop: true);
-                            },
-                    ),
-                  ],
-                ),
-                CaptureStyleControls(camera: camera, review: true),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final treatment in ['reframe', 'level'])
-                      ChoiceChip(
-                        label: Text(
-                          treatment == 'reframe'
-                              ? 'Auto reframe'
-                              : 'Level horizon',
-                        ),
-                        selected: camera.selectedTreatment == treatment,
-                        onSelected:
-                            camera.busy ||
-                                camera.photoAnalysis?[treatment == 'reframe'
-                                        ? 'reframe'
-                                        : 'horizon'] ==
-                                    null ||
-                                (treatment == 'level' &&
-                                    !canLevelHorizon(camera.photoAnalysis))
-                            ? null
-                            : (_) => camera.applyTreatment(treatment),
-                      ),
-                  ],
-                ),
-                PhotoEffectControls(camera: camera, review: true),
-                PhotoAnalysisCard(camera: camera),
-                ReviewModeControls(
-                  value: splitComparison
-                      ? 'split'
-                      : compare
-                      ? 'before'
-                      : 'after',
-                  onChanged: (value) => setState(() {
-                    compare = value == 'before';
-                    splitComparison = value == 'split';
-                  }),
-                ),
                 if (camera.message != null)
                   Semantics(liveRegion: true, child: Text(camera.message!)),
                 const SizedBox(height: 12),
@@ -676,6 +772,14 @@ class _CameraScreenState extends State<CameraScreen>
                   spacing: 8,
                   runSpacing: 8,
                   children: [
+                    TextButton(
+                      onPressed:
+                          camera.busy ||
+                              camera.selected?.id == camera.original?.id
+                          ? null
+                          : () => openFullScreen(mode: 'split'),
+                      child: const Text('Compare'),
+                    ),
                     FilledButton(
                       onPressed: camera.busy
                           ? null
@@ -683,12 +787,10 @@ class _CameraScreenState extends State<CameraScreen>
                               originalView: compare && !splitComparison,
                             ),
                       child: Text(
-                        camera.selected?.id == camera.original?.id &&
-                                camera.original?.unsaved == true
+                        camera.original?.unsaved == true &&
+                                camera.selected?.id == camera.original?.id
                             ? 'Retry save original'
-                            : compare && !splitComparison
-                            ? 'Save original copy'
-                            : 'Save selected',
+                            : 'Save a copy',
                       ),
                     ),
                     FilledButton.tonal(
@@ -697,11 +799,7 @@ class _CameraScreenState extends State<CameraScreen>
                           : () => camera.shareSelected(
                               originalView: compare && !splitComparison,
                             ),
-                      child: Text(
-                        compare && !splitComparison
-                            ? 'Share original'
-                            : 'Share selected',
-                      ),
+                      child: const Text('Share'),
                     ),
                     if (camera.original?.unsaved == true) ...[
                       TextButton(
@@ -742,6 +840,88 @@ class _CameraScreenState extends State<CameraScreen>
                     ],
                   ],
                 ),
+                FilledButton.icon(
+                  onPressed: camera.busy ? null : camera.returnToCamera,
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: const Text('Back to Camera'),
+                ),
+                ReviewTreatmentControls(camera: camera),
+                ExpansionTile(
+                  title: const Text('Versions and imports'),
+                  children: [
+                    Text(
+                      'Choose a version',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Original'),
+                          selected: camera.selected?.id == camera.original?.id,
+                          onSelected: camera.busy
+                              ? null
+                              : (_) {
+                                  camera.variant();
+                                },
+                        ),
+                        ChoiceChip(
+                          label: const Text('Tighter crop'),
+                          selected:
+                              !camera.styled &&
+                              camera.selected?.id != camera.original?.id,
+                          onSelected: camera.busy
+                              ? null
+                              : (_) {
+                                  camera.variant(crop: true);
+                                },
+                        ),
+                      ],
+                    ),
+                    CaptureStyleControls(camera: camera, review: true),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final treatment in ['reframe', 'level'])
+                          ChoiceChip(
+                            label: Text(
+                              treatment == 'reframe'
+                                  ? 'Auto reframe'
+                                  : 'Level horizon',
+                            ),
+                            selected: camera.selectedTreatment == treatment,
+                            onSelected:
+                                camera.busy ||
+                                    camera.photoAnalysis?[treatment == 'reframe'
+                                            ? 'reframe'
+                                            : 'horizon'] ==
+                                        null ||
+                                    (treatment == 'level' &&
+                                        !canLevelHorizon(camera.photoAnalysis))
+                                ? null
+                                : (_) => camera.applyTreatment(treatment),
+                          ),
+                      ],
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        TextButton(
+                          onPressed: camera.busy ? null : recentPhotos,
+                          child: const Text('Recent photos'),
+                        ),
+                        TextButton(
+                          onPressed: camera.busy ? null : choosePhotos,
+                          child: const Text('Import photos'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                if (camera.debug) ...[
+                  PhotoEffectControls(camera: camera, review: true),
+                  PhotoAnalysisCard(camera: camera),
+                ],
                 if (camera.busy) const LinearProgressIndicator(),
               ],
             ),
@@ -750,6 +930,22 @@ class _CameraScreenState extends State<CameraScreen>
       ],
     );
   }
+
+  Future<void> openFullScreen({String? mode}) => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => FullScreenReview(
+        before: camera.original!.path,
+        after: camera.selected!.path,
+        initialMode:
+            mode ??
+            (splitComparison
+                ? 'split'
+                : compare
+                ? 'before'
+                : 'after'),
+      ),
+    ),
+  );
 
   Future<void> choosePhotos() async {
     final folder = await showModalBottomSheet<bool>(
@@ -797,12 +993,13 @@ class _CameraScreenState extends State<CameraScreen>
           catalog: camera.catalog,
           kind: camera.catalogKind,
           selected: camera.guidance.entry,
+          onExample: details,
         ),
       ),
     );
     if (!mounted) return;
     if (result == 'natural') camera.choose(null);
-    if (result is CatalogEntry) await details(result, select: true);
+    if (result is CatalogEntry) camera.choose(result);
   }
 
   Future<void> effects() {
@@ -835,61 +1032,15 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  Future<void> details(CatalogEntry item, {bool select = false}) =>
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        builder: (ctx) => SizedBox(
-          height: MediaQuery.sizeOf(ctx).height * .85,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.title,
-                        style: Theme.of(ctx).textTheme.titleLarge,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Close reference',
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                SizedBox(
-                  height: 260,
-                  child: Image.asset(item.asset, fit: BoxFit.contain),
-                ),
-                const SizedBox(height: 16),
-                Text('${item.recipient}: ${item.cues.join(' ')}'),
-                const SizedBox(height: 12),
-                Text('Camera: ${camera.catalog.angleInstruction(item)}'),
-                const SizedBox(height: 12),
-                Text(camera.catalog.lightDescription(item)),
-                if (item.data['safetyNote'] != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Text(item.data['safetyNote'] as String),
-                  ),
-                if (select)
-                  FilledButton(
-                    onPressed: () {
-                      camera.choose(item);
-                      Navigator.pop(ctx);
-                    },
-                    child: const Text('Use this reference'),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      );
+  Future<void> details(CatalogEntry item) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (ctx) => SizedBox(
+      height: MediaQuery.sizeOf(ctx).height * .85,
+      child: ReferenceDetails(camera: camera, initial: item),
+    ),
+  );
   Future<void> recentPhotos() => showModalBottomSheet<void>(
     context: context,
     useSafeArea: true,
@@ -957,112 +1108,61 @@ class _CameraScreenState extends State<CameraScreen>
       builder: (ctx) => AnimatedBuilder(
         animation: camera,
         builder: (ctx, _) {
-          final snapshot = camera.snapshot;
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+          return SizedBox(
+            height: MediaQuery.sizeOf(ctx).height * .85,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'Camera controls',
-                  style: Theme.of(ctx).textTheme.titleLarge,
+                ListTile(
+                  title: Text(
+                    'Camera controls',
+                    style: Theme.of(ctx).textTheme.titleLarge,
+                  ),
+                  trailing: TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Done'),
+                  ),
                 ),
-                if (snapshot?.minimumISO != null &&
-                    snapshot?.minimumShutter != null)
-                  ListTile(
-                    title: const Text('Focus and Exposure'),
-                    subtitle: Text(
-                      camera.manualWorkspace ? 'Manual workspace' : 'Auto',
-                    ),
-                    trailing: TextButton(
-                      onPressed: camera.controlBusy
-                          ? null
-                          : () {
-                              camera.manualWorkspace = true;
-                              manualToolsVisible = true;
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      children: [
+                        ShutterSettings(camera: camera),
+                        CaptureStyleControls(camera: camera),
+                        PhotoEffectControls(camera: camera),
+                        FocusExposureSettings(
+                          camera: camera,
+                          onManual: () async {
+                            await camera.enterManual();
+                            if (ctx.mounted && camera.manualWorkspace) {
+                              manualToolsVisible = false;
                               Navigator.pop(ctx);
                               refresh();
-                            },
-                      child: const Text('Manual'),
+                            }
+                          },
+                        ),
+                        ExpansionTile(
+                          title: const Text('Diagnostics'),
+                          children: [
+                            SwitchListTile(
+                              title: const Text('Debug overlay'),
+                              value: camera.debug,
+                              onChanged: (value) {
+                                camera.debug = value;
+                                refresh();
+                              },
+                            ),
+                            TextButton(
+                              onPressed: () => Clipboard.setData(
+                                ClipboardData(text: jsonEncode(camera.log)),
+                              ),
+                              child: const Text('Copy diagnostic log'),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                if ((snapshot?.maximumZoom ?? 1) >
-                    (snapshot?.minimumZoom ?? 1)) ...[
-                  Text(
-                    'Zoom ${(snapshot?.currentZoom ?? 1).toStringAsFixed(1)}?',
-                  ),
-                  Slider(
-                    min: snapshot!.minimumZoom!,
-                    max: snapshot.maximumZoom!,
-                    value: snapshot.currentZoom!.clamp(
-                      snapshot.minimumZoom!,
-                      snapshot.maximumZoom!,
-                    ),
-                    onChanged: camera.controlBusy ? null : camera.zoom,
-                  ),
-                ],
-                ShutterSettings(camera: camera),
-                CaptureStyleControls(camera: camera),
-                if (snapshot != null &&
-                    snapshot.minimumEV < snapshot.maximumEV) ...[
-                  Text(
-                    'Exposure ${(snapshot.currentEV).toStringAsFixed(1)} EV',
-                  ),
-                  Slider(
-                    value: snapshot.currentEV.clamp(
-                      snapshot.minimumEV,
-                      snapshot.maximumEV,
-                    ),
-                    min: snapshot.minimumEV,
-                    max: snapshot.maximumEV,
-                    onChanged: (v) async {
-                      await camera.controls(v, snapshot.locked);
-                    },
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      await camera.controls(0, false);
-                    },
-                    child: const Text('Return to Auto'),
-                  ),
-                ],
-                if (snapshot?.supportsLock == true &&
-                    snapshot?.manualExposure != true)
-                  SwitchListTile(
-                    title: const Text('Focus / exposure lock'),
-                    value: snapshot!.locked,
-                    onChanged: (v) async {
-                      await camera.controls(snapshot.currentEV, v);
-                    },
-                  ),
-                SwitchListTile(
-                  title: const Text('Debug overlay'),
-                  value: camera.debug,
-                  onChanged: (v) {
-                    camera.debug = v;
-                    refresh();
-                  },
-                ),
-                SwitchListTile(
-                  title: const Text('Voice shutter'),
-                  value: camera.voicePreferred,
-                  subtitle: Text(camera.voiceStatus),
-                  onChanged: (v) async {
-                    await camera.setVoice(v);
-                  },
-                ),
-                TextButton(
-                  onPressed: () {
-                    Clipboard.setData(
-                      ClipboardData(text: jsonEncode(camera.log)),
-                    );
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Copy diagnostic log'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Done'),
                 ),
               ],
             ),
@@ -1101,47 +1201,3 @@ IconData directionIcon(String direction) => switch (direction) {
   'rotateLeft' => Icons.rotate_left,
   _ => Icons.rotate_right,
 };
-
-class FramePainter extends CustomPainter {
-  FramePainter(this.frame);
-  final Map<String, dynamic>? frame;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final grid = Paint()
-      ..color = Colors.white.withValues(alpha: .15)
-      ..strokeWidth = 1;
-    for (var i = 1; i < 3; i++) {
-      canvas.drawLine(
-        Offset(size.width * i / 3, 0),
-        Offset(size.width * i / 3, size.height),
-        grid,
-      );
-      canvas.drawLine(
-        Offset(0, size.height * i / 3),
-        Offset(size.width, size.height * i / 3),
-        grid,
-      );
-    }
-    if (frame == null) return;
-    for (final key in ['people', 'faces']) {
-      final paint = Paint()
-        ..color = key == 'faces' ? Colors.amber : Colors.tealAccent
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2;
-      for (final box in frame![key] as List? ?? []) {
-        canvas.drawRect(
-          Rect.fromLTWH(
-            (box['x'] as num) * size.width,
-            (box['y'] as num) * size.height,
-            (box['width'] as num) * size.width,
-            (box['height'] as num) * size.height,
-          ),
-          paint,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(FramePainter oldDelegate) => oldDelegate.frame != frame;
-}

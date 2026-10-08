@@ -1,6 +1,6 @@
 # Native UI parity inventory
 
-Reference: native iOS `d53a977`, audited October 8, 2026. This records implementation coverage, not physical visual sign-off. Source behavior is in `DaliCamera/ContentView.swift`, `Models.swift`, `CameraModel.swift` and the native processing engines. Both Flutter backends are connected unless a limitation is stated.
+Reference: native iOS `d53a977`, audited October 8, 2026. This records implementation coverage, not physical visual sign-off. Source behavior is in `DaliCamera/ContentView.swift`, `Models.swift`, `CameraModel.swift` and the native processing engines. The earlier aggregate inventory omitted reachable UI differences. The comprehensive action audit and corrections in the porting plan now take precedence; ?connected? does not mean accepted parity.
 
 | Reference area | Implemented behavior | Acceptance / platform limits |
 | --- | --- | --- |
@@ -16,7 +16,8 @@ Reference: native iOS `d53a977`, audited October 8, 2026. This records implement
 | Filter settings | Named presets and seven parameters, Auto per situation, watermark; mode/preset/raw values persisted | iOS native Core Image sequence; Android corresponding spatial/color operations require visual tolerance acceptance |
 | Beautifier settings | General Enhance, Portrait Polish, Landscape Polish; native levels, presets, option switches and separate capture/review settings | Landmark-aware guarded eyes/lips, skin/blemishes and sky/color; strength-zero avoids cosmetics |
 | Depth | Reference rounded subject-region live overlay and feathered saved blur; subject/focus fallback | Baseline has no semantic segmentation or live Filter/Beautifier rendering. Android bounded preview blur needs physical edge/performance checks |
-| Focus / exposure / Manual | Auto/M, shutter/ISO, linked ISO, EV, lock, tap metering, zoom, actual aperture and supported metering | Hardware-gated. Android live exposure-offset unavailable; Tv/Av belongs to disabled native iOS 27 compile gate, outside Xcode 16.4 baseline |
+| Focus / exposure / Manual | Native Focus/Depth/Exposure rail and one editor at a time; Auto exposure on entry; focus-only taps, exposure-Auto vs full-Auto reset; shutter/ISO logarithmic sliders and live EV. Existing hardware commands retained | Hardware-gated. Android live exposure-offset unavailable; Tv/Av belongs to disabled native iOS 27 compile gate, outside Xcode 16.4 baseline |
+| System Photos browser | **Pending implementation in current run:** accessible library listing/lazy loading, permission/limited-access fallback and wrap navigation | Previous private-latest/picker destination did not match native `openSystemPhotoLibrary` |
 | Recent / review navigation | 25 saved originals, previous/next/swipe/wrap, source-isolated derived selections | Global treatment settings follow reference; no per-photo treatment persistence requirement |
 | Import | Up to 20 selected photos or 50 folder images; private byte-preserving copies, cancellation and bounded traversal | Folder import intentionally visible by product decision; session review only, not package installation |
 | Comparison / fullscreen | Before/After/Split, draggable split, pan/zoom; new source starts Before, processed selection shows After | Before exports original; After/Split export selected version |

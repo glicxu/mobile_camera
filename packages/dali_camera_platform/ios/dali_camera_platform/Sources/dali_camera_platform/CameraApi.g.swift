@@ -375,8 +375,8 @@ protocol CameraHostApi {
   func releasePhoto(photo: PhotoHandle) throws
   func reconcilePrivatePhotos(retainedPaths: [String], completion: @escaping (Result<Void, Error>) -> Void)
   func setZoom(configurationId: String, zoom: Double, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
-  func meter(configurationId: String, x: Double, y: Double, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
-  func setManualExposure(configurationId: String, seconds: Double?, iso: Double?, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
+  func meter(configurationId: String, x: Double, y: Double, focusOnly: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
+  func setManualExposure(configurationId: String, seconds: Double?, iso: Double?, resetFocus: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
   func openSettings() throws
   func setVoiceEnabled(enabled: Bool, completion: @escaping (Result<Bool, Error>) -> Void)
   func setDepthPreview(configurationId: String, level: Int64, subjectRect: String?) throws
@@ -714,7 +714,8 @@ class CameraHostApiSetup {
         let configurationIdArg = args[0] as! String
         let xArg = args[1] as! Double
         let yArg = args[2] as! Double
-        api.meter(configurationId: configurationIdArg, x: xArg, y: yArg) { result in
+        let focusOnlyArg = args[3] as! Bool
+        api.meter(configurationId: configurationIdArg, x: xArg, y: yArg, focusOnly: focusOnlyArg) { result in
           switch result {
           case .success(let res):
             reply(wrapResult(res))
@@ -733,7 +734,8 @@ class CameraHostApiSetup {
         let configurationIdArg = args[0] as! String
         let secondsArg: Double? = nilOrValue(args[1])
         let isoArg: Double? = nilOrValue(args[2])
-        api.setManualExposure(configurationId: configurationIdArg, seconds: secondsArg, iso: isoArg) { result in
+        let resetFocusArg = args[3] as! Bool
+        api.setManualExposure(configurationId: configurationIdArg, seconds: secondsArg, iso: isoArg, resetFocus: resetFocusArg) { result in
           switch result {
           case .success(let res):
             reply(wrapResult(res))

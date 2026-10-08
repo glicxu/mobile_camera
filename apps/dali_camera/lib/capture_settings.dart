@@ -1,111 +1,16 @@
 import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:flutter/material.dart';
 import 'camera_controller.dart';
-import 'dart:math' as math;
-
-class ManualCameraTools extends StatelessWidget {
-  const ManualCameraTools({super.key, required this.camera});
-  final CameraController camera;
-  @override
-  Widget build(BuildContext context) {
-    final state = camera.snapshot;
-    if (state?.minimumISO == null || state?.minimumShutter == null) {
-      return const SizedBox.shrink();
-    }
-    final seconds = (state!.currentShutter ?? 1 / 125).clamp(
-      state.minimumShutter!,
-      state.maximumShutter!,
-    );
-    final iso = (state.currentISO ?? 100).clamp(
-      state.minimumISO!,
-      state.maximumISO!,
-    );
-    final fixed = state.manualExposure == true;
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          const Text('Focus and Exposure'),
-          const Text('Tap the preview to choose a focus point.'),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Auto exposure'),
-            value: !fixed,
-            onChanged: camera.controlBusy
-                ? null
-                : (auto) => auto
-                      ? camera.returnAuto(stayInManual: true)
-                      : camera.manual(seconds, iso),
-          ),
-          Text(
-            'Tv ${seconds < 1 ? '1/${(1 / seconds).round()}' : seconds.toStringAsFixed(1)}s · ISO ${iso.round()}',
-          ),
-          if (state.currentAperture != null)
-            Text(
-              'Av f/${state.currentAperture!.toStringAsFixed(1)} · Fixed aperture',
-            ),
-          if (state.exposureOffset != null)
-            Text(
-              'Exposure meter: ${state.exposureOffset! >= 0 ? '+' : ''}${state.exposureOffset!.toStringAsFixed(1)} EV',
-            ),
-          if (fixed) ...[
-            SwitchListTile(
-              title: const Text('Link ISO to shutter'),
-              subtitle: const Text(
-                'Keep the exposure level as shutter time changes.',
-              ),
-              value: camera.linkedISO,
-              onChanged: camera.controlBusy ? null : camera.setLinkedISO,
-            ),
-            const Text('Shutter time'),
-            Slider(
-              min: math.log(state.minimumShutter!),
-              max: math.log(state.maximumShutter!),
-              value: math.log(seconds),
-              onChanged: camera.controlBusy
-                  ? null
-                  : (value) => camera.changeShutter(math.exp(value)),
-            ),
-            const Text('ISO'),
-            Slider(
-              min: state.minimumISO!,
-              max: state.maximumISO!,
-              value: iso,
-              onChanged: camera.controlBusy
-                  ? null
-                  : (value) => camera.changeISO(value),
-            ),
-            if (camera.linkedISO) ...[
-              Text(
-                'Linked exposure adjustment: ${camera.linkedEV.toStringAsFixed(1)} EV',
-              ),
-              Slider(
-                min: -2,
-                max: 2,
-                divisions: 40,
-                value: camera.linkedEV,
-                onChanged: camera.controlBusy ? null : camera.changeLinkedEV,
-              ),
-            ],
-          ],
-          TextButton(
-            onPressed: camera.controlBusy ? null : camera.returnAuto,
-            child: const Text('Return to Auto'),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class ShutterSettings extends StatelessWidget {
   const ShutterSettings({super.key, required this.camera});
   final CameraController camera;
   @override
   Widget build(BuildContext context) => ExpansionTile(
-    title: const Text('Shutter controls'),
+    key: const Key('shutterControlsGroup'),
+    title: const Text('Shutter Controls'),
     children: [
-      const Text('Timer'),
+      const Text('Photo timer'),
       Wrap(
         spacing: 8,
         children: [0, 3, 5, 10]
@@ -121,8 +26,36 @@ class ShutterSettings extends StatelessWidget {
             )
             .toList(),
       ),
+      SwitchListTile(
+        title: const Text('Voice shutter'),
+        value: camera.voicePreferred,
+        subtitle: Text(camera.voiceStatus),
+        onChanged: camera.busy ? null : camera.setVoice,
+      ),
+      if (camera.voicePreferred)
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: TextFormField(
+            initialValue: camera.voicePhrase,
+            maxLength: 120,
+            decoration: const InputDecoration(
+              labelText: 'Your shutter word or phrase',
+              hintText:
+                  'Cheese, Take photo, Take a picture, Capture photo, Snap a photo',
+            ),
+            onChanged: (text) {
+              camera.voicePhrase = text;
+              camera.persistSettings();
+            },
+          ),
+        ),
+      if (camera.voiceStatus.toLowerCase().contains('denied'))
+        TextButton(
+          onPressed: camera.host.openSettings,
+          child: const Text('Open Settings'),
+        ),
       const SizedBox(height: 12),
-      const Text('Hold shutter'),
+      const Text('Long-press shutter'),
       Wrap(
         spacing: 8,
         children: ['burst', 'timer', 'disabled']
@@ -150,21 +83,6 @@ class ShutterSettings extends StatelessWidget {
           'Burst takes up to 25 photos, saving each original before the next. Hold Timer uses 3s if the timer is Off.',
         ),
       ),
-      Padding(
-        padding: const EdgeInsets.all(12),
-        child: TextFormField(
-          initialValue: camera.voicePhrase,
-          maxLength: 120,
-          decoration: const InputDecoration(
-            labelText: 'Custom voice phrase',
-            hintText: 'Cheese, Take photo, Capture photo, Snap a photo',
-          ),
-          onChanged: (text) {
-            camera.voicePhrase = text;
-            camera.persistSettings();
-          },
-        ),
-      ),
     ],
   );
 }
@@ -182,74 +100,105 @@ class CaptureStyleControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ExpansionTile(
     initiallyExpanded: initiallyExpanded,
-    title: const Text('Filters and watermark'),
+    key: const Key('filterControlsGroup'),
+    title: const Text('Filters'),
     subtitle: const Text(
       'Creates a separate review copy. Original stays unchanged.',
     ),
     children: [
+      const Padding(
+        padding: EdgeInsets.all(12),
+        child: Text(
+          'Auto chooses for the scene, Custom lets you select and fine-tune a preset, and Off applies nothing.',
+        ),
+      ),
       Wrap(
         spacing: 8,
-        runSpacing: 8,
         children: [
-          for (final name in [
-            'off',
-            'auto',
-            ...(camera.catalog.data['filters'] as Map).keys.cast<String>(),
-            'custom',
-          ])
+          for (final mode in ['auto', 'custom', 'off'])
             ChoiceChip(
-              label: Text(
-                name == 'off'
-                    ? 'Off'
-                    : name == 'auto'
-                    ? 'Auto'
-                    : name == 'custom'
-                    ? 'Custom'
-                    : camera.catalog.data['filters'][name]['title'] as String,
-              ),
-              selected: camera.filter == name,
+              label: Text(mode[0].toUpperCase() + mode.substring(1)),
+              selected: mode == 'custom'
+                  ? camera.filter != 'auto' && camera.filter != 'off'
+                  : camera.filter == mode,
               onSelected: camera.busy
                   ? null
                   : (_) {
-                      camera.filter = name;
+                      camera.useFilterMode(mode);
                       camera.persistSettings();
                     },
             ),
         ],
       ),
-      if (camera.filter == 'custom')
-        for (final field in PhotoStyle.fields)
-          Column(
-            children: [
-              Text('$field: ${camera.style.value(field)}'),
-              Slider(
-                value: camera.style.value(field).toDouble(),
-                min: ['exposure', 'warmth', 'contrast'].contains(field)
-                    ? -5
-                    : 0,
-                max: 5,
-                divisions: ['exposure', 'warmth', 'contrast'].contains(field)
-                    ? 10
-                    : 5,
-                onChanged: camera.busy
-                    ? null
-                    : (value) {
-                        camera.customStyle[field] = value.round();
-                        camera.persistSettings();
-                      },
+      if (camera.filter != 'auto' && camera.filter != 'off') ...[
+        DropdownButtonFormField<String>(
+          key: ValueKey('filterPreset-${camera.filter}'),
+          initialValue: camera.filter,
+          decoration: const InputDecoration(labelText: 'Filter preset'),
+          isExpanded: true,
+          items: [
+            for (final name in [
+              ...(camera.catalog.data['filters'] as Map).keys.cast<String>(),
+              'custom',
+            ])
+              DropdownMenuItem(
+                value: name,
+                child: Text(
+                  name == 'custom'
+                      ? 'Custom'
+                      : camera.catalog.data['filters'][name]['title'] as String,
+                ),
               ),
-            ],
-          ),
-      SwitchListTile(
-        title: const Text('Dali watermark'),
-        value: camera.watermark,
-        onChanged: camera.busy
-            ? null
-            : (value) {
-                camera.watermark = value;
-                camera.persistSettings();
-              },
-      ),
+          ],
+          onChanged: camera.busy
+              ? null
+              : (name) {
+                  if (name != null) {
+                    camera.filter = name;
+                    camera.persistSettings();
+                  }
+                },
+        ),
+        ExpansionTile(
+          title: const Text('Individual settings'),
+          children: [
+            const Text(
+              'Moving any slider copies the current preset into Custom, then changes that individual setting.',
+            ),
+            for (final field in PhotoStyle.fields)
+              Column(
+                children: [
+                  Text(
+                    '${field == "blueSky" ? "Blue sky" : field[0].toUpperCase() + field.substring(1)}: ${camera.style.value(field)}',
+                  ),
+                  Slider(
+                    key: Key('photoFilter$field'),
+                    value: camera.style.value(field).toDouble(),
+                    min: ['exposure', 'warmth', 'contrast'].contains(field)
+                        ? -5
+                        : 0,
+                    max: 5,
+                    divisions:
+                        ['exposure', 'warmth', 'contrast'].contains(field)
+                        ? 10
+                        : 5,
+                    onChanged: camera.busy
+                        ? null
+                        : (value) {
+                            camera.customStyle = {
+                              for (final name in PhotoStyle.fields)
+                                name: camera.style.value(name),
+                            };
+                            camera.customStyle[field] = value.round();
+                            camera.filter = 'custom';
+                            camera.persistSettings();
+                          },
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ],
       if (review)
         FilledButton.tonal(
           onPressed: camera.busy ? null : camera.applyStyle,
@@ -263,4 +212,96 @@ class CaptureStyleControls extends StatelessWidget {
       const SizedBox(height: 12),
     ],
   );
+}
+
+class FocusExposureSettings extends StatelessWidget {
+  const FocusExposureSettings({
+    super.key,
+    required this.camera,
+    required this.onManual,
+  });
+  final CameraController camera;
+  final VoidCallback onManual;
+  @override
+  Widget build(BuildContext context) {
+    final state = camera.snapshot;
+    return ExpansionTile(
+      key: const Key('focusExposureControlsGroup'),
+      title: const Text('Focus and Exposure'),
+      children: [
+        const Padding(
+          padding: EdgeInsets.all(12),
+          child: Text(
+            'Auto keeps focus and exposure under camera control. Manual closes this panel and places focus, depth, and exposure controls directly over the live preview.',
+          ),
+        ),
+        Wrap(
+          spacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('Auto'),
+              selected: !camera.manualWorkspace,
+              onSelected: camera.controlBusy
+                  ? null
+                  : (_) => camera.returnAuto(),
+            ),
+            ChoiceChip(
+              label: const Text('Manual'),
+              selected: camera.manualWorkspace,
+              onSelected: camera.controlBusy || state?.ready != true
+                  ? null
+                  : (_) => onManual(),
+            ),
+          ],
+        ),
+        if (state?.ready == true) ...[
+          ListTile(
+            title: const Text('Camera'),
+            subtitle: Text(state!.front ? 'Front camera' : 'Rear camera'),
+          ),
+          if (state.currentShutter != null)
+            ListTile(
+              title: const Text('Tv'),
+              subtitle: Text(
+                state.currentShutter! < 1
+                    ? '1/${(1 / state.currentShutter!).round()}s'
+                    : '${state.currentShutter!.toStringAsFixed(1)}s',
+              ),
+            ),
+          if (state.currentAperture != null)
+            ListTile(
+              title: const Text('Av'),
+              subtitle: Text('f/${state.currentAperture!.toStringAsFixed(1)}'),
+            ),
+          if (state.currentISO != null)
+            ListTile(
+              title: const Text('ISO'),
+              subtitle: Text('${state.currentISO!.round()}'),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              camera.manualWorkspace
+                  ? 'Manual controls are active on the preview'
+                  : 'Continuous auto focus and exposure',
+              style: TextStyle(
+                color: camera.manualWorkspace ? Colors.teal : Colors.green,
+              ),
+            ),
+          ),
+          if (camera.manualWorkspace)
+            TextButton(
+              onPressed: camera.controlBusy ? null : camera.returnAuto,
+              child: const Text('Return Focus and Exposure to Auto'),
+            ),
+        ] else
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              'Camera controls are unavailable. Start the camera to use them.',
+            ),
+          ),
+      ],
+    );
+  }
 }

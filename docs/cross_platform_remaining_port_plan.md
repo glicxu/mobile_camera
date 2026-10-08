@@ -1,24 +1,30 @@
 # Remaining iOS-to-Flutter Porting Plan
 
 Date: October 8, 2026
-Status: Baseline feature implementation connected; final automated validation and joint physical acceptance in progress.
+Status: Comprehensive source/action audit and software corrections in progress. Parity is not complete.
 Branch: `codex/cross-platform-20261007`
 Reference: native iOS app at `d53a977`. Starting Flutter source: `be9c765`.
 
-## Current parity candidate ? October 8, 2026
+## Comprehensive implementation run ? October 8, 2026
 
-The baseline feature implementation is connected in Flutter and both native services. Joint physical acceptance is still required. The earlier checkpoints below are historical; this table supersedes their remaining-software lists. No pixel-identical Android rendering or physical iPhone acceptance is claimed.
+The user found that the Manual workspace still did not match iOS. The previous aggregate ?connected? status was insufficient: working services and passing tests did not establish complete screen/action parity. This run follows the complete P0?P8 plan below, using reachable native views and actions as the reference. Software omissions stay open until implemented and verified; physical comparison is a separate acceptance step.
+
+Current corrections: compact Focus/Depth/Exposure preview rail and mutually exclusive editors; focus-only Manual tapping and separate exposure-Auto/full-Auto resets; session-only depth; native Camera controls sections including Beautifier; named filter fine-tuning; automatic review treatment updates and Reset; review navigation/action hierarchy; native preview coaching light/direction cues, countdown/burst overlays and watermark; direct reference selection with separate examples and adjacent posture navigation; tutorial illustrations. Analyzer and 21 Flutter tests pass at the initial correction checkpoint. Device/build validation follows after the library work.
+
+Additional audit gap: the lower-left native button browses all accessible system Photos with lazy loading. Flutter only opened a private latest capture/picker. Library listing, lazy loading, permission/limited-access fallback and wrap navigation are being ported next. Do not label P1/P7 complete while that destination differs.
+
+The remaining physical iPhone/screenshots, cross-engine rendering tolerances, permission/audio/accessibility scenarios, second Android vendor and ten-minute release performance sessions remain P8 acceptance work. Source helpers that are never called (`proExposureControls`, Auto-assistance card/lock bindings) do not establish an implemented reference screen; retain supported service capabilities without inventing reference UI.
 
 | Phase | Implementation status | Verification / remaining acceptance |
 | --- | --- | --- |
 | P0 | Reference behavior and defaults inventoried | Updated [UI inventory](cross_platform_ui_inventory.md); matched physical screenshots pending |
-| P1 | Native header (Manual/coaching/App Settings/switch), seven-step tutorial, landscape sidebar, three selection controls, contextual packages, montages, details, navigation and large-text layouts implemented | Widget navigation checks; physical typography/spacing comparison pending |
+| P1 | **In progress:** native header (Manual/coaching/App Settings/switch), seven-step tutorial, landscape sidebar, three selection controls, contextual packages, montages, details, navigation and large-text layouts implemented | Widget navigation checks; physical typography/spacing comparison pending |
 | P2 | Eight situations, stable Auto classification, issue selection and creative guidance implemented | Nine baseline, 24 transition and 150 rich native coaching fixtures pass |
 | P3 | Face/pose/group geometry, luminance, saliency and optical horizon connected | 16 native pose fixtures pass; Android uses multi-face group coverage and single-body pose. Matched real-scene calibration pending |
 | P4 | Separate Filter/Beautifier modes, seven filter controls, Enhance/Portrait/Landscape, strengths/presets/options and capture sequence implemented | Immutable original/full-resolution bridge checks; Android cross-engine visual tolerances pending |
 | P5 | Reference subject-region depth preview and saved feathered blur implemented | Not semantic segmentation; front/rear depth edges and low-tier performance need joint testing |
-| P6 | Linked ISO, actual aperture, metering/locks/zoom, settings and persistent voice preference implemented | Capability-gated controls; Android live exposure-offset meter unavailable. Native Tv/Av requires the reference's disabled iOS 27 compile gate and is outside the Xcode 16.4 baseline |
-| P7 | Before/After/Split with zoom, analysis, reframe/level and polish, slideshow, imports, exports and cleanup implemented | Photos max 20; folder max 50 intentionally retained. Treatment settings are global in the reference, not persisted per photo. Save/share/recovery checks included |
+| P6 | **In validation:** native Manual rail/editors and linked ISO, actual aperture, metering/locks/zoom, settings and persistent voice preference implemented | Capability-gated controls; Android live exposure-offset meter unavailable. Native Tv/Av requires the reference's disabled iOS 27 compile gate and is outside the Xcode 16.4 baseline |
+| P7 | **In progress:** system Photos browser plus Before/After/Split with zoom, analysis, reframe/level and polish, slideshow, imports, exports and cleanup implemented | Photos max 20; folder max 50 intentionally retained. Treatment settings are global in the reference, not persisted per photo. Save/share/recovery checks included |
 | P8 | App Settings/About/version/native placeholder sections, Help, semantics, automated checks and test instructions updated | Physical iPhone, matched visual comparison, accessibility/audio/permission cases and longer thermal sessions remain acceptance work |
 
 Header correction: the user identified an omitted native header flow in the earlier parity candidate. The implementation now includes the coaching toggle and App Settings/tutorial, keeps camera controls beside the shutter, and guards shutter/voice capture while these screens are presented. Local analyzer and 19 Flutter tests pass, including large-text portrait/landscape navigation. Tablet (107 seconds) and Galaxy (44 seconds) full camera flows pass with the corrected header. Both normal apps are updated without clearing data, with installed hashes verified. Shared checks and Android/unsigned iOS builds pass; clean-boot iOS native/bridge validation is in progress.
@@ -92,7 +98,7 @@ Android filters approximate the native render using a color matrix and spatial p
 
 ## Ordered implementation phases
 
-The current table above records implementation completion. The original checklists below combine implementation with acceptance: an unchecked item remains open where matched physical evidence is still required; it does not override the current implemented-feature inventory.
+The current table above records implementation progress. The original checklists below combine implementation with acceptance: an unchecked item remains open where matched physical evidence is still required; it does not override an explicitly tracked software omission.
 
 ### Full-parity implementation run (October 8, 2026)
 

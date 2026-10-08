@@ -301,8 +301,8 @@ interface CameraHostApi {
   fun releasePhoto(photo: PhotoHandle)
   fun reconcilePrivatePhotos(retainedPaths: List<String>, callback: (Result<Unit>) -> Unit)
   fun setZoom(configurationId: String, zoom: Double, callback: (Result<CameraSnapshot>) -> Unit)
-  fun meter(configurationId: String, x: Double, y: Double, callback: (Result<CameraSnapshot>) -> Unit)
-  fun setManualExposure(configurationId: String, seconds: Double?, iso: Double?, callback: (Result<CameraSnapshot>) -> Unit)
+  fun meter(configurationId: String, x: Double, y: Double, focusOnly: Boolean, callback: (Result<CameraSnapshot>) -> Unit)
+  fun setManualExposure(configurationId: String, seconds: Double?, iso: Double?, resetFocus: Boolean, callback: (Result<CameraSnapshot>) -> Unit)
   fun openSettings()
   fun setVoiceEnabled(enabled: Boolean, callback: (Result<Boolean>) -> Unit)
   fun setDepthPreview(configurationId: String, level: Long, subjectRect: String?)
@@ -696,7 +696,8 @@ interface CameraHostApi {
             val configurationIdArg = args[0] as String
             val xArg = args[1] as Double
             val yArg = args[2] as Double
-            api.meter(configurationIdArg, xArg, yArg) { result: Result<CameraSnapshot> ->
+            val focusOnlyArg = args[3] as Boolean
+            api.meter(configurationIdArg, xArg, yArg, focusOnlyArg) { result: Result<CameraSnapshot> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))
@@ -718,7 +719,8 @@ interface CameraHostApi {
             val configurationIdArg = args[0] as String
             val secondsArg = args[1] as Double?
             val isoArg = args[2] as Double?
-            api.setManualExposure(configurationIdArg, secondsArg, isoArg) { result: Result<CameraSnapshot> ->
+            val resetFocusArg = args[3] as Boolean
+            api.setManualExposure(configurationIdArg, secondsArg, isoArg, resetFocusArg) { result: Result<CameraSnapshot> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))

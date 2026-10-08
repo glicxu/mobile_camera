@@ -75,11 +75,12 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   }
 
   Map<String, int> customStyle = {};
-  bool watermark = false;
+  bool watermark = true;
   bool styled = false;
   String beautifier = 'off';
   String customBeautifier = 'portrait';
   int depthLevel = 0;
+  Timer? _focusIndicator;
   String selectedTreatment = 'original';
   Map<String, dynamic>? photoAnalysis;
   String? analysisError;
@@ -101,6 +102,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     'landscape': {'strength': 0, 'flags': <String, bool>{}},
   };
   String reviewTreatment = 'enhance';
+  Timer? _reviewUpdate;
+  int _reviewRevision = 0;
   PosePackageId coachingPackage = PosePackageId.neutral;
   String get captureTreatment => beautifier == 'off'
       ? 'original'
@@ -176,6 +179,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     notifyListeners();
   }
 
+  int get effectiveDepth => manualWorkspace ? depthLevel : 0;
   bool linkedISO = false;
   double linkedExposureProduct = 100 / 125;
   double linkedEV = 0;
@@ -303,7 +307,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       if ((style.active ||
               watermark ||
               beautifier != 'off' ||
-              depthLevel > 0) &&
+              effectiveDepth > 0) &&
           original?.unsaved != true) {
         try {
           selected = await _renderStyle(original!);
@@ -605,7 +609,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       markPath = file.path;
     }
     final selectedStyle = style;
-    if (beautifier != 'off' || depthLevel > 0) {
+    if (beautifier != 'off' || effectiveDepth > 0) {
       final settings = captureTreatments[captureTreatment];
       return host.renderEffects(
         source,
@@ -617,7 +621,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           'filter': PhotoStyle.fields
               .map((field) => selectedStyle.value(field).toDouble())
               .toList(),
-          'depth': depthLevel,
+          'depth': effectiveDepth,
           if (focusX != null && focusY != null)
             'focus': {'x': focusX, 'y': focusY},
           'watermarkPath': ?markPath,
@@ -679,14 +683,40 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     notifyListeners();
   }
 
+  void requestReviewTreatment(String treatment) {
+    reviewTreatment = treatment;
+    _reviewRevision++;
+    _reviewUpdate?.cancel();
+    final sourceId = original?.id;
+    final revision = _reviewRevision;
+    void update() {
+      if (_disposed ||
+          !reviewing ||
+          original?.id != sourceId ||
+          revision != _reviewRevision) {
+        return;
+      }
+      if (busy) {
+        _reviewUpdate = Timer(const Duration(milliseconds: 200), update);
+        return;
+      }
+      unawaited(applyTreatment(treatment));
+    }
+
+    _reviewUpdate = Timer(const Duration(milliseconds: 200), update);
+    unawaited(persistSettings());
+  }
+
   Future<void> applyTreatment(String treatment) async {
     if (busy || original == null) return;
+    final source = original!;
+    final revision = _reviewRevision;
     busy = true;
     notifyListeners();
     try {
       final settings = reviewTreatments[treatment];
       final result = await host.renderEffects(
-        original!,
+        source,
         jsonEncode({
           'version': 1,
           'treatment': treatment,
@@ -694,6 +724,12 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           'flags': settings?['flags'] ?? {},
         }),
       );
+      if (_disposed ||
+          original?.id != source.id ||
+          revision != _reviewRevision) {
+        await _release(result);
+        return;
+      }
       await _releaseVariant();
       selected = result;
       selectedTreatment = treatment;
@@ -788,7 +824,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           ].contains(savedCustomFilter)) {
         customFilter = savedCustomFilter;
       }
-      watermark = prefs.getBool('watermark') ?? false;
+      watermark = true; // Native free tier always includes the signature.
       final savedBeauty = prefs.getString('beautifier');
       beautifier = ['auto', 'custom', 'off'].contains(savedBeauty)
           ? savedBeauty!
@@ -807,7 +843,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       if (!reviewTreatments.containsKey(reviewTreatment)) {
         reviewTreatment = 'enhance';
       }
-      depthLevel = (prefs.getInt('depthLevel') ?? 0).clamp(0, 5);
+      depthLevel = 0; // Native depth is a session setting.
       for (final entry in {
         'captureTreatments': captureTreatments,
         'reviewTreatments': reviewTreatments,
@@ -930,6 +966,18 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     notifyListeners();
   }
 
+  void adjacentReference(int offset) {
+    final item = guidance.entry;
+    if (item == null) return;
+    final entries = catalog.entries
+        .where(
+          (entry) => entry.kind == item.kind && entry.package == item.package,
+        )
+        .toList();
+    final index = entries.indexWhere((entry) => entry.id == item.id);
+    choose(entries[(index + offset + entries.length) % entries.length]);
+  }
+
   void next() {
     guidance.advance();
     engine.reset();
@@ -968,11 +1016,24 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     }
     focusX = x.clamp(0, 1);
     focusY = y.clamp(0, 1);
-    await _control((current) => host.meter(current.configurationId, x, y));
+    _focusIndicator?.cancel();
+    if (!manualWorkspace) {
+      _focusIndicator = Timer(const Duration(seconds: 2), () {
+        if (!_disposed && !manualWorkspace) {
+          focusX = null;
+          focusY = null;
+          notifyListeners();
+        }
+      });
+    }
+    await _control(
+      (current) => host.meter(current.configurationId, x, y, manualWorkspace),
+    );
   }
 
   Future<void> manual(double seconds, double iso) => _control(
-    (current) => host.setManualExposure(current.configurationId, seconds, iso),
+    (current) =>
+        host.setManualExposure(current.configurationId, seconds, iso, false),
   );
   void setLinkedISO(bool value) {
     linkedISO = value;
@@ -982,14 +1043,29 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     notifyListeners();
   }
 
-  Future<void> changeShutter(double seconds) => manual(
-    seconds,
-    linkedISO
-        ? (linkedExposureProduct / seconds * math.pow(2, linkedEV))
-              .clamp(snapshot!.minimumISO!, snapshot!.maximumISO!)
-              .toDouble()
-        : snapshot?.currentISO ?? 100,
-  );
+  Future<void> enableManualExposure() {
+    final seconds = snapshot?.currentShutter ?? 1 / 125;
+    final iso = snapshot?.currentISO ?? 100;
+    linkedExposureProduct = seconds * iso;
+    linkedEV = 0;
+    return manual(seconds, iso);
+  }
+
+  Future<void> changeShutter(double seconds) {
+    if (!linkedISO) {
+      linkedEV = 0;
+      linkedExposureProduct = seconds * (snapshot?.currentISO ?? 100);
+    }
+    return manual(
+      seconds,
+      linkedISO
+          ? (linkedExposureProduct / seconds * math.pow(2, linkedEV))
+                .clamp(snapshot!.minimumISO!, snapshot!.maximumISO!)
+                .toDouble()
+          : snapshot?.currentISO ?? 100,
+    );
+  }
+
   Future<void> changeISO(double iso) {
     linkedExposureProduct = iso * (snapshot?.currentShutter ?? 1 / 125);
     linkedEV = 0;
@@ -998,20 +1074,45 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   Future<void> changeLinkedEV(double ev) {
     linkedEV = ev;
-    return changeShutter(snapshot?.currentShutter ?? 1 / 125);
+    final seconds = snapshot?.currentShutter ?? 1 / 125;
+    return manual(
+      seconds,
+      (linkedExposureProduct / seconds * math.pow(2, ev))
+          .clamp(snapshot!.minimumISO!, snapshot!.maximumISO!)
+          .toDouble(),
+    );
+  }
+
+  Future<void> enterManual() async {
+    await returnAuto(stayInManual: true);
+    await updateDepthPreview();
+  }
+
+  Future<void> setDepth(int value) async {
+    depthLevel = value.clamp(0, 5);
+    notifyListeners();
+    await updateDepthPreview();
   }
 
   Future<void> returnAuto({bool stayInManual = false}) async {
     await _control(
-      (current) => host.setManualExposure(current.configurationId, null, null),
+      (current) => host.setManualExposure(
+        current.configurationId,
+        null,
+        null,
+        !stayInManual,
+      ),
     );
     if (snapshot?.manualExposure != true) {
       linkedISO = false;
       linkedEV = 0;
       manualWorkspace = stayInManual;
-      focusX = null;
-      focusY = null;
+      if (!stayInManual) {
+        focusX = null;
+        focusY = null;
+      }
     }
+    await updateDepthPreview();
     notifyListeners();
   }
 
@@ -1225,7 +1326,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       }
       await host.setDepthPreview(
         current.configurationId,
-        depthLevel,
+        effectiveDepth,
         rect == null ? null : jsonEncode(rect),
       );
     } catch (_) {
@@ -1243,6 +1344,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   @override
   void dispose() {
     cancelSequence();
+    _reviewUpdate?.cancel();
+    _focusIndicator?.cancel();
     _disposed = true;
     unawaited(_releaseVariant().then((_) => _clearImportedPhotos()));
     CameraEvents.setUp(null);

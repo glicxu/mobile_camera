@@ -133,12 +133,13 @@ abstract class CameraHostApi {
   @async
   CameraSnapshot setZoom(String configurationId, double zoom);
   @async
-  CameraSnapshot meter(String configurationId, double x, double y);
+  CameraSnapshot meter(String configurationId, double x, double y, bool focusOnly);
   @async
   CameraSnapshot setManualExposure(
     String configurationId,
     double? seconds,
     double? iso,
+    bool resetFocus,
   );
   void openSettings();
   @async

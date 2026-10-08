@@ -805,14 +805,14 @@ class CameraHostApi {
     }
   }
 
-  Future<CameraSnapshot> meter(String configurationId, double x, double y) async {
+  Future<CameraSnapshot> meter(String configurationId, double x, double y, bool focusOnly) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.meter$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[configurationId, x, y]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[configurationId, x, y, focusOnly]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
@@ -832,14 +832,14 @@ class CameraHostApi {
     }
   }
 
-  Future<CameraSnapshot> setManualExposure(String configurationId, double? seconds, double? iso) async {
+  Future<CameraSnapshot> setManualExposure(String configurationId, double? seconds, double? iso, bool resetFocus) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setManualExposure$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[configurationId, seconds, iso]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[configurationId, seconds, iso, resetFocus]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);

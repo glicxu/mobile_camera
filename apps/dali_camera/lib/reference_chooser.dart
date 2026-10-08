@@ -7,10 +7,12 @@ class ReferenceChooser extends StatefulWidget {
     required this.catalog,
     required this.kind,
     required this.selected,
+    required this.onExample,
   });
   final SharedCatalog catalog;
   final String kind;
   final CatalogEntry? selected;
+  final void Function(CatalogEntry) onExample;
 
   @override
   State<ReferenceChooser> createState() => _ReferenceChooserState();
@@ -48,10 +50,39 @@ class _ReferenceChooserState extends State<ReferenceChooser> {
             icon: const Icon(Icons.close),
           ),
         ),
-        TextButton(
-          onPressed: () => Navigator.pop(context, 'natural'),
-          child: const Text('Natural'),
+        ListTile(
+          leading: const Icon(Icons.eco, color: Colors.teal),
+          title: const Text('Natural'),
+          subtitle: Text(
+            widget.kind == 'landscape'
+                ? 'No composition recipe; horizon guidance stays on'
+                : widget.kind == 'food'
+                ? 'No food recipe; framing guidance stays on'
+                : 'No posture selected; live framing guidance stays on',
+          ),
+          trailing: widget.selected == null
+              ? const Icon(Icons.check_circle, color: Colors.teal)
+              : null,
+          onTap: () => Navigator.pop(context, 'natural'),
         ),
+        if (package == null && widget.kind != 'food')
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              widget.kind == 'pose'
+                  ? 'Choose a package'
+                  : 'Choose a landscape package',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+        if (package != null)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              widget.catalog.packageDescription(widget.kind, package!),
+            ),
+          ),
+
         Expanded(
           child: showGrid
               ? LayoutBuilder(
@@ -89,7 +120,25 @@ class _ReferenceChooserState extends State<ReferenceChooser> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            Text(entry.title),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(entry.title),
+                                                ),
+                                                IconButton(
+                                                  key: Key(
+                                                    'example_${entry.id}',
+                                                  ),
+                                                  tooltip:
+                                                      'Photo example of ${entry.title}',
+                                                  onPressed: () =>
+                                                      widget.onExample(entry),
+                                                  icon: const Icon(
+                                                    Icons.info_outline,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                             Text(
                                               widget.catalog.angleTitle(entry),
                                               style: Theme.of(
@@ -127,7 +176,7 @@ class _ReferenceChooserState extends State<ReferenceChooser> {
                         child: ListTile(
                           key: Key('package_${group.key}'),
                           leading: SizedBox(
-                            width: 92,
+                            width: 126,
                             child: Row(
                               children: [
                                 for (final entry
@@ -144,7 +193,7 @@ class _ReferenceChooserState extends State<ReferenceChooser> {
                                       child: Image.asset(
                                         entry.asset,
                                         cacheWidth: 128,
-                                        height: 72,
+                                        height: 86,
                                         fit: BoxFit.cover,
                                       ),
                                     ),
