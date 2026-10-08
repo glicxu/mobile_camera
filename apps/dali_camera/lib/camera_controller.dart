@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
@@ -65,21 +66,33 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   bool watermark = false;
   bool styled = false;
   final List<PhotoHandle> history = [];
+  final List<PhotoHandle> importedPhotos = [];
+  bool get reviewingImport =>
+      importedPhotos.any((photo) => photo.id == original?.id);
+  List<PhotoHandle> get reviewPhotos =>
+      reviewingImport ? importedPhotos : history;
   int get reviewIndex =>
-      history.indexWhere((photo) => photo.id == original?.id);
+      reviewPhotos.indexWhere((photo) => photo.id == original?.id);
   bool get canPreviousPhoto =>
-      !busy && original?.unsaved != true && reviewIndex > 0;
+      !busy &&
+      original?.unsaved != true &&
+      (reviewIndex > 0 || (reviewingImport && importedPhotos.length > 1));
   bool get canNextPhoto =>
       !busy &&
       original?.unsaved != true &&
       reviewIndex >= 0 &&
-      reviewIndex < history.length - 1;
+      (reviewIndex < reviewPhotos.length - 1 ||
+          (reviewingImport && importedPhotos.length > 1));
   Future<void> previousPhoto() async {
-    if (canPreviousPhoto) await openHistory(history[reviewIndex - 1]);
+    if (canPreviousPhoto) {
+      await openHistory(reviewPhotos[(reviewIndex - 1) % reviewPhotos.length]);
+    }
   }
 
   Future<void> nextPhoto() async {
-    if (canNextPhoto) await openHistory(history[reviewIndex + 1]);
+    if (canNextPhoto) {
+      await openHistory(reviewPhotos[(reviewIndex + 1) % reviewPhotos.length]);
+    }
   }
 
   PhotoStyle get style => filter == 'custom'
@@ -274,30 +287,40 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     }
   }
 
-  Future<void> pick() async {
+  Future<void> pick({bool folder = false}) async {
     if (busy) return;
     cancelSequence();
     if (original?.unsaved == true) {
       message =
-          'Save or discard the retained original before choosing another photo.';
+          'Save or discard the retained original before choosing other photos.';
       notifyListeners();
       return;
     }
     busy = true;
     notifyListeners();
     try {
-      final picked = await host.pickPhoto();
-      if (picked != null) {
+      final result = await host.pickPhotos(folder);
+      if (_disposed) {
+        for (final photo in result.photos) {
+          await _release(photo);
+        }
+        return;
+      }
+      if (result.photos.isNotEmpty) {
         await _releaseVariant();
-        original = picked;
-        selected = picked;
+        await _clearImportedPhotos();
+        importedPhotos.addAll(result.photos);
+        original = importedPhotos.first;
+        selected = original;
         styled = false;
         reviewing = true;
-        await host.stop();
-        snapshot = null;
+        await pause();
+        message = result.skipped > 0
+            ? '${result.photos.length} photos opened; ${result.skipped} skipped. Imports are limited to 50 photos.'
+            : '${result.photos.length} ${result.photos.length == 1 ? 'photo' : 'photos'} opened';
       }
     } catch (e) {
-      message = 'Could not open photo: $e';
+      message = 'Could not open photos: $e';
     } finally {
       busy = false;
       notifyListeners();
@@ -314,6 +337,19 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   Future<void> returnToCamera() async {
     if (busy) return;
+    busy = true;
+    notifyListeners();
+    try {
+      if (reviewingImport) {
+        await _releaseVariant();
+        await _clearImportedPhotos();
+        original = history.firstOrNull;
+        selected = original;
+        styled = false;
+      }
+    } finally {
+      busy = false;
+    }
     reviewing = false;
     await start();
     notifyListeners();
@@ -418,6 +454,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       original = photo;
       selected = photo;
       styled = false;
+      if (!reviewingImport) await _clearImportedPhotos();
       reviewing = true;
       await pause();
     } finally {
@@ -480,7 +517,16 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     final photo = selected;
     if (photo != null &&
         photo.id != original?.id &&
-        !history.any((p) => p.id == photo.id)) {
+        !history.any((p) => p.id == photo.id) &&
+        !importedPhotos.any((p) => p.id == photo.id)) {
+      await _release(photo);
+    }
+  }
+
+  Future<void> _clearImportedPhotos() async {
+    final previous = List<PhotoHandle>.of(importedPhotos);
+    importedPhotos.clear();
+    for (final photo in previous) {
       await _release(photo);
     }
   }
@@ -773,6 +819,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   void dispose() {
     cancelSequence();
     _disposed = true;
+    unawaited(_releaseVariant().then((_) => _clearImportedPhotos()));
     CameraEvents.setUp(null);
     super.dispose();
   }

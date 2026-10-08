@@ -15,7 +15,7 @@ Reference: native iOS app at `d53a977`. Starting Flutter source: `be9c765`.
 | P3 | In progress | iOS full-body rectangles, saliency and optical horizon; group geometry and motion tracker; explicit availability. Android multi-person/scenic pipeline and richer face/pose analysis pending |
 | P4 | In progress | Native iOS filter sequence/coefficients through the typed bridge. Android rendering approximation and full Enhance/Beautify remain pending |
 | P5/P6 | Pending | Live depth/beautification and richer exposure/voice/settings parity remain pending |
-| P7 | In progress | Previous/next/swipe review, pending-original guard, failed-render selected-copy preservation. Multi-import, rich treatments/analysis and per-photo settings remain pending |
+| P7 | In progress | Previous/next/swipe review; multiple-photo and folder import up to 50; private byte-preserving copies, isolated selection navigation and cleanup; pending-original guard. Rich treatments/analysis and per-photo settings remain pending |
 | P8 | Pending | Current automated checks cover the first UI increment; full Android/iPhone acceptance is outstanding |
 
 The attached Galaxy S10+ disconnected before device validation of this increment. The Samsung SM-T290 passed the updated camera integration flow in 66 seconds, including package browsing, Food selection, controls, timer/style, review/export, and burst. Its first attempt failed at camera readiness after a permission reset; rerun passed with camera permission granted. No physical iPhone validation is available in this Windows workspace.
@@ -31,6 +31,10 @@ A ninth local Flutter regression check also passes: capture routes the situation
 [CI run 37818899173](https://github.com/glicxu/mobile_camera/actions/runs/37818899173) passed all jobs for production source `16aac8fb710a88f8573f362a8bd676c31432756f`: catalog validation, shared analysis/33 tests, Flutter analysis/eight tests, Android APK build, unsigned iOS device build, 51 native iOS unit tests, iPhone simulator bridge checks, nine native coaching fixtures and 24 native situation-transition fixtures. The ninth Flutter regression test was added and verified locally after this run's source checkpoint. Physical iPhone comparison and Galaxy phone validation remain pending; successful CI does not close the remaining phases.
 
 ## Goal and completion rules
+
+### Follow-up import increment
+
+Multiple-photo and folder selection now use the platform pickers through a typed `PhotoImport` response. Imported files remain separate from captured history. Review navigation wraps within the imported selection; cancellation and provider failure preserve the current selection. Returning to the camera, opening captured history, or replacing an import releases private imported copies and derived files. Source files are copied without JPEG recompression. Folder scanning is bounded to 4,096 entries and 16 nested levels, with up to 50 images imported in filename order. Flutter analysis and all 11 tests pass locally; Android APK compilation passes. New iOS compilation and physical picker checks are pending for this increment.
 
 Make the Flutter Android and iOS apps match the implemented native iOS product in screen structure, navigation, settings, coaching, capture, effects, and review. Start with the visible camera-screen differences reported during Android testing.
 

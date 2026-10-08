@@ -71,6 +71,12 @@ class PhotoHandle {
   String? mimeType;
 }
 
+class PhotoImport {
+  PhotoImport({required this.photos, required this.skipped});
+  List<PhotoHandle> photos;
+  int skipped;
+}
+
 @HostApi()
 abstract class CameraHostApi {
   @async
@@ -86,6 +92,8 @@ abstract class CameraHostApi {
   void share(PhotoHandle photo);
   @async
   PhotoHandle? pickPhoto();
+  @async
+  PhotoImport pickPhotos(bool folder);
   @async
   PhotoHandle render(
     PhotoHandle original,

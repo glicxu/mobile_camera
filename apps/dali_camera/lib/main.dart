@@ -289,7 +289,7 @@ class _CameraScreenState extends State<CameraScreen>
                 onPressed: camera.busy
                     ? null
                     : camera.original == null
-                    ? camera.pick
+                    ? choosePhotos
                     : camera.openLatest,
               ),
               Semantics(
@@ -319,9 +319,9 @@ class _CameraScreenState extends State<CameraScreen>
                 ),
               ),
               IconButton(
-                tooltip: 'Choose photo',
+                tooltip: 'Import photos',
                 icon: const Icon(Icons.add_photo_alternate_outlined),
-                onPressed: camera.busy ? null : camera.pick,
+                onPressed: camera.busy ? null : choosePhotos,
               ),
             ],
           ),
@@ -474,7 +474,7 @@ class _CameraScreenState extends State<CameraScreen>
               icon: const Icon(Icons.collections),
             ),
             TextButton(
-              onPressed: camera.busy ? null : camera.pick,
+              onPressed: camera.busy ? null : choosePhotos,
               child: const Text('Photos'),
             ),
           ],
@@ -493,7 +493,7 @@ class _CameraScreenState extends State<CameraScreen>
                     : null,
                 icon: const Icon(Icons.chevron_left),
               ),
-              Text('${camera.reviewIndex + 1} / ${camera.history.length}'),
+              Text('${camera.reviewIndex + 1} / ${camera.reviewPhotos.length}'),
               IconButton(
                 tooltip: 'Next photo',
                 onPressed: camera.canNextPhoto
@@ -531,7 +531,10 @@ class _CameraScreenState extends State<CameraScreen>
                           body: Center(
                             child: InteractiveViewer(
                               maxScale: 5,
-                              child: Image.file(File(photo.path)),
+                              child: Image.file(
+                                File(photo.path),
+                                cacheWidth: 2400,
+                              ),
                             ),
                           ),
                         ),
@@ -651,6 +654,38 @@ class _CameraScreenState extends State<CameraScreen>
         ),
       ],
     );
+  }
+
+  Future<void> choosePhotos() async {
+    final folder = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Import up to 50 photos for review'),
+            ),
+            ListTile(
+              key: const Key('importPhotos'),
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Select photos'),
+              onTap: () => Navigator.pop(context, false),
+            ),
+            ListTile(
+              key: const Key('importFolder'),
+              leading: const Icon(Icons.folder_open),
+              title: const Text('Open folder'),
+              onTap: () => Navigator.pop(context, true),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (folder == null || !mounted) return;
+    await camera.pick(folder: folder);
+    if (mounted) setState(() => compare = false);
   }
 
   Future<void> chooser() async {

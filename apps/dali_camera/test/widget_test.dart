@@ -12,6 +12,11 @@ class FakeHost extends CameraHostApi {
   int captures = 0;
   PhotoHandle? retained;
   int released = 0;
+  final List<String> releasedIds = [];
+  PhotoImport importResult = PhotoImport(photos: [], skipped: 0);
+  bool failImport = false;
+  int importRequests = 0;
+  bool? importedFolder;
   @override
   Future<CameraSnapshot> start(bool front) async => CameraSnapshot(
     ready: true,
@@ -54,6 +59,15 @@ class FakeHost extends CameraHostApi {
   @override
   Future<void> releasePhoto(PhotoHandle photo) async {
     released++;
+    releasedIds.add(photo.id);
+  }
+
+  @override
+  Future<PhotoImport> pickPhotos(bool folder) async {
+    importRequests++;
+    importedFolder = folder;
+    if (failImport) throw StateError('Provider unavailable');
+    return importResult;
   }
 
   @override
@@ -92,6 +106,58 @@ class FakeHost extends CameraHostApi {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'Imported selection wraps, preserves captures and cleans only copies',
+    () async {
+      final host = FakeHost();
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      await camera.capturePhoto(review: false);
+      final captured = camera.original;
+      final first = PhotoHandle(path: 'one.png', id: 'one', unsaved: false);
+      final second = PhotoHandle(path: 'two.heic', id: 'two', unsaved: false);
+      host.importResult = PhotoImport(photos: [first, second], skipped: 1);
+      await camera.pick(folder: true);
+      expect(host.importedFolder, isTrue);
+      expect(camera.reviewPhotos, [first, second]);
+      expect(camera.history, [captured]);
+      expect(camera.message, contains('1 skipped'));
+      await camera.previousPhoto();
+      expect(camera.original, same(second));
+      await camera.nextPhoto();
+      expect(camera.original, same(first));
+      await camera.variant(crop: true);
+      await camera.nextPhoto();
+      expect(host.releasedIds, ['derived-one']);
+      host.importResult = PhotoImport(photos: [], skipped: 0);
+      await camera.pick();
+      expect(camera.original, same(second));
+      expect(host.releasedIds, ['derived-one']);
+      host.failImport = true;
+      await camera.pick();
+      expect(camera.original, same(second));
+      expect(camera.busy, isFalse);
+      expect(camera.message, contains('Could not open photos'));
+      await camera.returnToCamera();
+      expect(host.releasedIds, ['derived-one', 'one', 'two']);
+      expect(camera.original, same(captured));
+      expect(camera.importedPhotos, isEmpty);
+      expect(camera.canCapture, isTrue);
+      camera.dispose();
+    },
+  );
+  test('Import cannot replace a pending original', () async {
+    final host = FakeHost()..failSave = true;
+    final camera = CameraController(host: host, register: false);
+    await camera.initialize();
+    await camera.capturePhoto();
+    final pending = camera.original;
+    await camera.pick(folder: true);
+    expect(host.importRequests, 0);
+    expect(camera.original, same(pending));
+    expect(camera.original!.unsaved, isTrue);
+    camera.dispose();
+  });
   test(
     'Capture routes situation Auto parameters and retains original on filter failure',
     () async {

@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.*
 import android.provider.MediaStore
 import android.provider.Settings
+import android.provider.DocumentsContract
 import android.speech.*
 import android.util.Size
 import android.view.View
@@ -69,6 +70,8 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     @Volatile private var meteredSeconds = 1.0 / 125.0
     private var pendingStart: ((Result<CameraSnapshot>) -> Unit)? = null
     private var pendingPicker: ((Result<PhotoHandle?>) -> Unit)? = null
+    private var pendingBatchPicker: ((Result<PhotoImport>) -> Unit)? = null
+    private var pickerIsFolder = false
     private var pendingSave: Pair<PhotoHandle, (Result<Unit>) -> Unit>? = null
     private var speech: SpeechRecognizer? = null
     private var listening = false
@@ -130,6 +133,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         stop(); binding?.removeRequestPermissionsResultListener(this); binding?.removeActivityResultListener(this)
         pendingStart?.invoke(Result.failure(IllegalStateException("Activity detached"))); pendingStart = null
         pendingPicker?.invoke(Result.failure(IllegalStateException("Picker interrupted"))); pendingPicker = null
+        pendingBatchPicker?.invoke(Result.failure(IllegalStateException("Picker interrupted"))); pendingBatchPicker = null
         pendingSave?.second?.invoke(Result.failure(IllegalStateException("Save interrupted; original retained"))); pendingSave = null
         binding = null; activity = null
     }
@@ -380,20 +384,98 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         } catch (e: Exception) { callback(Result.failure(e)) }
     }
     override fun pickPhoto(callback: (Result<PhotoHandle?>) -> Unit) {
-        if (pendingPicker != null) return callback(Result.failure(IllegalStateException("Picker busy")))
-        pendingPicker = callback; activity!!.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "image/*"; addCategory(Intent.CATEGORY_OPENABLE) }, 702)
+        launchPicker(false, false, callback, null)
+    }
+    override fun pickPhotos(folder: Boolean, callback: (Result<PhotoImport>) -> Unit) {
+        launchPicker(folder, true, null, callback)
+    }
+    private fun launchPicker(folder: Boolean, multiple: Boolean, single: ((Result<PhotoHandle?>) -> Unit)?, batch: ((Result<PhotoImport>) -> Unit)?) {
+        if (pendingPicker != null || pendingBatchPicker != null || activity == null) {
+            val error = IllegalStateException("Photo picker unavailable")
+            single?.invoke(Result.failure(error)); batch?.invoke(Result.failure(error)); return
+        }
+        pendingPicker = single; pendingBatchPicker = batch; pickerIsFolder = folder
+        try {
+            activity!!.startActivityForResult(Intent(if (folder) Intent.ACTION_OPEN_DOCUMENT_TREE else Intent.ACTION_OPEN_DOCUMENT).apply {
+                if (!folder) { type = "image/*"; addCategory(Intent.CATEGORY_OPENABLE); putExtra(Intent.EXTRA_ALLOW_MULTIPLE, multiple) }
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }, 702)
+        } catch (error: Exception) {
+            pendingPicker = null; pendingBatchPicker = null
+            single?.invoke(Result.failure(error)); batch?.invoke(Result.failure(error))
+        }
+    }
+    private fun folderPhotos(tree: Uri): List<Uri> {
+        val photos = mutableListOf<Pair<String, Uri>>()
+        val folders = java.util.ArrayDeque<Pair<String, Int>>()
+        folders.add(DocumentsContract.getTreeDocumentId(tree) to 0)
+        var visited = 0
+        while (folders.isNotEmpty() && visited < 4096) {
+            val (id, depth) = folders.removeFirst()
+            val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, id)
+            context.contentResolver.query(children, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE), null, null, null)?.use { cursor ->
+                val entries = mutableListOf<Triple<String, String, String>>()
+                while (cursor.moveToNext() && visited++ < 4096) {
+                    entries.add(Triple(cursor.getString(0), cursor.getString(1) ?: "", cursor.getString(2) ?: ""))
+                }
+                for ((child, name, mime) in entries.sortedBy { it.second.lowercase() }) {
+                    if (mime == DocumentsContract.Document.MIME_TYPE_DIR && depth < 16) folders.add(child to depth + 1)
+                    else if (mime.startsWith("image/") && !name.startsWith(".") ) {
+                        photos.add(name to DocumentsContract.buildDocumentUriUsingTree(tree, child))
+                    }
+                }
+            }
+        }
+        return photos.sortedBy { it.first.lowercase() }.map { it.second }
+    }
+    private fun copyImportedPhoto(uri: Uri): PhotoHandle {
+        val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+        val extension = when (mime) { "image/png" -> "png"; "image/heic" -> "heic"; "image/heif" -> "heif"; "image/webp" -> "webp"; else -> "jpg" }
+        val file = File(context.filesDir, "import-${UUID.randomUUID()}.$extension")
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input -> file.outputStream().use { input.copyTo(it) } } ?: error("Cannot read selected photo")
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.path, bounds)
+            check(bounds.outWidth > 0 && bounds.outHeight > 0) { "Cannot decode selected photo" }
+            return PhotoHandle(file.path, file.nameWithoutExtension, false, mime)
+        } catch (error: Exception) { file.delete(); throw error }
     }
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
         if (requestCode != 702) return false
-        val completion = pendingPicker; pendingPicker = null
-        if (resultCode != Activity.RESULT_OK || data?.data == null) { completion?.invoke(Result.success(null)); return true }
-        try {
-            val mime = context.contentResolver.getType(data.data!!) ?: "image/jpeg"
-            val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "jpg"
-            val file = File(photoFile().parentFile, "${UUID.randomUUID()}.$extension")
-            context.contentResolver.openInputStream(data.data!!)?.use { input -> file.outputStream().use { input.copyTo(it) } } ?: error("Cannot read selected photo")
-            completion?.invoke(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false, mime)))
-        } catch (e: Exception) { completion?.invoke(Result.failure(e)) }
+        val single = pendingPicker; val batch = pendingBatchPicker; val folder = pickerIsFolder
+        if (single == null && batch == null) return true
+        // Keep the request busy until copying finishes; no full-resolution bitmap is decoded.
+        executor.execute {
+            val photos = mutableListOf<PhotoHandle>()
+            var skipped = 0
+            try {
+                val uris = if (resultCode != Activity.RESULT_OK || data == null) emptyList() else if (folder) {
+                    data.data?.let { folderPhotos(it) } ?: emptyList()
+                } else {
+                    val clip = data.clipData
+                    if (clip != null) (0 until clip.itemCount).map { clip.getItemAt(it).uri }.distinct()
+                    else listOfNotNull(data.data)
+                }
+                skipped = (uris.size - 50).coerceAtLeast(0)
+                for (uri in uris.take(if (batch == null) 1 else 50)) {
+                    try { photos.add(copyImportedPhoto(uri)) } catch (_: Exception) { skipped++ }
+                }
+                if ((uris.isNotEmpty() || (folder && resultCode == Activity.RESULT_OK)) && photos.isEmpty()) error("No readable images were found")
+                main.post {
+                    if (pendingPicker !== single || pendingBatchPicker !== batch) { photos.forEach { File(it.path).delete() }; return@post }
+                    pendingPicker = null; pendingBatchPicker = null
+                    single?.invoke(Result.success(photos.firstOrNull())); batch?.invoke(Result.success(PhotoImport(photos, skipped.toLong())))
+                }
+            } catch (error: Exception) {
+                photos.forEach { File(it.path).delete() }
+                main.post {
+                    if (pendingPicker !== single || pendingBatchPicker !== batch) return@post
+                    pendingPicker = null; pendingBatchPicker = null
+                    single?.invoke(Result.failure(error)); batch?.invoke(Result.failure(error))
+                }
+            }
+        }
         return true
     }
     override fun render(original: PhotoHandle, rotationDegrees: Double, crop: Boolean, strength: Double, callback: (Result<PhotoHandle>) -> Unit) {
@@ -475,7 +557,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     override fun setVoicePhrase(phrase: String) { customVoicePhrase = phrase.take(120) }
     override fun releasePhoto(photo: PhotoHandle) {
         val file = File(photo.path).canonicalFile
-        if (file.parentFile == photoFile().parentFile?.canonicalFile && file.extension in listOf("jpg", "jpeg", "png", "heic", "heif") && recover()?.id != photo.id) {
+        if (file.parentFile == photoFile().parentFile?.canonicalFile && (file.extension in listOf("jpg", "jpeg", "png", "heic", "heif", "webp") || file.name.startsWith("import-")) && recover()?.id != photo.id) {
             if (file.exists()) check(file.delete()) { "Cannot release private copy" }
         }
     }

@@ -6,8 +6,10 @@ import CoreMotion
 import Photos
 import PhotosUI
 import CoreImage
+import ImageIO
+import UniformTypeIdentifiers
 
-public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHostApi, AVCapturePhotoCaptureDelegate, AVCaptureVideoDataOutputSampleBufferDelegate, PHPickerViewControllerDelegate {
+public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHostApi, AVCapturePhotoCaptureDelegate, AVCaptureVideoDataOutputSampleBufferDelegate, PHPickerViewControllerDelegate, UIDocumentPickerDelegate {
     private let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "dali.camera")
     private let photoOutput = AVCapturePhotoOutput()
@@ -20,7 +22,8 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     private var front = false
     private var configuration = ""
     private var captureCompletion: ((Result<PhotoHandle, Error>) -> Void)?
-    private var pickerCompletion: ((Result<PhotoHandle?, Error>) -> Void)?
+    private var pickerCompletion: ((Result<PhotoImport, Error>) -> Void)?
+    private let importQueue = DispatchQueue(label: "dali.import")
     private var lastFrame = CFAbsoluteTimeGetCurrent()
     private var lastState = CFAbsoluteTimeGetCurrent()
     private var currentRoll = 0.0
@@ -177,21 +180,91 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         presenter.present(sheet, animated: true); completion(.success(()))
     }
     func pickPhoto(completion: @escaping (Result<PhotoHandle?, Error>) -> Void) {
+        beginPicker(folder: false, limit: 1) { result in completion(result.map { $0.photos.first }) }
+    }
+    func pickPhotos(folder: Bool, completion: @escaping (Result<PhotoImport, Error>) -> Void) {
+        beginPicker(folder: folder, limit: 50, completion: completion)
+    }
+    private func beginPicker(folder: Bool, limit: Int, completion: @escaping (Result<PhotoImport, Error>) -> Void) {
         guard let presenter, pickerCompletion == nil else { completion(.failure(failure("Photo picker unavailable"))); return }
         pickerCompletion = completion
-        var config = PHPickerConfiguration(); config.filter = .images; config.selectionLimit = 1
-        let picker = PHPickerViewController(configuration: config); picker.delegate = self; presenter.present(picker, animated: true)
+        if folder {
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
+            picker.delegate = self
+            presenter.present(picker, animated: true)
+        } else {
+            var config = PHPickerConfiguration(); config.filter = .images; config.selectionLimit = limit; config.selection = .ordered
+            config.preferredAssetRepresentationMode = .current
+            let picker = PHPickerViewController(configuration: config); picker.delegate = self
+            presenter.present(picker, animated: true)
+        }
+    }
+    private func finishImport(_ result: Result<PhotoImport, Error>) {
+        DispatchQueue.main.async {
+            let completion = self.pickerCompletion; self.pickerCompletion = nil
+            completion?(result)
+        }
+    }
+    private func copyImportedPhoto(_ sourceURL: URL) throws -> PhotoHandle {
+        guard let source = CGImageSourceCreateWithURL(sourceURL as CFURL, nil),
+              CGImageSourceGetCount(source) > 0,
+              let identifier = CGImageSourceGetType(source),
+              let type = UTType(identifier as String), type.conforms(to: .image),
+              CGImageSourceCopyPropertiesAtIndex(source, 0, nil) != nil else { throw failure("Cannot decode selected photo") }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let id = UUID().uuidString
+        let destination = directory.appendingPathComponent("import-\(id).\(type.preferredFilenameExtension ?? "jpg")")
+        do { try FileManager.default.copyItem(at: sourceURL, to: destination) }
+        catch { try? FileManager.default.removeItem(at: destination); throw error }
+        return PhotoHandle(path: destination.path, id: id, unsaved: false, mimeType: type.preferredMIMEType)
     }
     public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-        picker.dismiss(animated: true); let completion = pickerCompletion; pickerCompletion = nil
-        guard let first = results.first else { completion?(.success(nil)); return }
-        first.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
-            do {
-                if let error { throw error }
-                guard let image = image as? UIImage, let data = image.jpegData(compressionQuality: 0.98) else { throw self.failure("Cannot load photo") }
-                let handle = try self.newPhoto(); try data.write(to: URL(fileURLWithPath: handle.path), options: .atomic)
-                DispatchQueue.main.async { completion?(.success(handle)) }
-            } catch { DispatchQueue.main.async { completion?(.failure(error)) } }
+        picker.dismiss(animated: true)
+        loadPickedPhotos(Array(results.prefix(50)), index: 0, photos: [], skipped: max(0, results.count - 50))
+    }
+    private func loadPickedPhotos(_ results: [PHPickerResult], index: Int, photos: [PhotoHandle], skipped: Int) {
+        guard index < results.count else {
+            if !results.isEmpty && photos.isEmpty { finishImport(.failure(failure("No readable images were found"))) }
+            else { finishImport(.success(PhotoImport(photos: photos, skipped: Int64(skipped)))) }
+            return
+        }
+        // Copy each temporary provider file inside its completion lifetime. Do not decode/recompress originals.
+        results[index].itemProvider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { url, error in
+            var next = photos; var missed = skipped
+            if error == nil, let url, let photo = try? self.copyImportedPhoto(url) { next.append(photo) }
+            else { missed += 1 }
+            self.loadPickedPhotos(results, index: index + 1, photos: next, skipped: missed)
+        }
+    }
+    public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        finishImport(.success(PhotoImport(photos: [], skipped: 0)))
+    }
+    public func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard let folder = urls.first else { finishImport(.success(PhotoImport(photos: [], skipped: 0))); return }
+        importQueue.async {
+            let access = folder.startAccessingSecurityScopedResource()
+            defer { if access { folder.stopAccessingSecurityScopedResource() } }
+            var photos: [PhotoHandle] = []; var skipped = 0
+            let keys: [URLResourceKey] = [.isRegularFileKey, .contentTypeKey]
+            guard let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else {
+                self.finishImport(.failure(self.failure("Could not open folder"))); return
+            }
+            var candidates: [URL] = []
+            var visited = 0
+            for case let url as URL in enumerator {
+                visited += 1
+                if visited > 4096 { break }
+                if enumerator.level > 16 { enumerator.skipDescendants(); continue }
+                if let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true,
+                   values.contentType?.conforms(to: .image) == true { candidates.append(url) }
+            }
+            candidates.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            skipped = max(0, candidates.count - 50)
+            for url in candidates.prefix(50) {
+                if let photo = try? self.copyImportedPhoto(url) { photos.append(photo) } else { skipped += 1 }
+            }
+            if photos.isEmpty { self.finishImport(.failure(self.failure("No readable images were found"))) }
+            else { self.finishImport(.success(PhotoImport(photos: photos, skipped: Int64(skipped)))) }
         }
     }
     func render(original: PhotoHandle, rotationDegrees: Double, crop: Bool, strength: Double, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
@@ -325,7 +398,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     func setVoicePhrase(phrase: String) throws { speech.customPhrase = phrase }
     func releasePhoto(photo: PhotoHandle) throws {
         let url = URL(fileURLWithPath: photo.path).standardizedFileURL
-        guard url.deletingLastPathComponent() == directory.standardizedFileURL, url.pathExtension == "jpg", try recover()?.id != photo.id else { return }
+        guard url.deletingLastPathComponent() == directory.standardizedFileURL, (url.pathExtension == "jpg" || url.lastPathComponent.hasPrefix("import-")), try recover()?.id != photo.id else { return }
         if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
     }
     func openSettings() throws { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }

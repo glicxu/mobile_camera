@@ -231,6 +231,52 @@ class PhotoHandle {
 ;
 }
 
+class PhotoImport {
+  PhotoImport({
+    required this.photos,
+    required this.skipped,
+  });
+
+  List<PhotoHandle> photos;
+
+  int skipped;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      photos,
+      skipped,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PhotoImport decode(Object result) {
+    result as List<Object?>;
+    return PhotoImport(
+      photos: (result[0] as List<Object?>?)!.cast<PhotoHandle>(),
+      skipped: result[1]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PhotoImport || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -245,6 +291,9 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PhotoHandle) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
+    }    else if (value is PhotoImport) {
+      buffer.putUint8(131);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -257,6 +306,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return CameraSnapshot.decode(readValue(buffer)!);
       case 130:
         return PhotoHandle.decode(readValue(buffer)!);
+      case 131:
+        return PhotoImport.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -459,6 +510,33 @@ class CameraHostApi {
       );
     } else {
       return (pigeonVar_replyList[0] as PhotoHandle?);
+    }
+  }
+
+  Future<PhotoImport> pickPhotos(bool folder) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.pickPhotos$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[folder]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as PhotoImport?)!;
     }
   }
 

@@ -202,6 +202,37 @@ data class PhotoHandle (
 
   override fun hashCode(): Int = toList().hashCode()
 }
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class PhotoImport (
+  val photos: List<PhotoHandle>,
+  val skipped: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PhotoImport {
+      val photos = pigeonVar_list[0] as List<PhotoHandle>
+      val skipped = pigeonVar_list[1] as Long
+      return PhotoImport(photos, skipped)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      photos,
+      skipped,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is PhotoImport) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return CameraApiPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
 private open class CameraApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -215,6 +246,11 @@ private open class CameraApiPigeonCodec : StandardMessageCodec() {
           PhotoHandle.fromList(it)
         }
       }
+      131.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PhotoImport.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -226,6 +262,10 @@ private open class CameraApiPigeonCodec : StandardMessageCodec() {
       }
       is PhotoHandle -> {
         stream.write(130)
+        writeValue(stream, value.toList())
+      }
+      is PhotoImport -> {
+        stream.write(131)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -244,6 +284,7 @@ interface CameraHostApi {
   fun discard(photo: PhotoHandle)
   fun share(photo: PhotoHandle, callback: (Result<Unit>) -> Unit)
   fun pickPhoto(callback: (Result<PhotoHandle?>) -> Unit)
+  fun pickPhotos(folder: Boolean, callback: (Result<PhotoImport>) -> Unit)
   fun render(original: PhotoHandle, rotationDegrees: Double, crop: Boolean, strength: Double, callback: (Result<PhotoHandle>) -> Unit)
   fun setControls(configurationId: String, ev: Double, locked: Boolean, callback: (Result<CameraSnapshot>) -> Unit)
   fun renderStyle(original: PhotoHandle, matrix: List<Double>, softness: Double, detail: Double, watermarkPath: String?, callback: (Result<PhotoHandle>) -> Unit)
@@ -395,6 +436,26 @@ interface CameraHostApi {
         if (api != null) {
           channel.setMessageHandler { _, reply ->
             api.pickPhoto{ result: Result<PhotoHandle?> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.pickPhotos$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val folderArg = args[0] as Boolean
+            api.pickPhotos(folderArg) { result: Result<PhotoImport> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))
