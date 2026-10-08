@@ -300,7 +300,9 @@ class _ManualPreviewControlsState extends State<ManualPreviewControls> {
               const Text('Under'),
               TextButton(
                 key: const Key('resetExposureAdjustment'),
-                onPressed: camera.controlBusy
+                onPressed:
+                    camera.controlBusy ||
+                        (fixed ? camera.linkedEV : state.currentEV).abs() < .01
                     ? null
                     : () => fixed
                           ? camera.changeLinkedEV(0)

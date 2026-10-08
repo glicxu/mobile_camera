@@ -319,10 +319,29 @@ void main() {
     await tester.tap(find.byKey(const Key('manualToolExposure')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('digitalDepthOfFocus')), findsNothing);
+    expect(
+      tester
+          .widget<TextButton>(find.byKey(const Key('resetExposureAdjustment')))
+          .onPressed,
+      isNull,
+    );
     await tester.tap(find.byKey(const Key('manualShutterAuto')));
     await tester.pumpAndSettle();
     expect(camera.snapshot!.manualExposure, isTrue);
     expect(find.byKey(const Key('previewShutterSlider')), findsOneWidget);
+    await camera.changeLinkedEV(1);
+    await tester.pumpAndSettle();
+    expect(camera.snapshot!.currentISO, 200);
+    await tester.tap(find.byKey(const Key('resetExposureAdjustment')));
+    await tester.pumpAndSettle();
+    expect(camera.linkedEV, 0);
+    expect(camera.snapshot!.currentISO, 100);
+    expect(
+      tester
+          .widget<TextButton>(find.byKey(const Key('resetExposureAdjustment')))
+          .onPressed,
+      isNull,
+    );
     await tester.tap(find.byKey(const Key('manualShutterAuto')));
     await tester.pumpAndSettle();
     expect(camera.focusX, .4);
