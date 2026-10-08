@@ -149,7 +149,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Relaxed standing'));
       await tester.pumpAndSettle();
-      expect(find.text('Done / Next'), findsOneWidget);
+      expect(find.text('Next'), findsOneWidget);
       await tester.ensureVisible(find.text('Natural'));
       await tester.tap(find.text('Natural'));
       await tester.pumpAndSettle();

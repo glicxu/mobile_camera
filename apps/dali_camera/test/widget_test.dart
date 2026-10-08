@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dali_camera/review_comparison.dart';
 import 'package:dali_camera/manual_preview_controls.dart';
 import 'package:dali_camera/review_treatment_controls.dart';
+import 'package:dali_camera/live_guidance.dart';
+import 'package:dali_camera/distance_swipe.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 class FakeHost extends CameraHostApi {
@@ -413,6 +415,94 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.byKey(const Key('reviewTreatmentStrength')), findsOneWidget);
       camera.dispose();
+    },
+  );
+
+  testWidgets(
+    'Coaching hierarchy and deliberate slow swipes follow native reference',
+    (tester) async {
+      final camera = CameraController(host: FakeHost(), register: false);
+      await camera.initialize();
+      final poses = camera.catalog.entries
+          .where((e) => e.kind == 'pose' && e.package == 'masculine')
+          .toList();
+      camera.choose(poses.first);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: AnimatedBuilder(
+                animation: camera,
+                builder: (_, _) =>
+                    LiveGuidancePanel(camera: camera, onExample: (_) {}),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('activeReferenceCard')), findsOneWidget);
+      expect(find.byKey(const Key('situationGuidanceCard')), findsNothing);
+      expect(find.text(poses.first.cues.join(' ')), findsOneWidget);
+      expect(find.text('Next'), findsOneWidget);
+      await tester.timedDrag(
+        find.byKey(const Key('activeReferenceCard')),
+        const Offset(-100, 0),
+        const Duration(seconds: 2),
+      );
+      await tester.pumpAndSettle();
+      expect(camera.guidance.entry!.id, poses[1].id);
+      final afterSlowSwipe = camera.guidance.entry!.id;
+      await tester.timedDrag(
+        find.byKey(const Key('activeReferenceCard')),
+        const Offset(-30, 0),
+        const Duration(seconds: 2),
+      );
+      await tester.pumpAndSettle();
+      expect(camera.guidance.entry!.id, afterSlowSwipe);
+      camera.setSituation(PhotographicSituation.food);
+      camera.choose(camera.catalog.entries.firstWhere((e) => e.kind == 'food'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('activeReferenceCard')), findsOneWidget);
+      expect(find.byKey(const Key('situationGuidanceCard')), findsOneWidget);
+      expect(find.byKey(const Key('guidedControls')), findsNothing);
+      camera.dispose();
+    },
+  );
+
+  testWidgets(
+    'Review slow swipe uses native distance and does not require a flick',
+    (tester) async {
+      final offsets = <int>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DistanceSwipe(
+              minimumDistance: 60,
+              onSwipe: offsets.add,
+              child: const SizedBox(width: 300, height: 200),
+            ),
+          ),
+        ),
+      );
+      await tester.timedDrag(
+        find.byType(DistanceSwipe),
+        const Offset(-80, 0),
+        const Duration(seconds: 2),
+      );
+      expect(offsets, [1]);
+      await tester.timedDrag(
+        find.byType(DistanceSwipe),
+        const Offset(45, 0),
+        const Duration(seconds: 2),
+      );
+      expect(offsets, [1]);
+      await tester.timedDrag(
+        find.byType(DistanceSwipe),
+        const Offset(90, 0),
+        const Duration(seconds: 2),
+      );
+      expect(offsets, [1, -1]);
     },
   );
 

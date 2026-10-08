@@ -15,6 +15,8 @@ import 'review_comparison.dart';
 import 'review_treatment_controls.dart';
 import 'camera_header.dart';
 import 'coaching_overlay.dart';
+import 'live_guidance.dart';
+import 'distance_swipe.dart';
 import 'app_settings.dart';
 import 'camera_tutorial.dart';
 
@@ -188,130 +190,10 @@ class _CameraScreenState extends State<CameraScreen>
                     onPackages: () => cameraSheet(chooser),
                     onEffects: () => cameraSheet(effects),
                   ),
-                  const SizedBox(height: 8),
-                  Semantics(
-                    liveRegion: true,
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  camera.advice.tone == AdviceTone.ready
-                                      ? Icons.check_circle
-                                      : camera.advice.tone == AdviceTone.waiting
-                                      ? Icons.pending
-                                      : Icons.warning_amber,
-                                  color: camera.advice.tone == AdviceTone.ready
-                                      ? Colors.greenAccent
-                                      : camera.advice.tone == AdviceTone.waiting
-                                      ? Colors.white70
-                                      : Colors.amber,
-                                ),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(camera.advice.statusTitle),
-                                ),
-                                if (camera.advice.direction != null) ...[
-                                  const SizedBox(width: 8),
-                                  Icon(directionIcon(camera.advice.direction!)),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              (camera.shootingMode == PhotographicSituation.auto
-                                      ? 'Auto · ${camera.activeSituation.title}'
-                                      : camera.activeSituation.title)
-                                  .toUpperCase(),
-                              style: Theme.of(context).textTheme.labelLarge,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              camera.advice.instruction,
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            if (camera.guidanceDetail.isNotEmpty) ...[
-                              const SizedBox(height: 6),
-                              Text(camera.guidanceDetail),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
+                  LiveGuidancePanel(
+                    camera: camera,
+                    onExample: (entry) => cameraSheet(() => details(entry)),
                   ),
-                  if (camera.guidance.isActive) ...[
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onHorizontalDragEnd: (details) {
-                        if (camera.guidance.entry?.kind != 'pose') return;
-                        final speed = details.primaryVelocity ?? 0;
-                        if (speed.abs() > 200) {
-                          camera.adjacentReference(speed < 0 ? 1 : -1);
-                        }
-                      },
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Image.asset(
-                          camera.guidance.entry!.asset,
-                          width: 52,
-                          height: 68,
-                          fit: BoxFit.cover,
-                        ),
-                        title: Text(camera.guidance.entry!.title),
-                        subtitle: Text(
-                          camera.catalog.angleTitle(camera.guidance.entry!),
-                        ),
-                        onTap: () =>
-                            cameraSheet(() => details(camera.guidance.entry!)),
-                      ),
-                    ),
-                    if (camera.guidance.entry!.kind == 'pose')
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IconButton(
-                            tooltip: 'Previous pose',
-                            onPressed: () => camera.adjacentReference(-1),
-                            icon: const Icon(Icons.chevron_left),
-                          ),
-                          const Flexible(
-                            child: Text(
-                              'Swipe the pose, or use the arrow buttons.',
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Next pose',
-                            onPressed: () => camera.adjacentReference(1),
-                            icon: const Icon(Icons.chevron_right),
-                          ),
-                        ],
-                      ),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        FilledButton.tonal(
-                          onPressed: camera.guidance.complete
-                              ? null
-                              : camera.next,
-                          child: const Text('Done / Next'),
-                        ),
-                        TextButton(
-                          onPressed: camera.guidance.complete
-                              ? null
-                              : camera.next,
-                          child: const Text('Skip'),
-                        ),
-                        TextButton(
-                          onPressed: () => camera.choose(null),
-                          child: const Text('Natural'),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
                 if (camera.message != null)
                   Padding(
@@ -759,12 +641,11 @@ class _CameraScreenState extends State<CameraScreen>
                   }),
                 ),
                 if (photo != null)
-                  GestureDetector(
-                    onHorizontalDragEnd: (details) {
-                      final speed = details.primaryVelocity ?? 0;
-                      if (speed.abs() < 200) return;
+                  DistanceSwipe(
+                    minimumDistance: 60,
+                    onSwipe: (offset) {
                       setState(() => compare = false);
-                      if (speed < 0) {
+                      if (offset > 0) {
                         camera.nextPhoto();
                       } else {
                         camera.previousPhoto();
@@ -1285,7 +1166,7 @@ class _CameraScreenState extends State<CameraScreen>
       title: const Text('Take a photo with Dali'),
       content: const SingleChildScrollView(
         child: Text(
-          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Done / Next confirms a creative step; Dali does not verify the pose.\n\nTap the shutter for one photo; hold for a paced burst. Timer and custom voice phrase are in Camera controls. Voice runs on device where your phone supports it.\n\nEffects has separate Filter and Beautifier Auto, Custom, and Off choices. Depth of focus softens the background around the detected subject or your focus point. The original saves first; save the prepared copy separately.\n\nReview offers Original, Reframe, Level, General Enhance, Portrait Polish, and Landscape Polish when measurements are available. Before exports the original; After and Split export the selected version. Tap the photo to zoom and move the comparison split.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed original saves remain available for retry.',
+          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Next confirms a posture step; Dali does not verify the pose.\n\nTap the shutter for one photo; hold for a paced burst. Timer and custom voice phrase are in Camera controls. Voice runs on device where your phone supports it.\n\nEffects has separate Filter and Beautifier Auto, Custom, and Off choices. Depth of focus softens the background around the detected subject or your focus point. The original saves first; save the prepared copy separately.\n\nReview offers Original, Reframe, Level, General Enhance, Portrait Polish, and Landscape Polish when measurements are available. Before exports the original; After and Split export the selected version. Tap the photo to zoom and move the comparison split.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed original saves remain available for retry.',
         ),
       ),
       actions: [

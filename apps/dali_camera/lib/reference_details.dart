@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dali_camera_core/dali_camera_core.dart';
 import 'camera_controller.dart';
+import 'distance_swipe.dart';
 
 class ReferenceDetails extends StatefulWidget {
   const ReferenceDetails({
@@ -45,13 +46,9 @@ class _ReferenceDetailsState extends State<ReferenceDetails> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              GestureDetector(
-                onHorizontalDragEnd: item.kind == 'pose'
-                    ? (details) {
-                        final speed = details.primaryVelocity ?? 0;
-                        if (speed.abs() > 100) adjacent(speed < 0 ? 1 : -1);
-                      }
-                    : null,
+              DistanceSwipe(
+                minimumDistance: 44,
+                onSwipe: item.kind == 'pose' ? adjacent : null,
                 child: Semantics(
                   label: 'Photo example of ${item.title}',
                   child: ClipRRect(

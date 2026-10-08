@@ -55,8 +55,9 @@ The reference's `proExposureControls`, `exposureMeter`, `assistedRecommendationC
 | Reference thumbnail | Selects immediately and dismisses chooser; no extra confirmation step | Widget/device selection tests |
 | Reference information | Separate example sheet with image, angle/light instructions, cues/safety and Done | Food safety device assertion; catalog export |
 | Pose example Prev/Next/swipe | Wraps within that package and updates active pose/example | `ReferenceDetails`, `adjacentReference` |
-| Active pose Prev/Next/swipe | Chooses adjacent pose within current package | Gesture + arrow actions connected |
-| Creative Next/Skip/Natural | Manual progression; urgent framing can interrupt without completing pose automatically | 150 native coaching fixtures + nine baseline fixtures |
+| Active pose swipe | Native 86x96 example, category/setting, complete instruction and angle/light; drag 44 points or accessible previous/next action chooses an adjacent pose | Widget deliberate slow-swipe and hierarchy checks |
+| Creative Next/Natural | Native step bar exists only for a selected posture; Natural returns to scene guidance. Next advances manually; urgent framing can interrupt without completing a pose automatically | Widget hierarchy + 150 native coaching fixtures and nine baseline fixtures |
+| Live advice panel | Selected posture replaces the scene card; selected Food/Landscape retains its recipe card plus scene advice. Recipe selection has no posture step bar | Native reachable `liveAdvicePanel`; widget checks |
 | Composition instructions | Landscape/Food recipes and angles come from native catalog, not a new independent angle picker | Export drift validation |
 
 ## Review, library, imports and storage (P4/P7)
@@ -69,7 +70,7 @@ The reference's `proExposureControls`, `exposureMeter`, `assistedRecommendationC
 | Review header Photos picker | Separate system multiple-photo selection, maximum 20 | Picker bridge; separate from full-library thumbnail action |
 | Folder import | Up to 50 images, filename order; bounded traversal and private copies | Intentionally visible by user decision, beyond native Debug-only button |
 | Camera return | Ends imported/library session, releases owned copies/variants, resumes camera | Navigation/cleanup regression tests |
-| Prev/Next/image swipe | Wraps imported selection/library; guards busy/pending original | Library and source-isolation tests |
+| Prev/Next/image swipe | Wraps imported selection/library; guards busy/pending original; a 60-point drag navigates even when slow | Library/source-isolation and deliberate slow-swipe tests |
 | Before/After/Split | Above image, source starts Before and successful treatment selects After | Comparison/export tests |
 | Image label and fullscreen | Original/processed label, treatment subtitle, explicit fullscreen plus tap; pan/zoom/split | Review widgets; physical visual check |
 | Treatment selector | Native three treatment choices and level 0-5; automatic debounced update, Reset 0 | Latest-edit coalescing and original protection tests |
