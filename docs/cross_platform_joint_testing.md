@@ -1,5 +1,13 @@
 # Joint phone testing - parity candidate
 
+## Latest viewport processing feedback - October 8, 2026
+
+Source: `ecc39c2`. After successful capture, the normal viewport shows the private original with Processing photo and an indeterminate progress indicator. It replaces that image with the completed processed photo while saving, then shows Photo saved and Back to camera. The result remains until dismissed or another capture starts. Burst keeps the live viewport during the sequence. Failures enter the existing recovery review. The native renderer does not stream intermediate frames or report percentage progress; the indicator communicates active work and stage changes.
+
+Flutter analysis and 32 tests pass, including delayed processing: original visible, no early gallery save, capture guarded, processed path displayed after completion and return to live camera. Galaxy camera flow passed in 43 seconds (45 with teardown), including the actual result/dismiss controls and one processed gallery asset. A normal-app shutter capture was visually inspected in Processing and Photo saved states. This sample scene was very dark; real-scene image comparison remains joint acceptance work. The test's Fresh plus watermark sample took 841 ms camera, 4835 ms effects and 117 ms final save (5793 ms total); scene/debug timing varies and this UI change is not a processing optimization.
+
+Galaxy and tablet normal apps are updated in place; independently pulled installed APKs match SHA-256 `d14a22c7aad3342a10bde3a2611c80b48afa03b693718af45e1cfb26095ab400`. Tablet runtime regression was not repeated for this UI change; the preceding processed-buffer camera/rendering passes remain its backend evidence. Shared CI passes in [run 37861015362](https://github.com/glicxu/mobile_camera/actions/runs/37861015362); Android build and deferred iOS checks were still running when this checkpoint was recorded.
+
 ## Latest processed-before-save capture - October 8, 2026
 
 Source: `0a95ca3`, branch `codex/cross-platform-20261007`. The user's requested order supersedes the historical original-first save checkpoints below. Android copies the CameraX JPEG buffer, closes the camera image, applies the shutter-time filter/beautifier/depth/signature recipe from the owned buffer and saves one final photo to Photos. A separate private original is retained for recovery and Before comparison. It is not automatically saved to Photos. Effects-off captures save that original as the final output. See the [CameraX in-memory capture API](https://developer.android.com/reference/androidx/camera/core/ImageCapture) for the capture mechanism.
