@@ -1,5 +1,15 @@
 # Joint phone testing - parity candidate
 
+## Latest Android capture-speed fix - October 8, 2026
+
+Source: `6309bb3`, branch `codex/cross-platform-20261007`. Supersedes the production candidate recorded below. A user reported a slow shutter-to-save transition. Galaxy profiling showed the original camera capture/gallery save completed in 1056 ms, followed by 10063 ms preparing a Fresh-filter copy. The UI previously waited for effects and analysis before entering review.
+
+The captured original now enters review after saving, while controls stay guarded and separate Preparing effects/Analyzing photo statuses identify the remaining work. Android smoothing/sharpening reads bounded blur rows instead of making one native bitmap call per full-resolution pixel. Zero-value filters skip the identity color pass. Pixel coordinates, strength calculations, JPEG quality and full-resolution output are unchanged.
+
+In the follow-up Galaxy debug run, capture/gallery save took 1121 ms and the same Fresh-filter step took 5066 ms, down from 10063 ms. The styled capture pipeline took 6199 ms including history, compared with 11128 ms before. These are one before/after sample per configuration, not release benchmarks or timing guarantees for every scene/effect/device.
+
+Flutter analysis and 28 tests pass, including a delayed-render check that the saved original is visible while processing and capture remains blocked. Galaxy camera flow passes in 43 seconds (45 with teardown); native rendering/recovery passes in 11 seconds (12 with teardown), including immutable originals and 2400x1600 output. Tablet runtime results below refer to the preceding candidate; this performance change was measured on the Galaxy. The normal app is updated on both Android devices without clearing data; independently pulled installed APKs match SHA-256 `243b5a10117e96849f255c4b77a29259136736038c07c19c891b35a1c9f5605c`. Retry a shutter capture in the normal Dali Camera app and check that the original appears while effects finish.
+
 ## Comprehensive source/action candidate - October 8, 2026
 
 The comprehensive [action audit](cross_platform_action_audit.md) now covers the reachable native baseline, including Manual preview rail/exclusive editors, focus-only tapping, exposure/full-Auto reset differences, Capture controls disclosures, full Photos-library browsing, automatic review treatments, reference destinations and the live advice hierarchy. Full native camera-position sequences precede posture cues; Next is unavailable while urgent framing takes priority. Food/Landscape recipes retain measured scene advice. Group/Action uses the native person overlay and posture flow while preserving its contextual scene card when no posture is selected.

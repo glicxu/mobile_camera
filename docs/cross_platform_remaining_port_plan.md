@@ -7,6 +7,10 @@ Reference: native iOS app at `d53a977`. Starting Flutter source: `be9c765`.
 
 Current per-action contract: [comprehensive source/action audit](cross_platform_action_audit.md). Its destinations and state transitions supersede the historical aggregate checks below. Current software additions: lazy Photos library, native beautifier dropdown/disclosures, image labels/fullscreen, actual lens metadata and active pose swipes. Final Android tablet and Galaxy camera/rendering validation passes; the same candidate is installed on both. iOS validation is deferred by the current priority.
 
+## Android capture-speed follow-up
+
+The user reported a slow save after pressing the shutter. Fixed in `6309bb3`: open review with the saved original before effects complete, report effects/analysis progress separately, skip identity color work and batch spatial bitmap reads. Galaxy debug Fresh-filter preparation decreased from 10.063 to 5.066 seconds in the measured samples; capture/gallery commit remained about 1.1 seconds. Analysis/28 Flutter tests and Galaxy camera/rendering/recovery checks pass. See the [latest build and timing evidence](cross_platform_joint_testing.md). More effects, release profiling and the user's retry remain acceptance work.
+
 ## Current priority: Android first
 
 The user requested Android development first. Continue Android implementation and tablet/Galaxy validation against the native source/action contract; defer iOS simulator debugging and Mac/iPhone acceptance. The latest iOS run connected to its VM service but timed out before reporting bridge results. Bounded stage diagnostics are retained for later investigation; iOS bridge validation is not passed and is not part of the Android-ready claim.
