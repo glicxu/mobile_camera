@@ -298,6 +298,13 @@ void main() {
       find.text('Tap a point in the preview to focus there.'),
       findsOneWidget,
     );
+    await tester.tap(find.byKey(const Key('manualFocusPrompt')));
+    await tester.pumpAndSettle();
+    expect(
+      host.lastFocusOnly,
+      isNull,
+      reason: 'An editor tap must not refocus the live camera behind it',
+    );
     await camera.meter(.4, .5);
     await tester.pumpAndSettle();
     expect(host.lastFocusOnly, isTrue);

@@ -41,9 +41,14 @@ class _ManualPreviewControlsState extends State<ManualPreviewControls> {
                 ),
                 child: Material(
                   type: MaterialType.transparency,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(11),
-                    child: editor(),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap:
+                        () {}, // Editor taps must not meter the camera behind it.
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(11),
+                      child: editor(),
+                    ),
                   ),
                 ),
               ),

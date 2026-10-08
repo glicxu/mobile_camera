@@ -12,8 +12,15 @@ import subprocess
 
 sdk = Path(shutil.which("flutter")).resolve().parent.parent
 patch = Path(__file__).with_name("flutter_simulator_log_ready.patch")
-subprocess.run(["git", "-C", str(sdk), "apply", "--check", str(patch)], check=True)
-subprocess.run(["git", "-C", str(sdk), "apply", str(patch)], check=True)
+check = subprocess.run(["git", "-C", str(sdk), "apply", "--check", str(patch)], capture_output=True, text=True)
+if check.returncode == 0:
+    subprocess.run(["git", "-C", str(sdk), "apply", str(patch)], check=True)
+else:
+    # A CI SDK cache may already contain this exact backport. Reject other drift.
+    reverse = subprocess.run(["git", "-C", str(sdk), "apply", "--reverse", "--check", str(patch)], capture_output=True, text=True)
+    if reverse.returncode != 0:
+        raise RuntimeError("Pinned Flutter source does not match the simulator patch: " + check.stderr)
+    print("Exact simulator log-readiness backport already present in CI SDK cache.")
 for name in ("flutter_tools.snapshot", "flutter_tools.stamp"):
     artifact = sdk / "bin" / "cache" / name
     if artifact.is_file():
