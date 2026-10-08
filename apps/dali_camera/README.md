@@ -1,17 +1,12 @@
-# dali_camera
+﻿# Dali Camera Flutter application
 
-A new Flutter project.
+Shared Android/iOS application. Uses `packages/dali_camera_core` for catalogs, geometry and coaching, and `packages/dali_camera_platform` for native camera services.
 
-## Getting Started
+```sh
+flutter pub get
+flutter run -d YOUR_PHONE_ID
+```
 
-This project is a starting point for a Flutter application.
+See [Android and Flutter iOS testing](../../docs/android_testing.md), [feature coverage](../../docs/cross_platform_parity.md), and the [implementation plan](../../docs/dali_camera_cross_platform_port_plan.md).
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The existing root Xcode project remains the full native iOS reference during migration. This new application's first milestone covers capture/review/export and basic guidance; remaining parity is tracked explicitly in the coverage document.

@@ -137,7 +137,8 @@ data class CameraSnapshot (
 data class PhotoHandle (
   val path: String,
   val id: String,
-  val unsaved: Boolean
+  val unsaved: Boolean,
+  val mimeType: String? = null
 )
  {
   companion object {
@@ -145,7 +146,8 @@ data class PhotoHandle (
       val path = pigeonVar_list[0] as String
       val id = pigeonVar_list[1] as String
       val unsaved = pigeonVar_list[2] as Boolean
-      return PhotoHandle(path, id, unsaved)
+      val mimeType = pigeonVar_list[3] as String?
+      return PhotoHandle(path, id, unsaved, mimeType)
     }
   }
   fun toList(): List<Any?> {
@@ -153,6 +155,7 @@ data class PhotoHandle (
       path,
       id,
       unsaved,
+      mimeType,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -209,7 +212,7 @@ interface CameraHostApi {
   fun share(photo: PhotoHandle, callback: (Result<Unit>) -> Unit)
   fun pickPhoto(callback: (Result<PhotoHandle?>) -> Unit)
   fun render(original: PhotoHandle, rotationDegrees: Double, crop: Boolean, strength: Double, callback: (Result<PhotoHandle>) -> Unit)
-  fun setControls(configurationId: String, ev: Double, locked: Boolean): CameraSnapshot
+  fun setControls(configurationId: String, ev: Double, locked: Boolean, callback: (Result<CameraSnapshot>) -> Unit)
   fun openSettings()
   fun setVoiceEnabled(enabled: Boolean, callback: (Result<Boolean>) -> Unit)
 
@@ -396,12 +399,15 @@ interface CameraHostApi {
             val configurationIdArg = args[0] as String
             val evArg = args[1] as Double
             val lockedArg = args[2] as Boolean
-            val wrapped: List<Any?> = try {
-              listOf(api.setControls(configurationIdArg, evArg, lockedArg))
-            } catch (exception: Throwable) {
-              CameraApiPigeonUtils.wrapError(exception)
+            api.setControls(configurationIdArg, evArg, lockedArg) { result: Result<CameraSnapshot> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
             }
-            reply.reply(wrapped)
           }
         } else {
           channel.setMessageHandler(null)

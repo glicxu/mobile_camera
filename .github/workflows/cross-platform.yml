@@ -44,9 +44,30 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Pin Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.8'
           cache: true
       - run: flutter build ios --debug --no-codesign
         working-directory: apps/dali_camera
+      - name: Native Flutter bridge on iPhone simulator
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for k,vs in d["devices"].items() if "iOS" in k for v in vs if v["name"].startswith("iPhone")))')
+          echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
+          cd apps/dali_camera
+          flutter test integration_test/bridge_test.dart -d "$DEVICE_ID"
+      - name: Export native coaching fixtures
+        run: |
+          swiftc -parse-as-library DaliCamera/Models.swift DaliCamera/CoachingEngine.swift tools/ExportCrossPlatformFixtures.swift -o /tmp/export-dali-fixtures
+          /tmp/export-dali-fixtures "$GITHUB_WORKSPACE/fixtures/swift-baseline.json"
+          cd packages/dali_camera_core
+          dart pub get
+          dart run tool/verify_swift_fixtures.dart ../../fixtures/swift-baseline.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: swift-baseline-fixtures
+          path: fixtures/swift-baseline.json
+      - name: Preserve native iOS unit validation
+        run: xcodebuild test -project DaliCamera.xcodeproj -scheme DaliCamera -only-testing:DaliCameraTests -destination "platform=iOS Simulator,id=$DEVICE_ID" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO

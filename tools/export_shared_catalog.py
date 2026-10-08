@@ -15,6 +15,7 @@ from PIL import Image, ImageOps
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'DaliCamera/Models.swift'
 text = SOURCE.read_text(encoding='utf-8')
+export_check = False
 
 
 def enum(name):
@@ -94,7 +95,10 @@ def catalog(name, fields, landscape=False):
             raise ValueError(f'Invalid asset: {asset}')
         item['asset'] = 'assets/catalog/' + files[0].name
         image_bytes = files[0].read_bytes()
-        if len(image_bytes) >= 100000:
+        item['sourceAssetSha256'] = hashlib.sha256(image_bytes).hexdigest()
+        if export_check:
+            image_bytes = (ROOT / 'apps/dali_camera' / item['asset']).read_bytes()
+        elif len(image_bytes) >= 100000:
             image = ImageOps.exif_transpose(Image.open(files[0])).convert('RGB')
             image.thumbnail((720, 720))
             for quality in range(90, 29, -5):
@@ -109,14 +113,16 @@ def catalog(name, fields, landscape=False):
 
 
 def main():
+    global export_check
     parser = argparse.ArgumentParser()
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
+    export_check = args.check
     poses = catalog('GuidedPose', ['title', 'cues', 'category', 'setting', 'recommendedCameraAngle', 'recommendedLighting', 'exampleAssetName'])
     landscapes = catalog('LandscapeCompositionRecipe', ['package', 'title', 'cues', 'recommendedCameraAngle', 'recommendedLight', 'safetyNote', 'exampleAssetName'], True)
     assert len(poses) == 76 and len(landscapes) == 24
     asset_bytes = {item['asset']: item.pop('_bytes') for item in poses + landscapes}
-    data = {'schemaVersion': 1, 'sourceSha256': hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
+    data = {'schemaVersion': 1, 'sourceSha256': hashlib.sha256(text.encode('utf-8')).hexdigest(),
             'posePackages': property_cases(enum('GuidedPoseCollectionID'), 'title'),
             'landscapePackages': property_cases(enum('LandscapeCompositionPackageID'), 'title'),
             'angles': {key: {'title': value, 'instruction': property_cases(enum('CameraAngleChoice'), 'instruction')[key]}

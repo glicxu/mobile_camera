@@ -10,9 +10,17 @@ import android.net.Uri
 import android.os.*
 import android.provider.MediaStore
 import android.provider.Settings
+import android.speech.*
 import android.util.Size
 import android.view.View
+import android.view.OrientationEventListener
 import androidx.camera.core.*
+import androidx.camera.camera2.interop.*
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.TotalCaptureResult
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
@@ -33,6 +41,7 @@ import java.util.UUID
 import java.util.concurrent.Executors
 import kotlin.math.*
 
+@androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
 class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     PluginRegistry.RequestPermissionsResultListener, PluginRegistry.ActivityResultListener, SensorEventListener {
     private lateinit var context: Context
@@ -43,20 +52,33 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private var previewView: PreviewView? = null
     private var camera: androidx.camera.core.Camera? = null
     private var captureUseCase: ImageCapture? = null
+    private var analysisUseCase: ImageAnalysis? = null
+    private var previewUseCase: Preview? = null
+    private var orientationListener: OrientationEventListener? = null
+    private var displayRotation = 0
     private var front = false
     private var active = false
     private var generation = 0L
     private var config = ""
     private var aspect = 0.75
     private var capturing = false
+    @Volatile private var focusDistance: Float? = null
+    private var lockedState = false
     private var pendingStart: ((Result<CameraSnapshot>) -> Unit)? = null
     private var pendingPicker: ((Result<PhotoHandle?>) -> Unit)? = null
+    private var pendingSave: Pair<PhotoHandle, (Result<Unit>) -> Unit>? = null
+    private var speech: SpeechRecognizer? = null
+    private var listening = false
+    private var lastVoice = 0L
+    private var speechEpoch = 0L
     private val executor = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private var lastAnalysis = 0L
+    private var lastState = 0L
     private var roll = 0.0
     private var motion = 0.0
     private var lastGravity: FloatArray? = null
+    private var motionAvailable = false
     private val faceDetector = FaceDetection.getClient(FaceDetectorOptions.Builder()
         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
         .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL).enableTracking().build())
@@ -66,6 +88,16 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     override fun onAttachedToEngine(b: FlutterPlugin.FlutterPluginBinding) {
         context = b.applicationContext; events = CameraEvents(b.binaryMessenger)
         CameraHostApi.setUp(b.binaryMessenger, this)
+        orientationListener = object : OrientationEventListener(context) {
+            override fun onOrientationChanged(orientation: Int) {
+                val current = previewView?.display?.rotation ?: return
+                if (!active || current == displayRotation) return
+                displayRotation = current
+                captureUseCase?.targetRotation = current
+                analysisUseCase?.targetRotation = current
+                previewUseCase?.targetRotation = current
+            }
+        }
         b.platformViewRegistry.registerViewFactory("dali/camera", object : PlatformViewFactory(null) {
             override fun create(ctx: Context, id: Int, args: Any?): PlatformView {
                 val view = PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FIT_CENTER
@@ -94,6 +126,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         stop(); binding?.removeRequestPermissionsResultListener(this); binding?.removeActivityResultListener(this)
         pendingStart?.invoke(Result.failure(IllegalStateException("Activity detached"))); pendingStart = null
         pendingPicker?.invoke(Result.failure(IllegalStateException("Picker interrupted"))); pendingPicker = null
+        pendingSave?.second?.invoke(Result.failure(IllegalStateException("Save interrupted; original retained"))); pendingSave = null
         binding = null; activity = null
     }
     override fun start(front: Boolean, callback: (Result<CameraSnapshot>) -> Unit) {
@@ -109,28 +142,50 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 if (epoch != generation) throw IllegalStateException("Session superseded")
                 provider = future.get(); provider!!.unbindAll()
                 val rotation = previewView?.display?.rotation ?: android.view.Surface.ROTATION_0
-                val preview = Preview.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3).setTargetRotation(rotation).build()
+                displayRotation = rotation
+                focusDistance = null; lockedState = false
+                val previewBuilder = Preview.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3).setTargetRotation(rotation)
+                Camera2Interop.Extender(previewBuilder).setSessionCaptureCallback(object : CameraCaptureSession.CaptureCallback() {
+                    override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+                        focusDistance = result.get(CaptureResult.LENS_FOCUS_DISTANCE)
+                    }
+                })
+                val preview = previewBuilder.build()
+                previewUseCase = preview
                 previewView?.let { preview.setSurfaceProvider(it.surfaceProvider) }
                 captureUseCase = ImageCapture.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3)
                     .setTargetRotation(rotation).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build()
                 val analysis = ImageAnalysis.Builder().setTargetResolution(Size(640, 480)).setTargetRotation(rotation)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
+                analysisUseCase = analysis
                 analysis.setAnalyzer(executor) { image -> analyze(image, epoch) }
                 camera = provider!!.bindToLifecycle(host as LifecycleOwner,
                     if (front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA,
                     preview, captureUseCase, analysis)
                 active = true; config = UUID.randomUUID().toString()
+                orientationListener?.enable()
                 val sensors = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-                sensors.getDefaultSensor(Sensor.TYPE_GRAVITY)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
+                val gravityAvailable = sensors.getDefaultSensor(Sensor.TYPE_GRAVITY)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) } ?: false
+                val accelerationAvailable = sensors.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) } ?: false
+                motionAvailable = gravityAvailable && accelerationAvailable
                 callback(Result.success(snapshot())); events.state(snapshot()) {}
             } catch (e: Exception) { active = false; callback(Result.failure(e)) }
         }, ContextCompat.getMainExecutor(context))
     }
     override fun stop() {
         generation++; active = false; provider?.unbindAll(); camera = null; captureUseCase = null
+        analysisUseCase = null; previewUseCase = null; orientationListener?.disable()
+        speechEpoch++; listening = false; speech?.destroy(); speech = null
         (context.getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(this)
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray): Boolean {
+        if (requestCode == 704) {
+            val request = pendingSave; pendingSave = null
+            if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) request?.let { save(it.first, it.second) }
+            else request?.second?.invoke(Result.failure(SecurityException("Photos storage permission denied; original retained")))
+            return true
+        }
+        if (requestCode == 703) return true
         if (requestCode != 701) return false
         val completion = pendingStart; pendingStart = null
         if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) completion?.let { start(front, it) }
@@ -140,18 +195,38 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private fun snapshot(): CameraSnapshot {
         val exposure = camera?.cameraInfo?.exposureState
         val step = exposure?.exposureCompensationStep?.toDouble() ?: 0.0
+        val camera2 = camera?.let { Camera2CameraInfo.from(it.cameraInfo) }
+        val lockSupported = camera2?.getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE) == true &&
+            camera2.getCameraCharacteristic(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.contains(CaptureRequest.CONTROL_AF_MODE_OFF) == true && focusDistance != null
         return CameraSnapshot(active, front, config, aspect,
             (exposure?.exposureCompensationRange?.lower ?: 0) * step,
             (exposure?.exposureCompensationRange?.upper ?: 0) * step,
-            (exposure?.exposureCompensationIndex ?: 0) * step, false, false)
+            (exposure?.exposureCompensationIndex ?: 0) * step, lockSupported, lockedState)
     }
-    override fun setControls(configurationId: String, ev: Double, locked: Boolean): CameraSnapshot {
-        check(config == configurationId && active) { "Camera changed; refresh controls" }
-        check(!locked) { "Focus/exposure lock unavailable" }
-        val cam = camera!!; val state = cam.cameraInfo.exposureState
-        if (state.isExposureCompensationSupported) cam.cameraControl.setExposureCompensationIndex(
-            (ev / state.exposureCompensationStep.toDouble()).roundToInt().coerceIn(state.exposureCompensationRange.lower, state.exposureCompensationRange.upper))
-        return snapshot()
+    override fun setControls(configurationId: String, ev: Double, locked: Boolean, callback: (Result<CameraSnapshot>) -> Unit) {
+        try {
+            check(config == configurationId && active) { "Camera changed; refresh controls" }
+            check(!locked || snapshot().supportsLock) { "Focus/exposure lock unavailable" }
+            val cam = camera!!; val state = cam.cameraInfo.exposureState
+            val index = if (state.isExposureCompensationSupported) (ev / state.exposureCompensationStep.toDouble()).roundToInt()
+                .coerceIn(state.exposureCompensationRange.lower, state.exposureCompensationRange.upper) else 0
+            val options = CaptureRequestOptions.Builder().setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, locked)
+                .setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, if (locked) CaptureRequest.CONTROL_AF_MODE_OFF else CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+            if (locked) options.setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, focusDistance!!)
+            val controlFuture = Camera2CameraControl.from(cam.cameraControl).setCaptureRequestOptions(options.build())
+            controlFuture.addListener({
+                try {
+                    controlFuture.get()
+                    if (state.isExposureCompensationSupported) {
+                        val exposureFuture = cam.cameraControl.setExposureCompensationIndex(index)
+                        exposureFuture.addListener({
+                            try { exposureFuture.get(); check(config == configurationId) { "Camera changed" }; lockedState = locked; callback(Result.success(snapshot())) }
+                            catch (e: Exception) { callback(Result.failure(e)) }
+                        }, ContextCompat.getMainExecutor(context))
+                    } else { lockedState = locked; callback(Result.success(snapshot())) }
+                } catch (e: Exception) { callback(Result.failure(e)) }
+            }, ContextCompat.getMainExecutor(context))
+        } catch (e: Exception) { callback(Result.failure(e)) }
     }
     @androidx.annotation.OptIn(ExperimentalGetImage::class)
     private fun analyze(proxy: ImageProxy, epoch: Long) {
@@ -160,6 +235,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         val media = proxy.image ?: run { proxy.close(); return }
         lastAnalysis = now
         val rotation = proxy.imageInfo.rotationDegrees
+        if (camera?.cameraInfo?.getSensorRotationDegrees(displayRotation) != rotation) { proxy.close(); return }
         val width = if (rotation % 180 == 0) proxy.width else proxy.height
         val height = if (rotation % 180 == 0) proxy.height else proxy.width
         if (aspect != width.toDouble() / height) android.util.Log.i("DaliCamera", "Analysis image ${width}x${height}, rotation=$rotation, preview=${previewView?.width}x${previewView?.height}")
@@ -188,24 +264,35 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     val index = row * y.rowStride + col * y.pixelStride
                     if (index < buf.limit()) { sum += (buf.get(index).toInt() and 255) / 255.0; count++ }
                 }
-                val payload = JSONObject().put("configurationId", config).put("aspectRatio", aspect).put("people", people).put("faces", faceBoxes)
-                    .put("roll", roll).put("motion", motion).put("stable", motion < 0.08)
+                val payload = JSONObject().put("schemaVersion", 1).put("frameId", "$epoch:$now")
+                    .put("imageWidth", width).put("imageHeight", height).put("displayRotationDegrees", rotation).put("front", front)
+                    .put("motionStatus", if (motionAvailable) "valid" else "unsupported")
+                    .put("configurationId", config).put("aspectRatio", aspect).put("people", people).put("faces", faceBoxes)
+                    .put("roll", roll).put("motion", motion).put("stable", motion < 0.22)
                     .put("backgroundLuminance", if (count > 0) sum / count else JSONObject.NULL)
                     .put("peopleStatus", if (poseTask.isSuccessful) "valid" else "unavailable")
                     .put("faceStatus", if (faceTask.isSuccessful) "valid" else "unavailable")
                     .put("horizonStatus", "unsupported").put("openAreaStatus", "unsupported").put("timestamp", System.currentTimeMillis())
-                main.post { if (epoch == generation && active) events.analysis(payload.toString()) {} }
+                main.post {
+                    if (epoch == generation && active) {
+                        events.analysis(payload.toString()) {}
+                        if (now - lastState > 1000) { lastState = now; events.state(snapshot()) {} }
+                    }
+                }
             } finally { proxy.close() }
         }
     }
     override fun onSensorChanged(event: SensorEvent) {
         val values = event.values
+        if (event.sensor.type == Sensor.TYPE_LINEAR_ACCELERATION) {
+            motion = sqrt(values.sumOf { it.toDouble().pow(2) }) / 9.81
+            return
+        }
         val adjustment = when (previewView?.display?.rotation ?: 0) { 1 -> 90; 2 -> 180; 3 -> -90; else -> 0 }
         var degrees = atan2(-values[0].toDouble(), values[1].toDouble()) * 180 / PI - adjustment
         while (degrees > 180) degrees -= 360
         while (degrees < -180) degrees += 360
         roll = if (hypot(values[0].toDouble(), values[1].toDouble()) < 1.5) 0.0 else if (front) -degrees else degrees
-        lastGravity?.let { old -> motion = motion * 0.7 + sqrt(values.indices.sumOf { (values[it] - old[it]).toDouble().pow(2) }) / 9.81 * 0.3 }
         lastGravity = values.clone()
     }
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -217,8 +304,8 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         catch (e: Exception) { atomic.failWrite(stream); throw e }
     }
     override fun recover(): PhotoHandle? {
-        if (!pendingFile.exists()) return null
-        val json = JSONObject(pendingFile.readText()); val path = json.getString("path")
+        if (!pendingFile.exists() && !File(pendingFile.path + ".bak").exists()) return null
+        val json = JSONObject(String(android.util.AtomicFile(pendingFile).readFully())); val path = json.getString("path")
         check(File(path).exists()) { "Recovery original missing" }
         return PhotoHandle(path, json.getString("id"), true)
     }
@@ -241,15 +328,20 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         })
     }
     override fun save(photo: PhotoHandle, callback: (Result<Unit>) -> Unit) {
+        if (Build.VERSION.SDK_INT < 29 && ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            if (pendingSave != null) return callback(Result.failure(IllegalStateException("Save request busy")))
+            pendingSave = Pair(photo, callback); activity!!.requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 704); return
+        }
         executor.execute {
             var inserted: Uri? = null
             try {
-                val name = "Dali-${photo.id}.jpg"; val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                val extension = File(photo.path).extension.ifEmpty { "jpg" }
+                val name = "Dali-${photo.id}.$extension"; val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                 val existing = context.contentResolver.query(collection, arrayOf(MediaStore.Images.Media._ID),
                     "${MediaStore.Images.Media.DISPLAY_NAME} = ?", arrayOf(name), null)?.use { cursor ->
                     if (cursor.moveToFirst()) ContentUris.withAppendedId(collection, cursor.getLong(0)) else null }
                 val values = ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, name); put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    put(MediaStore.Images.Media.DISPLAY_NAME, name); put(MediaStore.Images.Media.MIME_TYPE, photo.mimeType ?: "image/jpeg")
                     if (Build.VERSION.SDK_INT >= 29) { put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Dali"); put(MediaStore.Images.Media.IS_PENDING, 1) }
                 }
                 val uri = existing ?: (context.contentResolver.insert(collection, values) ?: error("Gallery insert failed")).also { inserted = it }
@@ -267,7 +359,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         try {
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.dali.files", File(photo.path))
             activity!!.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                type = "image/jpeg"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); clipData = ClipData.newRawUri("Dali photo", uri)
+                type = photo.mimeType ?: "image/jpeg"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); clipData = ClipData.newRawUri("Dali photo", uri)
             }, "Share photo")); callback(Result.success(Unit))
         } catch (e: Exception) { callback(Result.failure(e)) }
     }
@@ -280,8 +372,11 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         val completion = pendingPicker; pendingPicker = null
         if (resultCode != Activity.RESULT_OK || data?.data == null) { completion?.invoke(Result.success(null)); return true }
         try {
-            val file = photoFile(); context.contentResolver.openInputStream(data.data!!)?.use { input -> file.outputStream().use { input.copyTo(it) } } ?: error("Cannot read selected photo")
-            completion?.invoke(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false)))
+            val mime = context.contentResolver.getType(data.data!!) ?: "image/jpeg"
+            val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "jpg"
+            val file = File(photoFile().parentFile, "${UUID.randomUUID()}.$extension")
+            context.contentResolver.openInputStream(data.data!!)?.use { input -> file.outputStream().use { input.copyTo(it) } } ?: error("Cannot read selected photo")
+            completion?.invoke(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false, mime)))
         } catch (e: Exception) { completion?.invoke(Result.failure(e)) }
         return true
     }
@@ -310,5 +405,43 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         }
     }
     override fun openSettings() { activity!!.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }
-    override fun setVoiceEnabled(enabled: Boolean, callback: (Result<Boolean>) -> Unit) { callback(Result.success(false)) }
+    override fun setVoiceEnabled(enabled: Boolean, callback: (Result<Boolean>) -> Unit) {
+        val epoch = ++speechEpoch
+        listening = false; speech?.destroy(); speech = null
+        if (!enabled || Build.VERSION.SDK_INT < 31 || !SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) { callback(Result.success(false)); return }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            activity!!.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 703)
+            callback(Result.failure(SecurityException("Allow microphone access, then enable voice shutter again"))); return
+        }
+        speech = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        speech!!.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+            override fun onError(error: Int) {
+                if (epoch != speechEpoch || !listening) return
+                if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED) {
+                    listening = false; events.error("speech", "Voice shutter unavailable for this permission or language") {}
+                } else if (listening && active) main.postDelayed({ listen() }, 1000)
+            }
+            override fun onResults(results: Bundle?) {
+                if (epoch != speechEpoch || !listening || !active) return
+                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.lowercase() ?: ""
+                val words = text.split(Regex("[^a-z]+")); val command = words.lastOrNull() == "cheese" || Regex("\\btake (a )?(photo|picture)\\b").containsMatchIn(text)
+                if (command && SystemClock.elapsedRealtime() - lastVoice > 3000) { lastVoice = SystemClock.elapsedRealtime(); events.voiceShutter() {} }
+                if (listening && active) main.postDelayed({ listen() }, 500)
+            }
+        })
+        listening = true; listen(); callback(Result.success(true))
+    }
+    private fun listen() {
+        if (listening && active) speech?.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+        })
+    }
 }

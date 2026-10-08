@@ -28,7 +28,11 @@ The first phone-testable build includes:
 
 ## Cross-Platform Port
 
-The proposed Flutter and native-adapter migration is documented in
+The Flutter application is now under `apps/dali_camera`. See
+[`docs/android_testing.md`](docs/android_testing.md) for building and testing it,
+and [`docs/cross_platform_parity.md`](docs/cross_platform_parity.md) for feature coverage.
+
+The Flutter and native-adapter migration is tracked in
 [`docs/dali_camera_cross_platform_port_plan.md`](docs/dali_camera_cross_platform_port_plan.md).
 
 ## Current Prototype Advice

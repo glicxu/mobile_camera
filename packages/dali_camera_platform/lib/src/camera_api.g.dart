@@ -125,6 +125,7 @@ class PhotoHandle {
     required this.path,
     required this.id,
     required this.unsaved,
+    this.mimeType,
   });
 
   String path;
@@ -133,11 +134,14 @@ class PhotoHandle {
 
   bool unsaved;
 
+  String? mimeType;
+
   List<Object?> _toList() {
     return <Object?>[
       path,
       id,
       unsaved,
+      mimeType,
     ];
   }
 
@@ -150,6 +154,7 @@ class PhotoHandle {
       path: result[0]! as String,
       id: result[1]! as String,
       unsaved: result[2]! as bool,
+      mimeType: result[3] as String?,
     );
   }
 

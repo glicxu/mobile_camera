@@ -13,6 +13,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     private let photoOutput = AVCapturePhotoOutput()
     private let motion = CMMotionManager()
     private let ci = CIContext()
+    private let speech = SpeechShutterService()
     private var events: CameraEvents!
     private var preview: CameraView?
     private var device: AVCaptureDevice?
@@ -34,6 +35,10 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     public static func register(with registrar: FlutterPluginRegistrar) {
         let plugin = DaliCameraPlatformPlugin()
         plugin.events = CameraEvents(binaryMessenger: registrar.messenger())
+        plugin.speech.onShutter = { [weak plugin] in
+            guard let plugin, plugin.active, !plugin.capturing else { return }
+            plugin.events.voiceShutter { _ in }
+        }
         CameraHostApiSetup.setUp(binaryMessenger: registrar.messenger(), api: plugin)
         registrar.register(CameraViewFactory(plugin: plugin), withId: "dali/camera")
     }
@@ -109,12 +114,12 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             } catch { self.active = false; DispatchQueue.main.async { completion(.failure(error)) } }
         }
     }
-    func stop() throws { active = false; generation = UUID(); motion.stopDeviceMotionUpdates(); queue.async { self.session.stopRunning() } }
+    func stop() throws { active = false; generation = UUID(); speech.stop(); motion.stopDeviceMotionUpdates(); queue.async { self.session.stopRunning() } }
     func capture(completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
         do {
             guard active, !capturing, try recover() == nil else { throw failure("Save or discard the retained original first") }
             capturing = true; captureCompletion = completion
-            queue.async { self.photoOutput.capturePhoto(with: AVCapturePhotoSettings(), delegate: self) }
+            queue.async { self.photoOutput.capturePhoto(with: AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg]), delegate: self) }
         } catch { completion(.failure(error)) }
     }
     public func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
@@ -125,7 +130,8 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 guard let bytes = photo.fileDataRepresentation() else { throw self.failure("No photo data") }
                 var handle = try self.newPhoto(); handle.unsaved = true
                 try bytes.write(to: URL(fileURLWithPath: handle.path), options: .atomic)
-                try JSONSerialization.data(withJSONObject: ["path": handle.path, "id": handle.id]).write(to: self.manifest, options: .atomic)
+                do { try JSONSerialization.data(withJSONObject: ["path": handle.path, "id": handle.id]).write(to: self.manifest, options: .atomic) }
+                catch { self.events.error(code: "recovery", message: "Original captured but relaunch recovery unavailable: \(error.localizedDescription)") { _ in } }
                 completion?(.success(handle))
             } catch { completion?(.failure(error)) }
         }
@@ -193,16 +199,20 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
     }
-    func setControls(configurationId: String, ev: Double, locked: Bool) throws -> CameraSnapshot {
-        guard active, configurationId == configuration, let device else { throw failure("Camera changed; refresh controls") }
-        try device.lockForConfiguration(); defer { device.unlockForConfiguration() }
-        device.setExposureTargetBias(Float(ev).clamped(device.minExposureTargetBias, device.maxExposureTargetBias), completionHandler: nil)
-        if device.isFocusModeSupported(locked ? .locked : .continuousAutoFocus) { device.focusMode = locked ? .locked : .continuousAutoFocus }
-        if device.isExposureModeSupported(locked ? .locked : .continuousAutoExposure) { device.exposureMode = locked ? .locked : .continuousAutoExposure }
-        return snapshot()
+    func setControls(configurationId: String, ev: Double, locked: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
+        queue.async {
+            do {
+                guard self.active, configurationId == self.configuration, let device = self.device else { throw self.failure("Camera changed; refresh controls") }
+                try device.lockForConfiguration(); defer { device.unlockForConfiguration() }
+                device.setExposureTargetBias(Float(ev).clamped(device.minExposureTargetBias, device.maxExposureTargetBias), completionHandler: nil)
+                if device.isFocusModeSupported(locked ? .locked : .continuousAutoFocus) { device.focusMode = locked ? .locked : .continuousAutoFocus }
+                if device.isExposureModeSupported(locked ? .locked : .continuousAutoExposure) { device.exposureMode = locked ? .locked : .continuousAutoExposure }
+                DispatchQueue.main.async { completion(.success(self.snapshot())) }
+            } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+        }
     }
     func openSettings() throws { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
-    func setVoiceEnabled(enabled: Bool, completion: @escaping (Result<Bool, Error>) -> Void) { completion(.success(false)) }
+    func setVoiceEnabled(enabled: Bool, completion: @escaping (Result<Bool, Error>) -> Void) { speech.setEnabled(enabled, completion: completion) }
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         let now = CFAbsoluteTimeGetCurrent(); guard active, now - lastFrame > 0.15, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         lastFrame = now; let epoch = generation
@@ -214,18 +224,35 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 return ["x": r.minX, "y": 1-r.maxY, "width": r.width, "height": r.height, "confidence": obs.confidence, "label": "detection"]
             }}
             aspect = Double(CVPixelBufferGetWidth(buffer)) / Double(CVPixelBufferGetHeight(buffer))
-            let data: [String: Any] = ["configurationId": configuration, "aspectRatio": aspect,
+            let data: [String: Any] = ["schemaVersion": 1, "frameId": "\(epoch):\(now)",
+                "imageWidth": CVPixelBufferGetWidth(buffer), "imageHeight": CVPixelBufferGetHeight(buffer),
+                "displayRotationDegrees": Int(rotation), "front": front,
+                "motionStatus": motion.isDeviceMotionAvailable ? "valid" : "unsupported",
+                "timestamp": Int(Date().timeIntervalSince1970 * 1000), "configurationId": configuration, "aspectRatio": aspect,
                 "people": boxes(people.results ?? []), "faces": boxes(faces.results ?? []), "roll": currentRoll,
-                "motion": currentMotion, "stable": currentMotion < 0.08, "peopleStatus": "valid", "faceStatus": "valid", "horizonStatus": "unsupported", "openAreaStatus": "unsupported"]
+                "motion": currentMotion, "stable": currentMotion < 0.22, "peopleStatus": "valid", "faceStatus": "valid", "horizonStatus": "unsupported", "openAreaStatus": "unsupported"]
             let json = String(data: try JSONSerialization.data(withJSONObject: data), encoding: .utf8)!
             DispatchQueue.main.async { if epoch == self.generation && self.active { self.events.analysis(json: json) { _ in } } }
         } catch { DispatchQueue.main.async { self.events.error(code: "analysis", message: error.localizedDescription) { _ in } } }
     }
     fileprivate func attach(_ view: CameraView) { preview = view; view.layer.session = session }
+    fileprivate func updateOrientation(_ orientation: UIInterfaceOrientation) {
+        let angle: CGFloat = orientation == .landscapeLeft ? 180 : orientation == .landscapeRight ? 0 : orientation == .portraitUpsideDown ? 270 : 90
+        guard active, angle != rotation else { return }
+        rotation = angle; generation = UUID()
+        if let connection = preview?.layer.connection, connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
+        queue.async {
+            for output in self.session.outputs {
+                if let connection = output.connection(with: .video), connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
+            }
+        }
+    }
 }
 private extension Float { func clamped(_ low: Float, _ high: Float) -> Float { min(high, max(low, self)) } }
 private final class PreviewContainer: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
+    var orientationChanged: ((UIInterfaceOrientation) -> Void)?
+    override func layoutSubviews() { super.layoutSubviews(); if let orientation = window?.windowScene?.interfaceOrientation { orientationChanged?(orientation) } }
 }
 private final class CameraView: NSObject, FlutterPlatformView {
     let container = PreviewContainer()
@@ -237,6 +264,8 @@ private final class CameraViewFactory: NSObject, FlutterPlatformViewFactory {
     let plugin: DaliCameraPlatformPlugin
     init(plugin: DaliCameraPlatformPlugin) { self.plugin = plugin }
     func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
-        let view = CameraView(frame: frame); plugin.attach(view); return view
+        let view = CameraView(frame: frame)
+        view.container.orientationChanged = { [weak plugin] orientation in plugin?.updateOrientation(orientation) }
+        plugin.attach(view); return view
     }
 }

@@ -1,7 +1,7 @@
 ﻿# Dali Camera Cross-Platform Implementation Plan
 
 Date: October 7, 2026
-Status: Ready to implement; Android application and native adapters are not implemented.
+Status: Implementation in progress. Shared catalogs, Flutter screens and Android/iOS service adapters are implemented for the first capture/review/export milestone. Remaining parity and validation are tracked in [feature coverage](cross_platform_parity.md); install instructions are in [Android testing](android_testing.md).
 Baseline: `da72a5d` on `main`.
 Targets: Android and iOS, using Flutter UI and the existing Dart core with native camera services.
 

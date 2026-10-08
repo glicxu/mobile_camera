@@ -194,6 +194,7 @@ struct PhotoHandle: Hashable {
   var path: String
   var id: String
   var unsaved: Bool
+  var mimeType: String? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -201,11 +202,13 @@ struct PhotoHandle: Hashable {
     let path = pigeonVar_list[0] as! String
     let id = pigeonVar_list[1] as! String
     let unsaved = pigeonVar_list[2] as! Bool
+    let mimeType: String? = nilOrValue(pigeonVar_list[3])
 
     return PhotoHandle(
       path: path,
       id: id,
-      unsaved: unsaved
+      unsaved: unsaved,
+      mimeType: mimeType
     )
   }
   func toList() -> [Any?] {
@@ -213,6 +216,7 @@ struct PhotoHandle: Hashable {
       path,
       id,
       unsaved,
+      mimeType,
     ]
   }
   static func == (lhs: PhotoHandle, rhs: PhotoHandle) -> Bool {
@@ -275,7 +279,7 @@ protocol CameraHostApi {
   func share(photo: PhotoHandle, completion: @escaping (Result<Void, Error>) -> Void)
   func pickPhoto(completion: @escaping (Result<PhotoHandle?, Error>) -> Void)
   func render(original: PhotoHandle, rotationDegrees: Double, crop: Bool, strength: Double, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
-  func setControls(configurationId: String, ev: Double, locked: Bool) throws -> CameraSnapshot
+  func setControls(configurationId: String, ev: Double, locked: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
   func openSettings() throws
   func setVoiceEnabled(enabled: Bool, completion: @escaping (Result<Bool, Error>) -> Void)
 }
@@ -435,11 +439,13 @@ class CameraHostApiSetup {
         let configurationIdArg = args[0] as! String
         let evArg = args[1] as! Double
         let lockedArg = args[2] as! Bool
-        do {
-          let result = try api.setControls(configurationId: configurationIdArg, ev: evArg, locked: lockedArg)
-          reply(wrapResult(result))
-        } catch {
-          reply(wrapError(error))
+        api.setControls(configurationId: configurationIdArg, ev: evArg, locked: lockedArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
         }
       }
     } else {

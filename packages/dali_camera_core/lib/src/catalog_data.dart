@@ -2,7 +2,7 @@
 const sharedCatalogJson = r'''
 {
   "schemaVersion": 1,
-  "sourceSha256": "8e0e0ec0fc931f1a6f21f3b47549d5dd204eaab942ef9453f12ce496105bb700",
+  "sourceSha256": "6ebd44c0a6eaa9b83636f8fabe0d10970b7ef2633a05f49f3b567bbb07e0d5a2",
   "posePackages": {
     "masculine": "Male / Masculine",
     "feminine": "Female / Feminine",
@@ -120,6 +120,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-relaxed-standing.jpg",
+      "sourceAssetSha256": "d64da27ed07844966a840d80e9c7e80a7b028964cd2995bc6e13cdbab2425d6f",
       "assetSha256": "d64da27ed07844966a840d80e9c7e80a7b028964cd2995bc6e13cdbab2425d6f"
     },
     {
@@ -145,6 +146,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-three-quarter.jpg",
+      "sourceAssetSha256": "215baa8ab74653ee00ebff2b5bae98588d94512417b4788fffbdfdddb8d8ba47",
       "assetSha256": "215baa8ab74653ee00ebff2b5bae98588d94512417b4788fffbdfdddb8d8ba47"
     },
     {
@@ -170,6 +172,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-hand-in-pocket.jpg",
+      "sourceAssetSha256": "7a000724df0d1ac38317058185aa42f4a30f91a7b528a92de713d4a7df992027",
       "assetSha256": "7a000724df0d1ac38317058185aa42f4a30f91a7b528a92de713d4a7df992027"
     },
     {
@@ -196,6 +199,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-seated-lean.jpg",
+      "sourceAssetSha256": "745488f6a0dea21ca3cc89a45bd01f654b9d5412d2f97244d15866cc6c118127",
       "assetSha256": "745488f6a0dea21ca3cc89a45bd01f654b9d5412d2f97244d15866cc6c118127"
     },
     {
@@ -222,6 +226,7 @@ const sharedCatalogJson = r'''
         "camera_unstable"
       ],
       "asset": "assets/catalog/pose-walking.jpg",
+      "sourceAssetSha256": "759abc83e0f34d73e4afbe1e3f3e2fb6ae9e4773556d339016a8658acc918c45",
       "assetSha256": "759abc83e0f34d73e4afbe1e3f3e2fb6ae9e4773556d339016a8658acc918c45"
     },
     {
@@ -247,6 +252,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-arms-crossed-masculine.jpg",
+      "sourceAssetSha256": "80974be8732488661d5818e26813ace09b06c140c323ed4ca6ff5d5c3aaf4ed6",
       "assetSha256": "80974be8732488661d5818e26813ace09b06c140c323ed4ca6ff5d5c3aaf4ed6"
     },
     {
@@ -272,6 +278,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-wall-lean-masculine.jpg",
+      "sourceAssetSha256": "66afff40a7de13ca46726ad1f3522171be9f02e30f3993b669123e4b3973a79f",
       "assetSha256": "66afff40a7de13ca46726ad1f3522171be9f02e30f3993b669123e4b3973a79f"
     },
     {
@@ -298,6 +305,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-seated-sideways-masculine.jpg",
+      "sourceAssetSha256": "30ca464e65255775404630c58219e6af8a339048dea3644e059a864843bd667e",
       "assetSha256": "30ca464e65255775404630c58219e6af8a339048dea3644e059a864843bd667e"
     },
     {
@@ -326,6 +334,7 @@ const sharedCatalogJson = r'''
         "face_turned_away"
       ],
       "asset": "assets/catalog/pose-look-away-masculine.jpg",
+      "sourceAssetSha256": "5a0939ea365e79e8b5d18f78dd48a69eae09d11501eb9ca4eb7d69433e3bf18e",
       "assetSha256": "5a0939ea365e79e8b5d18f78dd48a69eae09d11501eb9ca4eb7d69433e3bf18e"
     },
     {
@@ -351,6 +360,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-weight-shift.jpg",
+      "sourceAssetSha256": "d83343c581912f83373e499b45c4572baebb5a634e7eeadd6d70f16f4f2483ac",
       "assetSha256": "d83343c581912f83373e499b45c4572baebb5a634e7eeadd6d70f16f4f2483ac"
     },
     {
@@ -376,6 +386,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-foot-forward.jpg",
+      "sourceAssetSha256": "fd32c5f647a4b4c8ddc661972a7293d4538f1d20508bac99f3a6d1aec8f8bfe1",
       "assetSha256": "fd32c5f647a4b4c8ddc661972a7293d4538f1d20508bac99f3a6d1aec8f8bfe1"
     },
     {
@@ -401,6 +412,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-hand-at-waist.jpg",
+      "sourceAssetSha256": "2206893b59148f8684d3fa66b973e6bceddf06c2c5f4dd7cd610519a54fcc2be",
       "assetSha256": "2206893b59148f8684d3fa66b973e6bceddf06c2c5f4dd7cd610519a54fcc2be"
     },
     {
@@ -427,6 +439,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-seated-angle.jpg",
+      "sourceAssetSha256": "e3462a871dae01475b2d95ead1ffcfa8465a99dca051b5c088d913a950afb7d8",
       "assetSha256": "e3462a871dae01475b2d95ead1ffcfa8465a99dca051b5c088d913a950afb7d8"
     },
     {
@@ -455,6 +468,7 @@ const sharedCatalogJson = r'''
         "face_turned_away"
       ],
       "asset": "assets/catalog/pose-over-shoulder.jpg",
+      "sourceAssetSha256": "06e7f461bb32cb3c28866576d85c72d4dc8068283a7125e368e3d48db6f49fe9",
       "assetSha256": "06e7f461bb32cb3c28866576d85c72d4dc8068283a7125e368e3d48db6f49fe9"
     },
     {
@@ -480,6 +494,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-arms-crossed-feminine.jpg",
+      "sourceAssetSha256": "97378f9008f61d31f65df5f0e29ecbf8fc007686af34dd6ebda4baa1026fd7b8",
       "assetSha256": "97378f9008f61d31f65df5f0e29ecbf8fc007686af34dd6ebda4baa1026fd7b8"
     },
     {
@@ -505,6 +520,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-wall-lean-feminine.jpg",
+      "sourceAssetSha256": "655699fd63be305e26e756614f24a39566d66b1064a890bb91df973b54f8a320",
       "assetSha256": "655699fd63be305e26e756614f24a39566d66b1064a890bb91df973b54f8a320"
     },
     {
@@ -531,6 +547,7 @@ const sharedCatalogJson = r'''
         "camera_unstable"
       ],
       "asset": "assets/catalog/pose-walking-turn-feminine.jpg",
+      "sourceAssetSha256": "1bf1a3abf044f38b11a46d8760e74512a8d0251a947f1cdc18df522f149d23ff",
       "assetSha256": "1bf1a3abf044f38b11a46d8760e74512a8d0251a947f1cdc18df522f149d23ff"
     },
     {
@@ -557,6 +574,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-seated-sideways-feminine.jpg",
+      "sourceAssetSha256": "2496c4146d9135c22c23e6ecaf954ec150e6e91d5ff95616918e02bc0ef5616e",
       "assetSha256": "2496c4146d9135c22c23e6ecaf954ec150e6e91d5ff95616918e02bc0ef5616e"
     },
     {
@@ -582,6 +600,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-hair-sweep-feminine.jpg",
+      "sourceAssetSha256": "16dc5f96eb19c1390c8c9701a06053814f454aca65bfce56cd5c1142695ee10f",
       "assetSha256": "16dc5f96eb19c1390c8c9701a06053814f454aca65bfce56cd5c1142695ee10f"
     },
     {
@@ -607,6 +626,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-hand-near-cheek-feminine.jpg",
+      "sourceAssetSha256": "4e2d5abe94df2ae255c1c6afdf9911c122e1f59d322e3468d5247a4025c425a9",
       "assetSha256": "4e2d5abe94df2ae255c1c6afdf9911c122e1f59d322e3468d5247a4025c425a9"
     },
     {
@@ -632,6 +652,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-arm-across-waist-feminine.jpg",
+      "sourceAssetSha256": "f3667bf3c0e1847098cade9ef2ffb44c6a629009c31952841f069c14cf4dac74",
       "assetSha256": "f3667bf3c0e1847098cade9ef2ffb44c6a629009c31952841f069c14cf4dac74"
     },
     {
@@ -657,6 +678,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-hands-clasped-feminine.jpg",
+      "sourceAssetSha256": "7ea7cf294d75789afac716097cdb16707abc0e11705ffc62e6d827ef9c0a061f",
       "assetSha256": "7ea7cf294d75789afac716097cdb16707abc0e11705ffc62e6d827ef9c0a061f"
     },
     {
@@ -682,6 +704,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-couple-close-standing.jpg",
+      "sourceAssetSha256": "fad3f3bfbcf94f45ac7d93761aeca03e67ec906e5f5b7976292b9c996d742f67",
       "assetSha256": "fad3f3bfbcf94f45ac7d93761aeca03e67ec906e5f5b7976292b9c996d742f67"
     },
     {
@@ -707,6 +730,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-couple-arm-around-waist.jpg",
+      "sourceAssetSha256": "b219c83a84f6ff414074519b4f7e2623b3d183a93a116e21c9343ed07346a988",
       "assetSha256": "b219c83a84f6ff414074519b4f7e2623b3d183a93a116e21c9343ed07346a988"
     },
     {
@@ -732,6 +756,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-couple-back-to-back.jpg",
+      "sourceAssetSha256": "2df862aaff2c528eea5fadf13373c613829c80389c9b0e13f5a5ca03b43978b3",
       "assetSha256": "2df862aaff2c528eea5fadf13373c613829c80389c9b0e13f5a5ca03b43978b3"
     },
     {
@@ -758,6 +783,7 @@ const sharedCatalogJson = r'''
         "camera_unstable"
       ],
       "asset": "assets/catalog/pose-couple-walking.jpg",
+      "sourceAssetSha256": "08edbee081f3ddfbd3ef41d20d65baa33f1935bba15decbd8e5ffeed42a3903c",
       "assetSha256": "08edbee081f3ddfbd3ef41d20d65baa33f1935bba15decbd8e5ffeed42a3903c"
     },
     {
@@ -784,6 +810,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-couple-seated.jpg",
+      "sourceAssetSha256": "3278b108f757111548c68fd872907b9ea11e8a71667eabc2b6901f42e33e4f4f",
       "assetSha256": "3278b108f757111548c68fd872907b9ea11e8a71667eabc2b6901f42e33e4f4f"
     },
     {
@@ -809,6 +836,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-couple-forehead-touch.jpg",
+      "sourceAssetSha256": "de34e1a54f1bd1157c9f329f02fe5befb000b299db9c3c2f1c9b5523d7ad3955",
       "assetSha256": "de34e1a54f1bd1157c9f329f02fe5befb000b299db9c3c2f1c9b5523d7ad3955"
     },
     {
@@ -834,6 +862,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-group-shoulder-row.jpg",
+      "sourceAssetSha256": "9aa96ee4b2d1214aca5d46af0b8320e8f63f550a8ea094c3b109ea58e1bae968",
       "assetSha256": "9aa96ee4b2d1214aca5d46af0b8320e8f63f550a8ea094c3b109ea58e1bae968"
     },
     {
@@ -859,6 +888,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-group-staggered.jpg",
+      "sourceAssetSha256": "8578247433ccf7a0d3006a3b44fca1deec79694fb5b07ba4b25609cbd3343181",
       "assetSha256": "8578247433ccf7a0d3006a3b44fca1deec79694fb5b07ba4b25609cbd3343181"
     },
     {
@@ -885,6 +915,7 @@ const sharedCatalogJson = r'''
         "camera_unstable"
       ],
       "asset": "assets/catalog/pose-group-linked-walk.jpg",
+      "sourceAssetSha256": "ffaa2ffd9abb6df83b73129f21590a58d5a9c548e044c3a21794d0c464f1779a",
       "assetSha256": "ffaa2ffd9abb6df83b73129f21590a58d5a9c548e044c3a21794d0c464f1779a"
     },
     {
@@ -911,6 +942,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-group-seated-cluster.jpg",
+      "sourceAssetSha256": "dfa5ae44b6b5d2cb69be8dee8afcb678520663428b4278d9bca15a4e9b9c9dc7",
       "assetSha256": "dfa5ae44b6b5d2cb69be8dee8afcb678520663428b4278d9bca15a4e9b9c9dc7"
     },
     {
@@ -936,6 +968,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-group-celebration.jpg",
+      "sourceAssetSha256": "b2ecc930eccbf1819537f7cb641da08c528bb739107283b39c8d4653d42aa6fc",
       "assetSha256": "b2ecc930eccbf1819537f7cb641da08c528bb739107283b39c8d4653d42aa6fc"
     },
     {
@@ -961,6 +994,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-group-conversation.jpg",
+      "sourceAssetSha256": "3a8df2a8a3afb6aae7c7f6f20d9e044d6815ebbe2b4eade26110c9734c5b02b3",
       "assetSha256": "3a8df2a8a3afb6aae7c7f6f20d9e044d6815ebbe2b4eade26110c9734c5b02b3"
     },
     {
@@ -986,6 +1020,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-family-standing-row.jpg",
+      "sourceAssetSha256": "e2614ed9d7be26d2ea96c0fe985d2e9e75d9daf6335672284e1e1c3dcf43e342",
       "assetSha256": "e2614ed9d7be26d2ea96c0fe985d2e9e75d9daf6335672284e1e1c3dcf43e342"
     },
     {
@@ -1011,6 +1046,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-family-side-hug.jpg",
+      "sourceAssetSha256": "06662a1ceb8e90ef1f5facff9f59dff9a39c769b3cc4400569ff5601fb8d8769",
       "assetSha256": "06662a1ceb8e90ef1f5facff9f59dff9a39c769b3cc4400569ff5601fb8d8769"
     },
     {
@@ -1037,6 +1073,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-family-seated-cluster.jpg",
+      "sourceAssetSha256": "3a8c9ad9cc464a0d5263f7164444ea56bc0948f734f4190d6592ca2b1ae8e3e8",
       "assetSha256": "3a8c9ad9cc464a0d5263f7164444ea56bc0948f734f4190d6592ca2b1ae8e3e8"
     },
     {
@@ -1063,6 +1100,7 @@ const sharedCatalogJson = r'''
         "camera_unstable"
       ],
       "asset": "assets/catalog/pose-family-walking.jpg",
+      "sourceAssetSha256": "77dd9413265a2dd7bd0222596c812a5eeb7593f04e1584476697cb18dabe2e16",
       "assetSha256": "77dd9413265a2dd7bd0222596c812a5eeb7593f04e1584476697cb18dabe2e16"
     },
     {
@@ -1089,6 +1127,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-family-generations.jpg",
+      "sourceAssetSha256": "7636a67ff234a6a9eb3c114a7c79d48b963d7b26195312a73f325fdf09c7acf9",
       "assetSha256": "7636a67ff234a6a9eb3c114a7c79d48b963d7b26195312a73f325fdf09c7acf9"
     },
     {
@@ -1114,6 +1153,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-family-shared-laugh.jpg",
+      "sourceAssetSha256": "e00473f4aeec87f4904e427e0aa0902a763e4caeea52b8533dcf4d4a5314e5da",
       "assetSha256": "e00473f4aeec87f4904e427e0aa0902a763e4caeea52b8533dcf4d4a5314e5da"
     },
     {
@@ -1139,6 +1179,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-graduation-diploma-centered.jpg",
+      "sourceAssetSha256": "21acfb5d78a79a2876b4a6cdd077e65eaf4c28cd15ab325eda48f5b6a010581e",
       "assetSha256": "21acfb5d78a79a2876b4a6cdd077e65eaf4c28cd15ab325eda48f5b6a010581e"
     },
     {
@@ -1164,6 +1205,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-graduation-adjust-cap.jpg",
+      "sourceAssetSha256": "0328a858c6d91bcefbd775662fe9b8205a718f23d9abdd0caf8d6d3d9e223cbd",
       "assetSha256": "0328a858c6d91bcefbd775662fe9b8205a718f23d9abdd0caf8d6d3d9e223cbd"
     },
     {
@@ -1190,6 +1232,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-graduation-seated.jpg",
+      "sourceAssetSha256": "e0294c9d1c32a7887562737b74b0244e9c48bc1f669a3a2a93c334c53da7cbdb",
       "assetSha256": "e0294c9d1c32a7887562737b74b0244e9c48bc1f669a3a2a93c334c53da7cbdb"
     },
     {
@@ -1216,6 +1259,7 @@ const sharedCatalogJson = r'''
         "camera_unstable"
       ],
       "asset": "assets/catalog/pose-graduation-walk.jpg",
+      "sourceAssetSha256": "9eadc5078861b1a062bdbd82fdea4b594691cd7b2106eec0b9ad16a5fefda481",
       "assetSha256": "9eadc5078861b1a062bdbd82fdea4b594691cd7b2106eec0b9ad16a5fefda481"
     },
     {
@@ -1244,6 +1288,7 @@ const sharedCatalogJson = r'''
         "face_turned_away"
       ],
       "asset": "assets/catalog/pose-graduation-over-shoulder.jpg",
+      "sourceAssetSha256": "4a333b31506342df55af4ad8774cd1a04a163f57d8196e77c4a19190c2156473",
       "assetSha256": "4a333b31506342df55af4ad8774cd1a04a163f57d8196e77c4a19190c2156473"
     },
     {
@@ -1270,6 +1315,7 @@ const sharedCatalogJson = r'''
         "camera_unstable"
       ],
       "asset": "assets/catalog/pose-graduation-cap-toss.jpg",
+      "sourceAssetSha256": "a69f0b8e022af41b21a32a85168b0eec5fedec91223153630a0bef7473bb805c",
       "assetSha256": "a69f0b8e022af41b21a32a85168b0eec5fedec91223153630a0bef7473bb805c"
     },
     {
@@ -1295,6 +1341,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-maternity-belly-cradle.jpg",
+      "sourceAssetSha256": "f0a237e9f5f0e7888759739af769c7572197847a8d87a56dcdc442b02bc49296",
       "assetSha256": "f0a237e9f5f0e7888759739af769c7572197847a8d87a56dcdc442b02bc49296"
     },
     {
@@ -1323,6 +1370,7 @@ const sharedCatalogJson = r'''
         "face_turned_away"
       ],
       "asset": "assets/catalog/pose-maternity-side-profile.jpg",
+      "sourceAssetSha256": "c04aaff48c6d6699d82ee83acd7c9a32564a953027543910ae1f183d27cd5eb3",
       "assetSha256": "c04aaff48c6d6699d82ee83acd7c9a32564a953027543910ae1f183d27cd5eb3"
     },
     {
@@ -1349,6 +1397,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-maternity-seated-support.jpg",
+      "sourceAssetSha256": "0465ed7b8f332d1b29047d15c55d0a4c360905b78ba37b7003b87e18e018d937",
       "assetSha256": "0465ed7b8f332d1b29047d15c55d0a4c360905b78ba37b7003b87e18e018d937"
     },
     {
@@ -1374,6 +1423,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-maternity-husband-embrace.jpg",
+      "sourceAssetSha256": "7754fe51130c99d2a63468c8152dca39e77286b952bbb49faf50c888a7efcda9",
       "assetSha256": "7754fe51130c99d2a63468c8152dca39e77286b952bbb49faf50c888a7efcda9"
     },
     {
@@ -1400,6 +1450,7 @@ const sharedCatalogJson = r'''
         "camera_unstable"
       ],
       "asset": "assets/catalog/pose-maternity-husband-walk.jpg",
+      "sourceAssetSha256": "206f6f7b70d16075dab8ad9ad40c04c0b4ec7712f5357753bda8c0639d6e6daa",
       "assetSha256": "206f6f7b70d16075dab8ad9ad40c04c0b4ec7712f5357753bda8c0639d6e6daa"
     },
     {
@@ -1425,6 +1476,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-maternity-husband-face-to-face.jpg",
+      "sourceAssetSha256": "ecb995fd4ba835afdfc970e266fa6a8b8a880f29c2d9c7f83b22c8380c8d9e6a",
       "assetSha256": "ecb995fd4ba835afdfc970e266fa6a8b8a880f29c2d9c7f83b22c8380c8d9e6a"
     },
     {
@@ -1450,6 +1502,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-kids-big-smile.jpg",
+      "sourceAssetSha256": "c412776e69e822585a4ba03334285fbb58303013034476774a079ea98ae1111e",
       "assetSha256": "c412776e69e822585a4ba03334285fbb58303013034476774a079ea98ae1111e"
     },
     {
@@ -1476,6 +1529,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-kids-comfortable-seated.jpg",
+      "sourceAssetSha256": "bcd312e39f89bbe5d6a9887cc7a9eadd201299978e3378684cf564c421f70c03",
       "assetSha256": "bcd312e39f89bbe5d6a9887cc7a9eadd201299978e3378684cf564c421f70c03"
     },
     {
@@ -1502,6 +1556,7 @@ const sharedCatalogJson = r'''
         "camera_unstable"
       ],
       "asset": "assets/catalog/pose-kids-slow-walk.jpg",
+      "sourceAssetSha256": "8d2071a1e3c9b91d21c5398d4429478782bbbab3bb81e101dc1e6757e48ff546",
       "assetSha256": "8d2071a1e3c9b91d21c5398d4429478782bbbab3bb81e101dc1e6757e48ff546"
     },
     {
@@ -1530,6 +1585,7 @@ const sharedCatalogJson = r'''
         "face_turned_away"
       ],
       "asset": "assets/catalog/pose-kids-peek-around.jpg",
+      "sourceAssetSha256": "8640ed502572d2ea8a0c6c622f2a868d8031dd4aa9b631993fd182a2acb2a59c",
       "assetSha256": "8640ed502572d2ea8a0c6c622f2a868d8031dd4aa9b631993fd182a2acb2a59c"
     },
     {
@@ -1555,6 +1611,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-kids-superhero.jpg",
+      "sourceAssetSha256": "4db44ed96ad1f945b75e6e33ec6e036b1a9ff2e4b46144725de5cd1328f345ff",
       "assetSha256": "4db44ed96ad1f945b75e6e33ec6e036b1a9ff2e4b46144725de5cd1328f345ff"
     },
     {
@@ -1580,6 +1637,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-kids-sibling-side-hug.jpg",
+      "sourceAssetSha256": "9df8493ac2a8ef4bef6e5c1366c2217e8d25bf643f6ec6632ded7d525215f300",
       "assetSha256": "9df8493ac2a8ef4bef6e5c1366c2217e8d25bf643f6ec6632ded7d525215f300"
     },
     {
@@ -1605,6 +1663,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-newborn-safe-back.jpg",
+      "sourceAssetSha256": "94af4f58a5baa0bad3744d8184fa930e0d22294d19de7d4eb9f7fbcf0eacc0a4",
       "assetSha256": "94af4f58a5baa0bad3744d8184fa930e0d22294d19de7d4eb9f7fbcf0eacc0a4"
     },
     {
@@ -1630,6 +1689,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-newborn-caregiver-nearby.jpg",
+      "sourceAssetSha256": "a751558abc8a4cd6aa64e6c2c9eb68ebb800f90a5c91da679dd187b587e1c4ba",
       "assetSha256": "a751558abc8a4cd6aa64e6c2c9eb68ebb800f90a5c91da679dd187b587e1c4ba"
     },
     {
@@ -1656,6 +1716,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-newborn-seated-cradle.jpg",
+      "sourceAssetSha256": "e4bea22437c801c25dc8ef0c4ae51fe6c2376f0b3ddb3156e434cf756bb2d151",
       "assetSha256": "e4bea22437c801c25dc8ef0c4ae51fe6c2376f0b3ddb3156e434cf756bb2d151"
     },
     {
@@ -1682,6 +1743,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-newborn-shoulder-support.jpg",
+      "sourceAssetSha256": "df60c89bf238f7e7a7f5ef3fc0d0369189b09b43ea2a353d03d7b76b6f5ab13b",
       "assetSha256": "df60c89bf238f7e7a7f5ef3fc0d0369189b09b43ea2a353d03d7b76b6f5ab13b"
     },
     {
@@ -1708,6 +1770,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-newborn-parents-seated.jpg",
+      "sourceAssetSha256": "7c70d938a765fb92ac3f5577c50f6c47d2cab4e17818cc50f9a3565d773ebd80",
       "assetSha256": "7c70d938a765fb92ac3f5577c50f6c47d2cab4e17818cc50f9a3565d773ebd80"
     },
     {
@@ -1733,6 +1796,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-newborn-hands-feet-detail.jpg",
+      "sourceAssetSha256": "0950bcd616d132eb2750968b3489d8361c7a22e41ad339cd0d3fc7a849010bb3",
       "assetSha256": "0950bcd616d132eb2750968b3489d8361c7a22e41ad339cd0d3fc7a849010bb3"
     },
     {
@@ -1758,6 +1822,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-professional-classic-headshot.jpg",
+      "sourceAssetSha256": "1a7ee73a601ca929d3072fa9dfc8cebe7420f1a6b9ba89e51a6ff744cdb5c949",
       "assetSha256": "1a7ee73a601ca929d3072fa9dfc8cebe7420f1a6b9ba89e51a6ff744cdb5c949"
     },
     {
@@ -1783,6 +1848,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-professional-three-quarter.jpg",
+      "sourceAssetSha256": "439468a8da3765f6c0a1d9cd1074f81a5873099b5926f9218bb3768def9a7068",
       "assetSha256": "439468a8da3765f6c0a1d9cd1074f81a5873099b5926f9218bb3768def9a7068"
     },
     {
@@ -1809,6 +1875,7 @@ const sharedCatalogJson = r'''
         "feet_cropped"
       ],
       "asset": "assets/catalog/pose-professional-seated-forward.jpg",
+      "sourceAssetSha256": "d66770288dd44698978a294ed10e3368ac4fa4ddd5c5897f0dabafbd02def09a",
       "assetSha256": "d66770288dd44698978a294ed10e3368ac4fa4ddd5c5897f0dabafbd02def09a"
     },
     {
@@ -1834,6 +1901,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-professional-arms-crossed.jpg",
+      "sourceAssetSha256": "7d027951351bd1cfaabd808415bae79df3fa0c76dbbedaf192b14c11e52c61fb",
       "assetSha256": "7d027951351bd1cfaabd808415bae79df3fa0c76dbbedaf192b14c11e52c61fb"
     },
     {
@@ -1859,6 +1927,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-professional-open-standing.jpg",
+      "sourceAssetSha256": "596ca9dcbc56a3e4fc9c7802a0918561d6409799674375cf5cae0168c638750e",
       "assetSha256": "596ca9dcbc56a3e4fc9c7802a0918561d6409799674375cf5cae0168c638750e"
     },
     {
@@ -1884,6 +1953,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-professional-environmental.jpg",
+      "sourceAssetSha256": "1067942f370d11eb3f49e978331cc8204257e838f76cfe4697b128be325c8f08",
       "assetSha256": "1067942f370d11eb3f49e978331cc8204257e838f76cfe4697b128be325c8f08"
     },
     {
@@ -1909,6 +1979,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-wedding-formal-side-by-side.jpg",
+      "sourceAssetSha256": "325a165ec19047aef7a52b13978d89df5c51ff9e1600c7d86e84db152928b916",
       "assetSha256": "325a165ec19047aef7a52b13978d89df5c51ff9e1600c7d86e84db152928b916"
     },
     {
@@ -1934,6 +2005,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-wedding-ring-reveal.jpg",
+      "sourceAssetSha256": "2288a73fd55aa55c5c4cdd63d27c59b65dc8f4196747bb0e151b5c568eee803a",
       "assetSha256": "2288a73fd55aa55c5c4cdd63d27c59b65dc8f4196747bb0e151b5c568eee803a"
     },
     {
@@ -1962,6 +2034,7 @@ const sharedCatalogJson = r'''
         "face_turned_away"
       ],
       "asset": "assets/catalog/pose-wedding-proposal-reaction.jpg",
+      "sourceAssetSha256": "b0b274d11d3d0de5275c6a6cabdad388c7451a95b659ac202f37e5fc5c9519ab",
       "assetSha256": "af032583b1a15db3033f242e8301db5707677590967560cbe5ef6eaa15323c63"
     },
     {
@@ -1987,6 +2060,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-wedding-ring-exchange.jpg",
+      "sourceAssetSha256": "39200d8c855cd1b0ac56e3d56d1450b876ec5fbc69807a9eb88501649c0f23d5",
       "assetSha256": "6a56fc98cfe2e77b5bc7d75f23b4bd6a06b4e6ff737d9d3089bc2fbe0cb70f5c"
     },
     {
@@ -2012,6 +2086,7 @@ const sharedCatalogJson = r'''
         "arm_hidden"
       ],
       "asset": "assets/catalog/pose-wedding-first-dance.jpg",
+      "sourceAssetSha256": "1183f045fcfdb286bf2003fb58c78ef8dd5ff27a0427a6d155a7c96a955fd0b7",
       "assetSha256": "1183f045fcfdb286bf2003fb58c78ef8dd5ff27a0427a6d155a7c96a955fd0b7"
     },
     {
@@ -2038,6 +2113,7 @@ const sharedCatalogJson = r'''
         "camera_unstable"
       ],
       "asset": "assets/catalog/pose-wedding-celebration-walk.jpg",
+      "sourceAssetSha256": "78a5a4bb4dacb4f6ca6b9e621ea1bb6e2057104e2790351a99b4b580ba6d5658",
       "assetSha256": "78a5a4bb4dacb4f6ca6b9e621ea1bb6e2057104e2790351a99b4b580ba6d5658"
     },
     {
@@ -2057,6 +2133,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-mountain-trail.jpg",
+      "sourceAssetSha256": "7448b64e0c4604a4e196d37dda5d534a220d37a7a747db2f78b03fb84aca9351",
       "assetSha256": "7448b64e0c4604a4e196d37dda5d534a220d37a7a747db2f78b03fb84aca9351"
     },
     {
@@ -2076,6 +2153,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-mountain-ridges.jpg",
+      "sourceAssetSha256": "8c8a1fbf6699fd85b234b0d88aa7d2ecf47a36883ee383688151a57695ec689e",
       "assetSha256": "8c8a1fbf6699fd85b234b0d88aa7d2ecf47a36883ee383688151a57695ec689e"
     },
     {
@@ -2095,6 +2173,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-mountain-peak-sky.jpg",
+      "sourceAssetSha256": "5d991a190bf7d02a9d7d7d4c49fc98b01a41f5a7d9b5670d71a8028a2fdba047",
       "assetSha256": "5d991a190bf7d02a9d7d7d4c49fc98b01a41f5a7d9b5670d71a8028a2fdba047"
     },
     {
@@ -2114,6 +2193,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-mountain-valley.jpg",
+      "sourceAssetSha256": "71d1d5ed684da6be988862cc7df40a3daabf778feb11bce90b189252b03c0b7c",
       "assetSha256": "71d1d5ed684da6be988862cc7df40a3daabf778feb11bce90b189252b03c0b7c"
     },
     {
@@ -2133,6 +2213,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-mountain-scale.jpg",
+      "sourceAssetSha256": "e5af124ac375270998ce19e9a03c8347dca655f8275d1baef8157fbe3426e294",
       "assetSha256": "e5af124ac375270998ce19e9a03c8347dca655f8275d1baef8157fbe3426e294"
     },
     {
@@ -2152,6 +2233,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-mountain-detail.jpg",
+      "sourceAssetSha256": "29b9cfbc4e915a1e5256e21a3d4bdbc34b3faa188922a555d2d1089b4b5872b5",
       "assetSha256": "29b9cfbc4e915a1e5256e21a3d4bdbc34b3faa188922a555d2d1089b4b5872b5"
     },
     {
@@ -2171,6 +2253,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-lake-reflection.jpg",
+      "sourceAssetSha256": "37070a2d6963bfd1fdd531f31f6214d8f055ce053d2fce58c5b325ca41522f8b",
       "assetSha256": "37070a2d6963bfd1fdd531f31f6214d8f055ce053d2fce58c5b325ca41522f8b"
     },
     {
@@ -2190,6 +2273,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-lake-rocks.jpg",
+      "sourceAssetSha256": "7b6187b86f8c2624ee1c03a8bff5522ab73b9d202f1de2368a0f3c0a3de36474",
       "assetSha256": "7b6187b86f8c2624ee1c03a8bff5522ab73b9d202f1de2368a0f3c0a3de36474"
     },
     {
@@ -2209,6 +2293,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-lake-shoreline.jpg",
+      "sourceAssetSha256": "5480e69ab30254ce4ad6211e71409c9f8b283eae22607a02ff20cff37c310acc",
       "assetSha256": "5480e69ab30254ce4ad6211e71409c9f8b283eae22607a02ff20cff37c310acc"
     },
     {
@@ -2228,6 +2313,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-lake-minimal.jpg",
+      "sourceAssetSha256": "8410486f8acb5ad4141eafba0c21cb03d21653dba0bb922f04876edcc8cc6a80",
       "assetSha256": "8410486f8acb5ad4141eafba0c21cb03d21653dba0bb922f04876edcc8cc6a80"
     },
     {
@@ -2247,6 +2333,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-lake-reeds.jpg",
+      "sourceAssetSha256": "8130d1a4dd639b389dbd2cb02d4c1c6b38c33b37e7efd59228883b68c675111a",
       "assetSha256": "8130d1a4dd639b389dbd2cb02d4c1c6b38c33b37e7efd59228883b68c675111a"
     },
     {
@@ -2266,6 +2353,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-lake-ripples.jpg",
+      "sourceAssetSha256": "3a65108601eef8000f9bf2f22597e408bc8e08ee916e750f65430ef0bf92523e",
       "assetSha256": "3a65108601eef8000f9bf2f22597e408bc8e08ee916e750f65430ef0bf92523e"
     },
     {
@@ -2285,6 +2373,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plain-path.jpg",
+      "sourceAssetSha256": "f801e1eb8439c829bc1d64abe7f8a341a04a0f133c8f72d023daef4e65f54320",
       "assetSha256": "f801e1eb8439c829bc1d64abe7f8a341a04a0f133c8f72d023daef4e65f54320"
     },
     {
@@ -2304,6 +2393,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plain-sky.jpg",
+      "sourceAssetSha256": "206182985cf72c142583e662605795398dfbe938810b095023c634d5b7863cbe",
       "assetSha256": "206182985cf72c142583e662605795398dfbe938810b095023c634d5b7863cbe"
     },
     {
@@ -2323,6 +2413,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plain-rows.jpg",
+      "sourceAssetSha256": "7280668bb9627a0eccd67f624f08676965e6aedaec410e07b3fad2d8eeb54c9e",
       "assetSha256": "7280668bb9627a0eccd67f624f08676965e6aedaec410e07b3fad2d8eeb54c9e"
     },
     {
@@ -2342,6 +2433,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plain-tree.jpg",
+      "sourceAssetSha256": "b55da5fda85d4bc02576fce96345b92676b3997e0de350eacc219cb29be3c75f",
       "assetSha256": "b55da5fda85d4bc02576fce96345b92676b3997e0de350eacc219cb29be3c75f"
     },
     {
@@ -2361,6 +2453,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plain-foreground.jpg",
+      "sourceAssetSha256": "c3e573345c3c8a04036fc68b3417301ee9b772b722b5bc55bfa0ee3f75af6da4",
       "assetSha256": "c3e573345c3c8a04036fc68b3417301ee9b772b722b5bc55bfa0ee3f75af6da4"
     },
     {
@@ -2380,6 +2473,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plain-layers.jpg",
+      "sourceAssetSha256": "b301f16262b0ef962288ceb5ecf028aedefa12348f9a777a552756380e6e08eb",
       "assetSha256": "b301f16262b0ef962288ceb5ecf028aedefa12348f9a777a552756380e6e08eb"
     },
     {
@@ -2399,6 +2493,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plant-garden-path.jpg",
+      "sourceAssetSha256": "3f93a0c86f77c7699f2aab3eb248ea26b9e23346f9df2d11ebda3a0a30cc7f48",
       "assetSha256": "3f93a0c86f77c7699f2aab3eb248ea26b9e23346f9df2d11ebda3a0a30cc7f48"
     },
     {
@@ -2418,6 +2513,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plant-portrait.jpg",
+      "sourceAssetSha256": "92497bd9afd3f2b8a6e28a6c28691b879afc3624817e8c833bde390ad044395a",
       "assetSha256": "92497bd9afd3f2b8a6e28a6c28691b879afc3624817e8c833bde390ad044395a"
     },
     {
@@ -2437,6 +2533,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plant-backlit.jpg",
+      "sourceAssetSha256": "2e4bd183d7f5bd8d3bc63dc5d5a67f45e0e9cbc2b63460fb42d6290e6a3c2f89",
       "assetSha256": "2e4bd183d7f5bd8d3bc63dc5d5a67f45e0e9cbc2b63460fb42d6290e6a3c2f89"
     },
     {
@@ -2456,6 +2553,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plant-pattern.jpg",
+      "sourceAssetSha256": "c600cd35011df41501257cc3343b1fd428722a150a76bf836005696744ccd726",
       "assetSha256": "c600cd35011df41501257cc3343b1fd428722a150a76bf836005696744ccd726"
     },
     {
@@ -2475,6 +2573,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plant-foliage.jpg",
+      "sourceAssetSha256": "2d65b70e50f913e57fee6dc08bb0f0354f65eae940b9e0f67edd2ebdbe2be5a5",
       "assetSha256": "2d65b70e50f913e57fee6dc08bb0f0354f65eae940b9e0f67edd2ebdbe2be5a5"
     },
     {
@@ -2494,6 +2593,7 @@ const sharedCatalogJson = r'''
       "recipient": "Photographer",
       "conflicts": [],
       "asset": "assets/catalog/landscape-plant-detail.jpg",
+      "sourceAssetSha256": "07f448cafb9c6c1a50d2050753f72c72ba56c9162800d73d3a4e4f6e75a9730b",
       "assetSha256": "07f448cafb9c6c1a50d2050753f72c72ba56c9162800d73d3a4e4f6e75a9730b"
     }
   ]
