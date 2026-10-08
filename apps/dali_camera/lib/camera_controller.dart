@@ -25,6 +25,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   PhotoHandle? original;
   PhotoHandle? selected;
   bool busy = false;
+  bool takingPhoto = false;
+  int capturedPhotoSequence = 0;
   bool reviewing = false;
   bool starting = false;
   bool foreground = true;
@@ -417,6 +419,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   }) async {
     if (fromSequence ? !_captureReady : !canCapture) return;
     busy = true;
+    takingPhoto = true;
     message = 'Taking photo…';
     notifyListeners();
     final captureTimer = Stopwatch()..start();
@@ -435,6 +438,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       final prior = selected;
       original = await host.capture();
       recordStage('camera');
+      takingPhoto = false;
+      capturedPhotoSequence++;
       if (prior != null &&
           prior.id != history.firstOrNull?.id &&
           !history.any((p) => p.id == prior.id)) {
@@ -489,6 +494,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     } catch (e) {
       message = 'Photo could not be completed: $e';
     } finally {
+      takingPhoto = false;
       busy = false;
       notifyListeners();
     }

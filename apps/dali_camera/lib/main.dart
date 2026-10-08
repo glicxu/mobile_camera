@@ -1,3 +1,4 @@
+import 'capture_feedback.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:dali_camera_core/dali_camera_core.dart';
@@ -235,7 +236,11 @@ class _CameraScreenState extends State<CameraScreen>
                     : () => cameraSheet(openPhotoLibrary),
               ),
               Semantics(
-                label: 'Take photo',
+                label: camera.takingPhoto
+                    ? 'Taking photo'
+                    : camera.busy
+                    ? 'Photo processing'
+                    : 'Take photo',
                 button: true,
                 child: SizedBox(
                   width: 76,
@@ -255,32 +260,30 @@ class _CameraScreenState extends State<CameraScreen>
                         foregroundColor: Colors.black,
                         padding: EdgeInsets.zero,
                       ),
-                      child: camera.busy
-                          ? const CircularProgressIndicator()
-                          : SizedBox(
-                              width: 60,
-                              height: 60,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.black.withValues(alpha: .35),
-                                    width: 3,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: camera.timerSeconds > 0
-                                      ? Text(
-                                          '${camera.timerSeconds}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                              ),
+                      child: SizedBox(
+                        width: 60,
+                        height: 60,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.black.withValues(alpha: .35),
+                              width: 3,
                             ),
+                          ),
+                          child: Center(
+                            child: camera.timerSeconds > 0
+                                ? Text(
+                                    '${camera.timerSeconds}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -479,6 +482,7 @@ class _CameraScreenState extends State<CameraScreen>
                       camera.countdown == 0 &&
                       !camera.bursting)
                     ManualPreviewControls(camera: camera),
+                  CaptureFeedback(sequence: camera.capturedPhotoSequence),
                 ],
               ),
             ),

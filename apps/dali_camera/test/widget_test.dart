@@ -1,3 +1,4 @@
+import 'package:dali_camera/capture_feedback.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:dali_camera/main.dart';
@@ -177,6 +178,20 @@ class FakeHost extends CameraHostApi {
   }
 }
 
+class DelayedCaptureHost extends FakeHost {
+  final captureReply = Completer<PhotoHandle>();
+  final savingStarted = Completer<void>();
+  final finishSaving = Completer<void>();
+  @override
+  Future<PhotoHandle> capture() => captureReply.future;
+  @override
+  Future<void> save(PhotoHandle photo) async {
+    savingStarted.complete();
+    await finishSaving.future;
+    await super.save(photo);
+  }
+}
+
 class DelayedEffectsHost extends FakeHost {
   final renderingStarted = Completer<void>();
   final finishRendering = Completer<void>();
@@ -219,6 +234,85 @@ class ManualHost extends FakeHost {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets(
+    'Successful capture flashes before saving finishes without spinning shutter',
+    (tester) async {
+      final host = DelayedCaptureHost();
+      final camera = CameraController(host: host, register: false);
+      await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+      await tester.pumpAndSettle();
+      camera.watermark = false;
+      camera.beautifier = 'off';
+      camera.filter = 'off';
+      final capture = camera.capturePhoto(review: false);
+      await tester.pump();
+      expect(camera.takingPhoto, isTrue);
+      expect(camera.capturedPhotoSequence, 0);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      host.captureReply.complete(
+        PhotoHandle(path: 'fixture.jpg', id: 'capture-ack', unsaved: true),
+      );
+      await host.savingStarted.future;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(camera.takingPhoto, isFalse);
+      expect(camera.busy, isTrue);
+      expect(camera.capturedPhotoSequence, 1);
+      expect(find.text('Photo taken'), findsOneWidget);
+      expect(
+        tester.widget<Opacity>(find.byKey(const Key('captureFlash'))).opacity,
+        greaterThan(0),
+      );
+      expect(
+        tester.widget<FilledButton>(find.byKey(const Key('shutter'))).onPressed,
+        isNull,
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(
+        tester.widget<Opacity>(find.byKey(const Key('captureFlash'))).opacity,
+        0,
+      );
+      host.finishSaving.complete();
+      await capture;
+      await tester.pumpAndSettle();
+      expect(find.text('Photo taken'), findsNothing);
+    },
+  );
+  test(
+    'Failed capture does not acknowledge a photo and resets capture state',
+    () async {
+      final host = DelayedCaptureHost();
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      final capture = camera.capturePhoto();
+      host.captureReply.completeError(StateError('Camera capture failed'));
+      await capture;
+      expect(camera.capturedPhotoSequence, 0);
+      expect(camera.takingPhoto, isFalse);
+      expect(camera.busy, isFalse);
+      camera.dispose();
+    },
+  );
+  testWidgets('Reduced motion uses Photo taken confirmation without flashing', (
+    tester,
+  ) async {
+    Widget feedback(int sequence) => MaterialApp(
+      home: Scaffold(
+        body: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: CaptureFeedback(sequence: sequence),
+        ),
+      ),
+    );
+    await tester.pumpWidget(feedback(0));
+    await tester.pumpWidget(feedback(1));
+    await tester.pump();
+    expect(find.text('Photo taken'), findsOneWidget);
+    expect(find.byKey(const Key('captureFlash')), findsNothing);
+    await tester.pumpAndSettle();
+    expect(find.text('Photo taken'), findsNothing);
+  });
+
   test(
     'Captured original is visible while effects finish and capture stays guarded',
     () async {

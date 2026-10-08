@@ -250,9 +250,14 @@ void main() {
       expect(camera.guidance.entry!.kind, 'food');
       camera.filter = 'fresh';
       camera.watermark = true;
+      final priorCaptureSequence = camera.capturedPhotoSequence;
       camera.timerSeconds = 3;
       await camera.requestShutter();
       expect(camera.reviewing, isFalse);
+      expect(camera.capturedPhotoSequence, priorCaptureSequence + 1);
+      expect(camera.takingPhoto, isFalse);
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(camera.original!.unsaved, isFalse);
       expect(camera.styled, isTrue, reason: camera.message);
       expect(camera.selected!.id, isNot(camera.original!.id));
