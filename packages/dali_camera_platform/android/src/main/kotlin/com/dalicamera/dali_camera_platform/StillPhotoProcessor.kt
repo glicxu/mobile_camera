@@ -23,6 +23,7 @@ internal class StillPhotoProcessor : AutoCloseable {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }; BitmapFactory.decodeFile(path, bounds)
         check(bounds.outWidth > 0 && bounds.outHeight > 0) { "Cannot decode photo" }
         val options = BitmapFactory.Options().apply {
+            inSampleSize = 1
             if (bounded) while (max(bounds.outWidth, bounds.outHeight) / inSampleSize > 1400) inSampleSize *= 2
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }

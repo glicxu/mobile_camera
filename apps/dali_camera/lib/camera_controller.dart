@@ -604,8 +604,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       if (original?.id == source.id && result['sourceId'] == source.id) {
         if (result['imageWidth'] != null) {
           final measured = NativeFrame(result);
-          if (measured.poseAnalysis != null)
+          if (measured.poseAnalysis != null) {
             result['poseAnalysis'] = measured.poseAnalysis!.toJson();
+          }
           result['issues'] = engine
               .issues(
                 measured.measurements,
@@ -1099,8 +1100,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (_depthUpdating ||
         current == null ||
         reviewing ||
-        lastFrame?['configurationId'] != current.configurationId)
+        lastFrame?['configurationId'] != current.configurationId) {
       return;
+    }
     _depthUpdating = true;
     try {
       Map? subject;
