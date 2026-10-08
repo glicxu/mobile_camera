@@ -43,6 +43,7 @@ class _CameraScreenState extends State<CameraScreen>
     with WidgetsBindingObserver {
   late final CameraController camera;
   bool compare = false;
+  bool initialized = false;
   Orientation? orientation;
   @override
   void initState() {
@@ -77,7 +78,10 @@ class _CameraScreenState extends State<CameraScreen>
         await preferences.setBool('welcomeSeen', true);
       }
     }
-    if (mounted) await camera.initialize();
+    if (mounted) {
+      initialized = true;
+      await camera.initialize();
+    }
   }
 
   void refresh() {
@@ -88,7 +92,7 @@ class _CameraScreenState extends State<CameraScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       camera.foreground = true;
-      camera.start();
+      if (initialized) camera.start();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       camera.foreground = false;
@@ -417,6 +421,7 @@ class _CameraScreenState extends State<CameraScreen>
                       height: MediaQuery.sizeOf(context).height * .42,
                       child: Image.file(
                         File(photo.path),
+                        cacheWidth: 1600,
                         fit: BoxFit.contain,
                         semanticLabel: compare
                             ? 'Original photo'
@@ -656,8 +661,9 @@ class _CameraScreenState extends State<CameraScreen>
     context: context,
     useSafeArea: true,
     isScrollControlled: true,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, update) {
+    builder: (ctx) => AnimatedBuilder(
+      animation: camera,
+      builder: (ctx, _) {
         final snapshot = camera.snapshot;
         return SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -680,13 +686,11 @@ class _CameraScreenState extends State<CameraScreen>
                   max: snapshot.maximumEV,
                   onChanged: (v) async {
                     await camera.controls(v, snapshot.locked);
-                    update(() {});
                   },
                 ),
                 TextButton(
                   onPressed: () async {
                     await camera.controls(0, false);
-                    update(() {});
                   },
                   child: const Text('Return to Auto'),
                 ),
@@ -697,7 +701,6 @@ class _CameraScreenState extends State<CameraScreen>
                   value: snapshot!.locked,
                   onChanged: (v) async {
                     await camera.controls(snapshot.currentEV, v);
-                    update(() {});
                   },
                 ),
               SwitchListTile(
@@ -706,7 +709,6 @@ class _CameraScreenState extends State<CameraScreen>
                 onChanged: (v) {
                   camera.debug = v;
                   refresh();
-                  update(() {});
                 },
               ),
               SwitchListTile(
@@ -717,7 +719,6 @@ class _CameraScreenState extends State<CameraScreen>
                 value: camera.voice,
                 onChanged: (v) async {
                   await camera.setVoice(v);
-                  update(() {});
                 },
               ),
               TextButton(

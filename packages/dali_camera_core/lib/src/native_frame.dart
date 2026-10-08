@@ -26,6 +26,11 @@ class NativeFrame {
 
     final people = boxes('people', 'peopleStatus');
     final faces = boxes('faces', 'faceStatus');
+    DetectorState detector(Measured<List<DetectionBox>> value) => value.isUsable
+        ? DetectorState.ready
+        : value.status == MeasurementStatus.unsupported
+        ? DetectorState.unsupported
+        : DetectorState.unavailable;
     frame = FrameAnalysis(
       frameId: json['frameId'] as String,
       timestamp: DateTime.fromMillisecondsSinceEpoch(
@@ -60,14 +65,7 @@ class NativeFrame {
               ),
             )
           : const Measured.unsupported(),
-      detectorStatus: {
-        'people': people.isUsable
-            ? DetectorState.ready
-            : DetectorState.unavailable,
-        'faces': faces.isUsable
-            ? DetectorState.ready
-            : DetectorState.unavailable,
-      },
+      detectorStatus: {'people': detector(people), 'faces': detector(faces)},
     );
   }
   late final String configurationId;

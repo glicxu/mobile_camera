@@ -103,7 +103,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 val view = PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FIT_CENTER
                     implementationMode = PreviewView.ImplementationMode.COMPATIBLE }
                 previewView = view
-                if (active) start(front) {}
+                previewUseCase?.setSurfaceProvider(view.surfaceProvider)
                 return object : PlatformView {
                     override fun getView(): View = view
                     override fun dispose() { if (previewView === view) previewView = null }

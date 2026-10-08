@@ -343,7 +343,10 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   @override
   void state(CameraSnapshot value) {
-    if (!reviewing && foreground) {
+    if (!reviewing &&
+        foreground &&
+        !starting &&
+        snapshot?.configurationId == value.configurationId) {
       snapshot = value;
       aspectRatio = value.aspectRatio;
       notifyListeners();
