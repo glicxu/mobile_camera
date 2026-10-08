@@ -34,7 +34,7 @@ class ManualCameraTools extends StatelessWidget {
             onChanged: camera.controlBusy
                 ? null
                 : (auto) =>
-                      auto ? camera.returnAuto() : camera.manual(seconds, iso),
+                      auto ? camera.returnAuto(stayInManual: true) : camera.manual(seconds, iso),
           ),
           Text(
             'Tv ${seconds < 1 ? '1/${(1 / seconds).round()}' : seconds.toStringAsFixed(1)}s · ISO ${iso.round()}',

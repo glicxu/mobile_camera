@@ -57,6 +57,7 @@ void main() {
           'SOAK: ${soak.elapsed.inSeconds}s, $receivedUpdates fresh one-second samples',
         );
       }
+      await tester.ensureVisible(find.text('Posture packages'));
       await tester.tap(find.text('Posture packages'));
       await tester.pumpAndSettle();
       expect(find.text('Male / Masculine'), findsOneWidget);

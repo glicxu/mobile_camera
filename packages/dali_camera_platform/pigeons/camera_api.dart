@@ -24,10 +24,17 @@ class CameraSnapshot {
     required this.currentEV,
     required this.supportsLock,
     required this.locked,
-    this.minimumZoom, this.maximumZoom, this.currentZoom,
-    this.supportsTap, this.minimumISO, this.maximumISO,
-    this.minimumShutter, this.maximumShutter, this.currentISO,
-    this.currentShutter, this.manualExposure,
+    this.minimumZoom,
+    this.maximumZoom,
+    this.currentZoom,
+    this.supportsTap,
+    this.minimumISO,
+    this.maximumISO,
+    this.minimumShutter,
+    this.maximumShutter,
+    this.currentISO,
+    this.currentShutter,
+    this.manualExposure,
   });
   bool ready;
   bool front;
@@ -89,8 +96,13 @@ abstract class CameraHostApi {
   @async
   CameraSnapshot setControls(String configurationId, double ev, bool locked);
   @async
-  PhotoHandle renderStyle(PhotoHandle original, List<double> matrix,
-      double softness, double detail, String? watermarkPath);
+  PhotoHandle renderStyle(
+    PhotoHandle original,
+    List<double> matrix,
+    double softness,
+    double detail,
+    String? watermarkPath,
+  );
   void setVoicePhrase(String phrase);
   void releasePhoto(PhotoHandle photo);
   @async
@@ -98,7 +110,11 @@ abstract class CameraHostApi {
   @async
   CameraSnapshot meter(String configurationId, double x, double y);
   @async
-  CameraSnapshot setManualExposure(String configurationId, double? seconds, double? iso);
+  CameraSnapshot setManualExposure(
+    String configurationId,
+    double? seconds,
+    double? iso,
+  );
   void openSettings();
   @async
   bool setVoiceEnabled(bool enabled);

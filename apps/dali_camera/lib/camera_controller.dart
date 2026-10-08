@@ -595,12 +595,12 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   Future<void> manual(double seconds, double iso) => _control(
     (current) => host.setManualExposure(current.configurationId, seconds, iso),
   );
-  Future<void> returnAuto() async {
+  Future<void> returnAuto({bool stayInManual = false}) async {
     await _control(
       (current) => host.setManualExposure(current.configurationId, null, null),
     );
     if (snapshot?.manualExposure != true) {
-      manualWorkspace = false;
+      manualWorkspace = stayInManual;
       focusX = null;
       focusY = null;
     }

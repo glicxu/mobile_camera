@@ -16,7 +16,7 @@ open ios/Runner.xcworkspace
 
 Select the Runner scheme and your connected iPhone. Set your development team under Signing & Capabilities, enable Developer Mode if prompted, and Run. The development bundle ID is `com.dalicamera.daliCamera`; change it locally if your team needs a unique ID. CI's unsigned app validates compilation and cannot be installed directly.
 
-Build the reference from the root `DaliCamera.xcodeproj` with its DaliCamera scheme. Both apps can coexist. Do not uninstall either app while it contains an unsaved original.
+Build the reference from the root `DaliCamera.xcodeproj` with its DaliCamera scheme. When installing the native app on Alayna?s iPhone, follow the dedicated manual-signing instructions in [AGENTS.md](../AGENTS.md); that profile is for the native bundle ID and cannot sign the separate Flutter bundle. Both apps can coexist. Do not uninstall either app while it contains an unsaved original.
 
 ## Comparison needed before further calibration
 
@@ -33,4 +33,6 @@ Record the iPhone model, iOS version and source commit. Use the same scene and l
 
 Send the model/OS, commit, failing step and a preview/output comparison when alignment differs. This evidence is needed to accept M4 and set meaningful detector and enhancement tolerances for M5.
 
-The current Flutter build offers basic framing, tilt/stability, all 100 catalog references and original/crop review. Rich pose/face/horizon measurements, other situation modes, and native beautify/reframe/level parity remain tracked in [feature coverage](cross_platform_parity.md).
+The current Flutter build offers basic framing, tilt/stability, all 106 catalog references, recent originals, timer/burst, filters/watermark review copies, tap focus/zoom and supported manual shutter/ISO. Rich pose/face/horizon measurements, other situation modes, and native beautify/reframe/level parity remain tracked in [feature coverage](cross_platform_parity.md).
+
+Follow the additional Food, timer/burst, filter/watermark and Manual checks in [main sync testing](cross_platform_main_sync.md#phone-test-additions).

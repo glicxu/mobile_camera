@@ -22,6 +22,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     private var captureCompletion: ((Result<PhotoHandle, Error>) -> Void)?
     private var pickerCompletion: ((Result<PhotoHandle?, Error>) -> Void)?
     private var lastFrame = CFAbsoluteTimeGetCurrent()
+    private var lastState = CFAbsoluteTimeGetCurrent()
     private var currentRoll = 0.0
     private var currentMotion = 0.0
     private var active = false
@@ -233,7 +234,8 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 ])
                 if softness > 0 { image = image.clampedToExtent().applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: min(5, softness) * 0.3]).cropped(to: extent) }
                 if detail > 0 { image = image.applyingFilter("CIUnsharpMask", parameters: [kCIInputRadiusKey: 2, kCIInputIntensityKey: min(5, detail) * 0.08]).cropped(to: extent) }
-                if let watermarkPath, var mark = CIImage(contentsOf: URL(fileURLWithPath: watermarkPath)) {
+                if let watermarkPath {
+                    guard var mark = CIImage(contentsOf: URL(fileURLWithPath: watermarkPath)) else { throw self.failure("Cannot load watermark") }
                     let scale = extent.width * 0.28 / mark.extent.width
                     mark = mark.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
                     let margin = max(18, extent.width * 0.025)
@@ -325,7 +327,12 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 "people": boxes(people.results ?? []), "faces": boxes(faces.results ?? []), "roll": currentRoll,
                 "motion": currentMotion, "stable": currentMotion < 0.22, "peopleStatus": "valid", "faceStatus": "valid", "horizonStatus": "unsupported", "openAreaStatus": "unsupported"]
             let json = String(data: try JSONSerialization.data(withJSONObject: data), encoding: .utf8)!
-            DispatchQueue.main.async { if epoch == self.generation && self.active { self.events.analysis(json: json) { _ in } } }
+            DispatchQueue.main.async {
+                if epoch == self.generation && self.active {
+                    self.events.analysis(json: json) { _ in }
+                    if now - self.lastState > 1 { self.lastState = now; self.events.state(snapshot: self.snapshot()) { _ in } }
+                }
+            }
         } catch { DispatchQueue.main.async { self.events.error(code: "analysis", message: error.localizedDescription) { _ in } } }
     }
     fileprivate func attach(_ view: CameraView) { preview = view; view.layer.session = session }
@@ -341,8 +348,8 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         }
     }
 }
-private extension CGFloat { func clamped(_ low: CGFloat, _ high: CGFloat) -> CGFloat { min(high, max(low, self)) } }
-private extension Float { func clamped(_ low: Float, _ high: Float) -> Float { min(high, max(low, self)) } }
+private extension CGFloat { func clamped(_ low: CGFloat, _ high: CGFloat) -> CGFloat { Swift.min(high, Swift.max(low, self)) } }
+private extension Float { func clamped(_ low: Float, _ high: Float) -> Float { Swift.min(high, Swift.max(low, self)) } }
 private final class PreviewContainer: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
     var orientationChanged: ((UIInterfaceOrientation) -> Void)?
