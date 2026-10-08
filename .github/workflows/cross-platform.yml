@@ -103,7 +103,15 @@ jobs:
           xcrun simctl bootstatus "$DEVICE_ID" -b
       - name: Apply pinned Flutter simulator log-readiness fix
         run: python3 tools/patch_flutter_simulator_logs.py
+      - name: Seed disposable simulator Photos library
+        timeout-minutes: 5
+        run: |
+          flutter build ios --simulator --debug
+          xcrun simctl install "$DEVICE_ID" build/ios/iphonesimulator/Runner.app
+          xcrun simctl privacy "$DEVICE_ID" grant photos com.dalicamera.daliCamera
+          xcrun simctl addmedia "$DEVICE_ID" assets/catalog/pose-relaxed-standing.jpg
+        working-directory: apps/dali_camera
       - name: Native Flutter bridge on iPhone simulator
         timeout-minutes: 10
-        run: flutter test integration_test/bridge_test.dart -d "$DEVICE_ID" --verbose
+        run: flutter test integration_test/bridge_test.dart -d "$DEVICE_ID" --dart-define=DALI_TEST_LIBRARY=true --verbose
         working-directory: apps/dali_camera

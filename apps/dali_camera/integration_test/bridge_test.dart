@@ -28,6 +28,35 @@ void main() {
       source.lengthInBytes,
     );
     await file.writeAsBytes(bytes, flush: true);
+    if (const bool.fromEnvironment('DALI_TEST_LIBRARY')) {
+      final library = await host.listPhotoLibrary();
+      expect(library.status, 'authorized');
+      expect(
+        library.photos,
+        hasLength(1),
+        reason:
+            'Disposable simulator is seeded with one public repository fixture',
+      );
+      final copy = await host.loadLibraryPhoto(library.photos.single.id);
+      expect(copy.unsaved, isFalse);
+      expect(
+        await File(copy.path).readAsBytes(),
+        orderedEquals(bytes),
+        reason: 'Library import must preserve original provider bytes',
+      );
+      await host.releasePhoto(copy);
+      expect(File(copy.path).existsSync(), isFalse);
+      expect(
+        (await host.listPhotoLibrary()).photos,
+        hasLength(1),
+        reason: 'Private cleanup must not delete a Photos asset',
+      );
+      await expectLater(
+        host.loadLibraryPhoto('missing-library-asset'),
+        throwsA(isA<PlatformException>()),
+      );
+    }
+
     final original = PhotoHandle(
       path: file.path,
       id: 'fixture',
