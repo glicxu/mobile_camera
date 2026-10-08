@@ -1,410 +1,210 @@
-# Dali Camera Cross-Platform Port Plan
+﻿# Dali Camera Cross-Platform Implementation Plan
 
-**Status:** Draft for review
-**Primary target:** iOS and Android
-**Recommended application framework:** Flutter
-**Companion docs:** `docs/dali_camera.md`, `docs/dali_camera_implementation_plan.md`
-**Purpose:** Move Dali Camera to a shared application architecture while preserving native-quality camera, detection, sensor, and image-processing behavior.
+Date: October 7, 2026
+Status: Ready to implement; Android application and native adapters are not implemented.
+Baseline: `da72a5d` on `main`.
+Targets: Android and iOS, using Flutter UI and the existing Dart core with native camera services.
 
----
+## Outcome and scope
 
-## 1. Objective
+Deliver an installable Android development build first, then an equivalent Flutter-based iPhone build. Preserve the existing native iOS app throughout migration. The first Android handoff includes preview, capture, review, save/share, recovery, and basic live coaching. Full parity adds the current catalogs, camera controls, voice shutter, and enhancement workflow.
 
-Create an Android version without building and maintaining two independent products.
+This plan replaces the earlier draft. Planned features in the product documents are not automatically part of migration: reproduce implemented behavior first. Store publication, automatic pose verification, new package recommendations, advanced manual controls, RAW/ProRAW, and new beautification features are outside this implementation scope.
 
-The port should:
+Companion references: [posture packages](posture_packages.md), [landscape packages](landscape_packages.md), [camera controls](camera_control.md), and [current iPhone testing](phone_testing.md).
 
-- keep the current iOS prototype usable during migration,
-- share coaching behavior, application state, UI, logging, and tests,
-- retain native camera performance and reliable on-device analysis,
-- produce comparable measurements and advice on iPhone and Android,
-- allow most future product work to be implemented once.
+## Current state
 
-The target steady-state code split is:
+| Area | Existing implementation | Remaining work |
+| --- | --- | --- |
+| Native app | SwiftUI, AVFoundation, Vision, CoreMotion, Photos, Core Image | Extract services for Flutter; implement Android equivalents |
+| Shared core | `packages/dali_camera_core`: frame contract, coaching, geometry, guidance, recovery/export state | Update to current native behavior and establish parity fixtures |
+| Shared validation | 20 Dart tests and clean analysis at the baseline review | These tests do not establish Android hardware support or full current Swift parity |
+| People catalog | 76 poses across 11 collections, reference images, cues, angles, lighting and context | Dart still has the original 10 poses; migrate all current metadata and assets |
+| Landscape catalog | Four packages, 24 recipes and reference images | Shared catalog and landscape UI |
+| Camera controls | Runtime capabilities, exposure compensation, focus/exposure lock, reset to Auto | Shared capability contract and supported Android controls |
+| Voice shutter | Apple Speech and audio session integration | Shared state/UI and Android speech adapter |
+| Android application | No app project, manifest, Gradle build or APK | Scaffold, implement, build and test |
+| CI | Dart and native iOS tests/builds | Flutter, Android and Flutter-iOS validation |
 
-| Area | Target share |
-|---|---:|
-| Shared Flutter/Dart application code | 70-80% |
-| iOS-specific code | 10-15% |
-| Android-specific code | 10-15% |
+## Architecture decisions
 
-These percentages describe the end-state architecture. Existing Swift code will mostly be translated or adapted rather than copied directly.
+- Keep coaching, catalogs, workflow state and geometry in the platform-independent Dart package.
+- Put shared UI in `apps/dali_camera`. Native services belong in a local Flutter plugin at `packages/dali_camera_platform`.
+- Use a generated typed bridge, initially Pigeon, for commands/results. Flutter documents this approach for structured native communication: [platform channels](https://docs.flutter.dev/platform-integration/platform-channels).
+- Use Kotlin/CameraX for Android preview, analysis and capture; Swift/AVFoundation for iOS. Keep one camera-session owner per app. Do not run a second camera plugin alongside the custom session.
+- Analyze live frames natively and send compact measurements to Dart. Use latest-frame backpressure and release analysis buffers promptly; CameraX documents the nonblocking strategy in [image analysis](https://developer.android.com/media/camera/camerax/analyze).
+- Use a native preview surface/platform view initially. Validate transforms, overlays, gestures and performance before considering a texture implementation.
+- Preserve the full-frame fit behavior. Normalize detection coordinates to the oriented, mirrored image; map that image into the letterboxed Flutter preview once.
+- Keep inference on-device. Evaluate Android detector candidates against required signals and real device speed before selecting and pinning dependencies. Unsupported measurements remain explicitly unavailable.
+- Keep the current iOS 17 minimum. Provisionally target Android API 26+, subject to the actual test phone and dependency validation in M0. Select compile/target SDK and pinned tooling in M0 from then-current requirements.
+- Use separate development app identifiers so Flutter and native iOS builds can coexist. Do not migrate production identifiers or delete the native app in this work.
 
----
-
-## 2. Recommended Architecture
-
-Use Flutter for the shared application, with thin native adapters for camera and analysis work that benefits from platform APIs.
-
-```text
-                    Shared Flutter/Dart
-+----------------------------------------------------------+
-| screens, overlays, coaching, state, review, and logging  |
-| models, thresholds, configuration, diagnostics, and tests|
-+----------------------------+-----------------------------+
-                             | typed platform contract
-              +--------------+--------------+
-              |                             |
-       iOS native adapter            Android native adapter
-       AVFoundation                  CameraX
-       Vision                        ML Kit / MediaPipe
-       CoreMotion                    SensorManager
-       Core Image                    GPU/image pipeline
-       Photos                        MediaStore
-```
-
-The shared engine must consume normalized measurements rather than platform framework objects. Neither `VNObservation` nor Android detector types should cross the adapter boundary.
-
----
-
-## 3. Shared And Native Boundaries
-
-### Shared Flutter/Dart
-
-- normalized geometry and measurement models,
-- photography issue definitions,
-- coaching rules, thresholds, ranking, hysteresis, and cooldowns,
-- pose-package definitions and advice text,
-- capture and review state machines,
-- camera overlay rendering,
-- configuration and debug screens,
-- session logging schema and export orchestration,
-- fixture replay and deterministic tests,
-- localization and accessibility behavior,
-- product analytics events, if added later.
-
-### Native On iOS
-
-- AVFoundation session and photo capture,
-- Vision person, face, landmark, pose, and horizon analysis,
-- CoreMotion sampling,
-- Core Image processing where required,
-- Photos permission and save operations,
-- conversion from Vision coordinates to the normalized contract.
-
-### Native On Android
-
-- CameraX preview, image analysis, and photo capture,
-- ML Kit or MediaPipe person, face, landmark, and pose analysis,
-- SensorManager motion sampling,
-- GPU or Android image-processing implementation,
-- MediaStore permission and save operations,
-- conversion from Android detector coordinates to the normalized contract.
-
----
-
-## 4. Platform Contract
-
-The first shared artifact should be a versioned `FrameAnalysis` contract. All coordinates use the visible preview frame:
+Proposed additions; existing Xcode paths remain unchanged:
 
 ```text
-x: 0.0 left -> 1.0 right
-y: 0.0 top  -> 1.0 bottom
+apps/dali_camera/
+  lib/{camera,review,guidance,settings,diagnostics}/
+  assets/catalog/
+  test/
+  integration_test/
+  android/
+  ios/
+packages/dali_camera_core/         existing pure Dart logic
+packages/dali_camera_platform/
+  pigeons/
+  lib/
+  android/                        Kotlin services
+  ios/                            Swift services
+fixtures/{analysis,advice,geometry}/
+docs/android_testing.md
+docs/cross_platform_parity.md
 ```
 
-Proposed top-level shape:
+## Platform contract and ownership
 
-```text
-FrameAnalysis
-  schemaVersion
-  frameId
-  timestamp
-  imageWidth
-  imageHeight
-  displayRotationDegrees
-  lensFacing
-  mirrored
-  people[]
-  faces[]
-  poseKeypoints{}
-  groupAnalysis?
-  faceAnalysis?
-  horizon?
-  luminance?
-  openAreaRatio?
-  motion
-  detectorStatus{}
-```
+Extend the existing `FrameAnalysis` contract with backward-compatible fields where possible; version incompatible changes and preserve fixture readers.
 
-Each detected value should carry a confidence when the underlying API provides one. Missing and unsupported measurements must be explicit; they must not be represented as valid zero values.
+| Contract | Required behavior |
+| --- | --- |
+| Session | Start/stop, lens switch, lifecycle state, permission status, structured errors, session/configuration ID |
+| Preview | Image dimensions, display rotation, mirror state, fit rectangle/transform; identical mapping for overlays and taps |
+| Analysis | Frame/time/session IDs, normalized detections, motion, luminance, capability and confidence states; discard stale results |
+| Capture | Request ID, durable original file reference, dimensions/orientation/MIME type, capture settings and save state |
+| Storage/export | Save original or selected variant, retry, share, explicit discard; return an authoritative result for each request |
+| Controls | Per-camera supported ranges and lock states; reject commands calculated for an old configuration |
+| Speech | Availability, consent/permission, listening/error state and recognized shutter intent; capability-dependent availability |
 
-The contract should support JSON serialization for recorded fixture replay, while the live bridge may use a lower-overhead typed codec.
+The native adapter owns camera resources and file I/O. Dart owns capture/review/save state and manual guidance progression. Extend the current byte-based recovery interfaces to file-backed handles for full-resolution photos; avoid repeated image copies across the bridge. Persist a capture before reporting it recoverable, keep its manifest and original together, and reconcile interrupted operations on launch. Do not delete originals on share cancellation or save failure. Define save request IDs and recovery behavior for a process crash between gallery insertion and completion acknowledgement.
 
----
+## Ordered implementation milestones
 
-## 5. Migration Strategy
+All tasks below are pending unless marked as an existing foundation. Each milestone ends with a usable build or a verified artifact.
 
-Use an incremental replacement rather than rewriting the complete iOS app before Android can run.
+### M0 — Freeze behavior and validate dependencies
 
-### Phase 0: Baseline And Contracts
+Dependencies: none.
 
-Goal: freeze the behavior that the port must preserve.
+- [ ] Inventory implemented Swift features, controls, catalog IDs and assets in `docs/cross_platform_parity.md`; distinguish implemented, planned and unsupported behavior.
+- [ ] Export fixtures from the current Swift engine for issue selection, priority, cooldown, interruption, Natural mode, missing measurements and guidance replacement.
+- [ ] Record current iPhone startup/capture latency and ten-minute session behavior as the performance baseline.
+- [ ] Confirm available Android/iPhone test devices, OS versions and development signing setup. The Samsung SM-G975U named in the old draft is an intended test candidate, not verified hardware availability.
+- [ ] Pin Flutter/Dart, JDK, Gradle, Android SDK and Xcode versions; verify compatibility with the existing Dart SDK constraint.
+- [ ] Spike CameraX preview plus analysis and one capture. Evaluate detector signal coverage, bundled/offline model availability, licensing, startup and speed. Record the selected detector stack and gaps.
+- [ ] Confirm native-preview composition and the typed bridge work on both platforms.
 
-- record representative `Measurements`, issues, and selected advice,
-- convert current coaching tests into platform-neutral fixture cases,
-- define `FrameAnalysis` and coordinate conventions,
-- document front-camera mirroring and device-rotation rules,
-- capture basic performance and thermal baselines on an iPhone.
+Exit: checked-in parity inventory, fixtures and dependency decisions; camera feasibility demonstrated on Android. Missing optional detector signals have explicit fallback behavior.
 
-Acceptance criteria:
+### M1 — Update the shared core and catalogs
 
-- fixture data covers every current issue type,
-- expected advice is deterministic,
-- the contract distinguishes unavailable, low-confidence, and valid values.
+Dependencies: M0 contracts and baseline fixtures.
 
-### Phase 1: Shared Dart Engine
+- [ ] Port current Swift coaching changes into Dart, using identical-input fixtures to detect differences.
+- [ ] Migrate all 76 people poses, 11 collections, 24 landscape recipes, angle mappings, light/context/safety metadata and stable IDs.
+- [ ] Preserve current UI semantics: posture selection supplies the recommended angle; do not restore the removed standalone Angle chooser merely because the older Dart catalog has five positions.
+- [ ] Establish one versioned catalog source and asset manifest. Generate or validate Swift/Dart representations during coexistence to prevent drift.
+- [ ] Package the existing reference JPEGs for Flutter, preserving attribution where applicable, dimensions and the existing under-100-KB asset limit.
+- [ ] Add capability/configuration models, file-backed recovery contracts and capture/export transition coverage.
 
-Goal: move portable behavior into a standalone, camera-independent Dart package.
+Exit: shared fixture advice matches Swift for identical normalized input; catalog IDs/counts/metadata/assets validate; missing signals never produce false success; all shared tests and analysis pass.
 
-- port models from `Models.swift`,
-- port `CoachingEngine.swift`, thresholds, and pose packages,
-- port session event schemas,
-- port unit tests and fixture replay,
-- compare Dart output with current Swift output.
+### M2 — Build the Flutter application with replay services
 
-Acceptance criteria:
+Dependencies: M1 contracts; can start layout after M0.
 
-- shared tests cover every existing coaching rule,
-- Swift and Dart select the same top issue and advice for the baseline fixtures,
-- the shared package has no Flutter or platform dependencies.
-
-### Phase 2: Flutter Application Shell
-
-Goal: reproduce the core capture experience using shared UI.
-
-- create Flutter navigation, configuration, and capture state,
-- implement advice cards and debug overlay,
-- implement review-mode controls,
-- connect the UI to a fake/replay camera adapter first,
-- preserve the native iOS app as a reference implementation.
+- [ ] Scaffold `apps/dali_camera` and the local platform plugin, using separate development identifiers.
+- [ ] Implement welcome, camera screen, fixed shutter, latest-photo review, photo picker, settings and permission recovery UI.
+- [ ] Implement selected-photo review, original comparison, save/share status and retry/discard actions using fake services first.
+- [ ] Build situation/package navigation, catalog cards and optional manually confirmed guidance with Natural/reset behavior.
+- [ ] Implement accessible labels, TalkBack/VoiceOver reading order, scalable text and portrait/landscape layouts.
+- [ ] Add a fixture/replay service for deterministic UI tests without camera hardware.
 
-Acceptance criteria:
+Exit: replay-driven capture → review → save/retry/share flows pass widget/integration tests; controls remain reachable on small screens and at large text sizes; Android and iOS shell builds succeed.
 
-- fixture replay drives a complete coaching session,
-- overlay alignment is testable at multiple aspect ratios,
-- the application remains useful without a live native adapter.
+### M3 — First Android phone-testing build
 
-### Phase 3: Android Vertical Slice
+Dependencies: M0 camera spike, M1 core, M2 shell.
 
-Goal: get a phone-testable Android build quickly without porting every advanced feature.
+- [ ] Bind CameraX preview, capture and analysis to lifecycle; handle permissions, background/foreground, interruptions and front/rear switching.
+- [ ] Implement rotation, mirroring and fit transforms, then prove overlay alignment using edge/corner fixtures and physical photos.
+- [ ] Deliver person/face measurements and motion/roll to Dart for basic framing, crop, tilt and stability advice; report unsupported signals explicitly.
+- [ ] Capture to durable app storage, restore unsaved captures after process death, and implement MediaStore save, system photo selection and sharing with OS-appropriate permissions.
+- [ ] Connect duplicate-capture guards, retry/error states and direct latest-photo review. Verify exported originals remain intact.
+- [ ] Export user-initiated diagnostic logs with device/build/session information, avoiding photo payloads by default.
+- [ ] Produce a debug APK and `docs/android_testing.md` with installation, permissions, feature coverage and known limitations.
 
-- CameraX preview and back/front switching,
-- camera permission and lifecycle handling,
-- person and face detection,
-- basic pose points,
-- motion and camera roll,
-- normalized measurement delivery to Dart,
-- shared advice overlay,
-- still capture and MediaStore save.
+Exit: APK installs on a physical Android phone; capture → review → save/share works; failed save recovery survives relaunch; lens/orientation changes remain aligned; ten minutes of use does not crash, stall or grow queues without bound. Advanced enhancement and voice parity are not required for this first handoff and must be labeled unavailable.
 
-Initial Android issue coverage:
+### M4 — Connect the Flutter iOS app
 
-- subject missing,
-- too close or too far,
-- headroom,
-- edge cropping,
-- camera tilt,
-- camera stability,
-- ready state.
+Dependencies: stable M3 contract and M2 UI.
 
-Acceptance criteria:
+- [ ] Extract camera, analysis, motion and persistence services from `CameraModel.swift` without moving/removing the existing Xcode project.
+- [ ] Adapt Vision/CoreMotion measurements into the shared contract and route coaching through Dart in the Flutter app.
+- [ ] Connect Photos/picker/share, original recovery, session lifecycle and permissions to the shared workflow.
+- [ ] Preserve capture settings, orientation, mirror semantics and stale-result protections.
+- [ ] Run the Flutter app beside the native reference using separate identifiers; compare behavior on the same device and fixtures.
 
-- installs and runs on the Samsung test phone,
-- preview and overlay remain aligned through rotation and camera switching,
-- sustained analysis is usable for at least ten minutes,
-- no camera frames are sent off-device.
+Exit: Flutter iOS capture/review/export and basic coaching pass device acceptance with no unexplained baseline regression. The original iOS app continues to build and run.
 
-### Phase 4: iOS Adapter Under Flutter
+### M5 — Close current feature gaps on both platforms
 
-Goal: connect the shared app to the proven iOS measurement stack.
+Dependencies: M3 and M4; prioritize gaps using the parity inventory.
 
-- wrap the existing AVFoundation session,
-- adapt Vision results into `FrameAnalysis`,
-- connect CoreMotion and photo capture,
-- move remaining SwiftUI flows to Flutter,
-- compare with the original prototype before retiring it.
+- [ ] Complete landscape and people guidance, group/pose/face measurements, luminance/backlighting and horizon behavior where supported.
+- [ ] Separate true visual-horizon estimates from sensor roll; never substitute one silently for the other.
+- [ ] Port current reframe, level, compare and beautify behavior behind an image-processing interface. Agree fixture-based visual tolerances; retain original by default and export exactly the selected variant.
+- [ ] Implement capability-driven exposure compensation, focus/exposure lock and return to Auto. Hide or explain unavailable controls and invalidate stale settings after a camera change.
+- [ ] Port voice shutter with opt-in microphone/speech access, cancellation, deduplication and capture-state guards. Declare on-device speech availability; do not silently fall back to remote recognition.
+- [ ] Complete current logging/settings behavior and synchronize all catalog assets/metadata.
 
-Acceptance criteria:
+Exit: every implemented feature in the baseline parity inventory is passed or explicitly capability-limited with tested fallback. Planned RAW, additional manual controls and automatic recommendations remain separate future work.
 
-- current iOS prototype capabilities remain available,
-- baseline fixtures produce equivalent advice,
-- camera startup, capture latency, and thermal behavior do not regress materially.
+### M6 — Validate and hand off both platforms
 
-### Phase 5: Feature Parity And Tuning
-
-Goal: close detector and image-processing gaps.
-
-- horizon behavior,
-- luminance and backlighting,
-- group analysis,
-- open-area/scenic heuristics,
-- reframe and level suggestions,
-- beautification pipeline,
-- log export and saved-photo review.
-
-Tune platform-specific measurement calibration before changing shared coaching thresholds. A detector difference should not silently become a product-rule difference.
-
----
-
-## 6. Proposed Repository Shape
-
-Keep migration work in this repository so fixtures and behavior stay synchronized.
-
-```text
-mobile_camera/
-  app/                         Flutter application
-    lib/
-      camera_contract/
-      coaching/
-      capture/
-      review/
-      diagnostics/
-    test/
-    integration_test/
-    android/                   Android native adapter
-    ios/                       iOS native adapter
-  fixtures/
-    frame_analysis/
-    expected_advice/
-  legacy_ios/                  current Swift prototype during migration
-  docs/
-```
-
-The exact move of the existing Xcode project should happen only after the Flutter shell builds successfully. Until then, leave the current paths intact.
-
----
-
-## 7. Testing Strategy
-
-### Shared Tests
-
-- one unit test per issue type,
-- priority conflict tests,
-- confidence and missing-data tests,
-- hysteresis and cooldown tests using a fake clock,
-- pose-package override tests,
-- JSON contract compatibility tests,
-- golden overlay tests for common aspect ratios.
-
-### Native Adapter Tests
-
-- coordinate normalization,
-- mirroring and rotation,
-- detector result conversion,
-- permission denial and recovery,
-- camera lifecycle interruption,
-- still capture and save failure handling.
-
-### Cross-Platform Parity Tests
-
-Run recorded fixtures through both platforms and compare normalized outputs within documented tolerances. Advice should match even when raw detector confidences differ slightly.
-
-### Device Matrix
-
-Start with:
-
-- the current iPhone development device,
-- Samsung SM-G975U,
-- one newer mid-range Android device before release,
-- one small-screen iPhone and one small-screen Android emulator for UI checks.
-
----
-
-## 8. Performance Budgets
-
-Initial targets:
-
-| Operation | Target |
-|---|---:|
-| Camera preview | 30 FPS minimum |
-| Lightweight detection | 10-15 FPS |
-| Heavier pose analysis | 5-10 FPS |
-| Advice refresh | 1-5 Hz |
-| Capture button response | under 200 ms perceived latency |
-| Native-to-Dart analysis payload | bounded; latest frame wins |
-
-The bridge must use backpressure. If Dart is busy, native analysis should replace an old unpublished result rather than queueing frames indefinitely.
-
----
-
-## 9. Key Risks And Mitigations
-
-### Detector Differences
-
-Vision and Android detectors will not return identical landmarks or confidence values.
-
-Mitigation: normalize semantics in native adapters, use tolerance-based parity tests, and calibrate measurements per platform before applying shared rules.
-
-### Preview Coordinate Errors
-
-Crop mode, rotation, mirroring, and device aspect ratio can misalign overlays.
-
-Mitigation: make preview transforms part of the contract and build visual fixtures for each rotation and lens direction.
-
-### Real-Time Performance
-
-Sending full camera frames through Flutter can cause memory pressure and latency.
-
-Mitigation: analyze frames natively and send only compact normalized results to Dart.
-
-### Migration Scope
-
-Rebuilding every review and beautify feature before testing Android would delay useful feedback.
-
-Mitigation: deliver the Android vertical slice before parity work, while keeping the native iOS prototype available.
-
-### Rule Drift
-
-Maintaining Swift, Dart, and temporary Android rules simultaneously can produce different behavior.
-
-Mitigation: establish Dart as the single rule implementation during Phase 1 and use the original Swift engine only as a parity oracle until migration completes.
-
----
-
-## 10. Open Decisions
-
-- Android vision stack: ML Kit, MediaPipe, or a combination.
-- Native bridge implementation: Flutter platform channels, Pigeon, or a custom plugin API.
-- Whether live horizon detection ships in the first Android slice.
-- Cross-platform beautification implementation and acceptable visual differences.
-- Minimum supported Android API and iOS version.
-- Whether saved-photo analysis should precede or follow live Android analysis.
-- App identifiers, signing, store configuration, and release channels.
-
-Recommended early defaults:
-
-- use Pigeon or another generated typed contract,
-- use CameraX for Android capture,
-- evaluate ML Kit first for face detection and MediaPipe for pose,
-- defer beautification parity until the live coaching slice is proven,
-- keep all production inference on-device.
-
----
-
-## 11. First Working Milestone
-
-The first milestone should produce an installable Android development build that:
-
-1. opens a CameraX preview,
-2. detects one person and face,
-3. reports normalized measurements,
-4. runs the shared Dart coaching engine,
-5. displays one stable instruction at a time,
-6. draws aligned debug boxes,
-7. switches front and back cameras,
-8. captures and saves a photo,
-9. exports a diagnostic session log.
-
-Advanced pose coaching, reframe comparison, beautification, and full review-mode parity are explicitly outside this first milestone.
-
----
-
-## 12. Immediate Next Steps
-
-1. Approve the Flutter-plus-native-adapters architecture.
-2. Decide the minimum supported Android and iOS versions.
-3. Add baseline fixture JSON generated from current Swift measurements.
-4. Define the versioned `FrameAnalysis` schema.
-5. Scaffold the shared Dart engine and port the existing coaching tests.
-6. Scaffold the Flutter app using replay data.
-7. Build the Android CameraX adapter and install the vertical slice on the Samsung test phone.
+Dependencies: M5.
+
+- [ ] Add CI for Dart analysis/tests, Flutter analysis/widget tests, Android native tests/debug APK, Flutter iOS simulator tests and unsigned device build. Keep native iOS checks during migration.
+- [ ] Run changes on PRs and `main`, replacing the current restriction that only runs push validation on the phone-readiness branch pattern.
+- [ ] Run device acceptance on the primary iPhone, primary Android and a second Android vendor/device tier. Use small-screen emulators for layout coverage.
+- [ ] Verify camera denial/re-enable, save failure/storage exhaustion, process death, share cancellation, rapid taps, rotation during capture, repeated lens changes and session interruption.
+- [ ] Validate TalkBack/VoiceOver, large text, comfortable optional pose guidance and ten-minute performance/thermal behavior.
+- [ ] Record exact source SHA, device/OS matrix, passing checks, known limitations and APK/install instructions. Sign iPhone builds with the user's development team; an unsigned build is not an installable IPA.
+
+Exit: both apps are ready for user phone testing with reproducible builds and no unresolved capture-loss, permission-recovery or preview-alignment defects. Retirement of the native SwiftUI app requires a later acceptance decision and is not automatic.
+
+## Test strategy and performance gates
+
+| Layer | Evidence required |
+| --- | --- |
+| Core parity | Identical normalized fixtures yield matching issue/recipient/instruction and scheduler transitions in Swift/Dart |
+| Detector calibration | Annotated images and device scenes establish per-signal tolerances; raw confidence/landmarks need not be identical across engines |
+| Geometry | Four rotations, both lenses, differing aspect ratios, preview margins, corner targets and exported orientation |
+| Workflow | Injected disk/gallery failures, duplicate actions, interrupted saves and relaunch recovery; original and selected export bytes/images checked |
+| UI | Replay-based navigation, catalogs, comparison, permissions and accessibility layouts |
+| Device | Real sensor/camera alignment, audio interruption, permissions, gallery output, performance and thermal behavior |
+
+Initial engineering targets, to confirm in M0: 30 FPS preview on reference devices; basic analysis around 10 Hz with adaptive throttling; visible shutter feedback within 200 ms; no unbounded frame/result queues. Record startup and capture-completion median/p95 rather than equating shutter feedback with file-save latency. Investigate regressions above 20% against the iPhone baseline under matched conditions; document justified exceptions before acceptance. No promise of detector equivalence or performance is established by desktop unit tests.
+
+## Risks and responses
+
+| Risk | Response |
+| --- | --- |
+| Swift/Dart drift while iOS continues development | Freeze a baseline, require shared catalog validation, and update parity fixtures with behavior changes |
+| Android hardware/detector variability | Capability model, explicit missing measurements, reference devices and calibration before changing shared thresholds |
+| Flutter/native preview mismatch | One transform contract, physical edge checks and one camera owner |
+| Original loss or duplicate export after a crash | Durable manifest, request IDs, fault-injection tests and startup reconciliation |
+| Large-image memory pressure | File-backed handles, native processing and bounded preview/analysis buffers |
+| Speech unavailable/offline unsupported | Visible unavailable state; manual shutter stays usable |
+| Migration grows into new product development | M3 first Android handoff; parity limited to implemented baseline features |
+
+## Starting work order
+
+1. Create the M0 parity inventory and baseline fixture exporter.
+2. Pin the toolchain and validate the Android camera/bridge spike.
+3. Update the shared catalogs and coaching tests.
+4. Scaffold replay-based Flutter capture/review screens.
+5. Connect Android storage/camera services and deliver the M3 APK.
+6. Add the iOS adapter, complete parity, then run the two-platform acceptance matrix.
+
+Track completion with the milestone checkboxes and evidence links. Calendar estimates should follow the M0 camera/detector spike and available device access; no unsupported delivery date is assumed here.

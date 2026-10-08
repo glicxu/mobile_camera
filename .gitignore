@@ -6,3 +6,4 @@ build/
 .env
 .dart_tool/
 *.xcresult/
+packages/dali_camera_platform/example/
