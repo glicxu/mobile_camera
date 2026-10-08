@@ -18,12 +18,12 @@ class CoachingOverlay extends StatefulWidget {
     super.key,
     required this.advice,
     this.frame,
-    this.guided = false,
+    this.guidedAction,
     this.animate = true,
   });
   final Advice advice;
   final Map<String, dynamic>? frame;
-  final bool guided;
+  final GuidedAction? guidedAction;
   final bool animate;
   @override
   State<CoachingOverlay> createState() => _CoachingOverlayState();
@@ -175,18 +175,21 @@ class _CoachingOverlayState extends State<CoachingOverlay>
                     ],
                   ),
                 ),
-              if (direction == null && widget.guided)
+              if (direction == null && widget.guidedAction != null)
                 Center(
                   child: Icon(
-                    widget.advice.recipient == 'Subject'
-                        ? Icons.accessibility_new
-                        : Icons.open_with,
+                    switch (widget.guidedAction!) {
+                      GuidedAction.subjectPose => Icons.accessibility_new,
+                      GuidedAction.cameraHeight => Icons.height,
+                      GuidedAction.cameraPitch => Icons.cameraswitch,
+                      GuidedAction.photographerMove => Icons.directions_walk,
+                    },
                     size: 40,
                     color: color,
                   ),
                 ),
               if (direction == null &&
-                  !widget.guided &&
+                  widget.guidedAction == null &&
                   widget.advice.type != 'ready')
                 Center(
                   child: Icon(

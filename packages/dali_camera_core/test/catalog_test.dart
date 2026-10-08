@@ -28,12 +28,21 @@ void main() {
     () {
       for (final entry in catalog.entries) {
         final session = CatalogSession(entry, catalog);
-        expect(session.advice!.recipient, 'Photographer');
-        session.advance();
+        for (final step in session.cameraSteps) {
+          expect(session.advice!.recipient, 'Photographer');
+          expect(session.advice!.instruction, step.instruction);
+          session.advance();
+        }
+        if (entry.kind != 'pose') {
+          expect(session.advice!.instruction, catalog.angleInstruction(entry));
+          session.advance();
+        }
         expect(session.advice!.recipient, entry.recipient);
         expect(session.complete, isFalse);
-        session.advance();
-        session.advance();
+        for (final cue in entry.cues) {
+          expect(session.advice!.instruction, cue);
+          session.advance();
+        }
         expect(session.complete, isTrue);
         expect(session.advice!.tone, AdviceTone.waiting);
       }

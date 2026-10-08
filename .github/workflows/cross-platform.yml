@@ -76,6 +76,12 @@ jobs:
           /tmp/export-dali-pose "$GITHUB_WORKSPACE/fixtures/swift-pose.json"
           cd packages/dali_camera_core
           dart run tool/verify_pose_fixtures.dart ../../fixtures/swift-pose.json
+      - name: Compare all selected-posture sequences
+        run: |
+          swiftc -parse-as-library DaliCamera/Models.swift DaliCamera/CoachingEngine.swift tools/ExportCatalogSessionFixtures.swift -o /tmp/export-dali-catalog-sessions
+          /tmp/export-dali-catalog-sessions "$GITHUB_WORKSPACE/fixtures/swift-catalog-sessions.json"
+          cd packages/dali_camera_core
+          dart run tool/verify_catalog_session_fixtures.dart ../../fixtures/swift-catalog-sessions.json
       - uses: actions/upload-artifact@v4
         with:
           name: swift-baseline-fixtures

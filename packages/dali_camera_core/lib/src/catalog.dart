@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'catalog_data.dart';
 import 'models.dart';
+import 'guidance.dart';
 
 class CatalogEntry {
   CatalogEntry(this.data);
@@ -55,8 +56,31 @@ class CatalogSession {
   final SharedCatalog catalog;
   int index = 0;
   bool get isActive => entry != null;
-  List<String> get cues =>
-      entry == null ? [] : [catalog.angleInstruction(entry!), ...entry!.cues];
+  GuidedCameraPosition? get position => entry?.kind != 'pose'
+      ? null
+      : switch (entry!.angle) {
+          'eyeLevel' => GuidedCameraPosition.eyeLevel,
+          'slightlyHigh' => GuidedCameraPosition.elevated,
+          'low' => GuidedCameraPosition.waistLevel,
+          'side' || 'fortyFive' => GuidedCameraPosition.side,
+          _ => null,
+        };
+  List<GuidedStep> get cameraSteps => position?.steps() ?? [];
+  List<String> get cues => entry == null
+      ? []
+      : [
+          if (entry!.kind == 'pose')
+            ...cameraSteps.map((step) => step.instruction)
+          else
+            catalog.angleInstruction(entry!),
+          ...entry!.cues,
+        ];
+  GuidedAction? get currentAction =>
+      !isActive || complete || entry!.kind != 'pose'
+      ? null
+      : index < cameraSteps.length
+      ? cameraSteps[index].action
+      : GuidedAction.subjectPose;
   bool get complete => isActive && index >= cues.length;
   void advance() {
     if (index < cues.length) index++;
@@ -68,7 +92,7 @@ class CatalogSession {
           type: 'catalog_${entry!.key}_$index',
           recipient: complete
               ? 'Camera'
-              : index == 0 || entry!.kind != 'pose'
+              : (entry!.kind == 'pose' ? index < cameraSteps.length : true)
               ? 'Photographer'
               : entry!.recipient,
           instruction: complete

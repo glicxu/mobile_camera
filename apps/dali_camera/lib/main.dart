@@ -337,7 +337,9 @@ class _CameraScreenState extends State<CameraScreen>
                       camera.activeSituation.supportsPoseGuidance)
                     CoachingOverlay(
                       advice: camera.advice,
-                      guided: camera.guidance.isActive,
+                      guidedAction: camera.canAdvanceGuidance
+                          ? camera.guidance.currentAction
+                          : null,
                       animate: camera.livePreviewEnabled,
                       frame: camera.debug ? camera.lastFrame : null,
                     ),
