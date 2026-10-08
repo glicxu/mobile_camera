@@ -1,5 +1,11 @@
 # Joint phone testing - parity candidate
 
+## Automatic return after completed photo - October 8, 2026
+
+Source: `9fc9836`, superseding the completion label/button behavior below. After successful processing and saving, the finished image remains in the viewport for one second without Photo saved text or a Back to camera button, then the live camera returns automatically. Processing/saving feedback remains visible while work is active. Capture start, return to camera and controller disposal cancel the preceding timer; failures retain the recovery flow.
+
+Analysis and 32 Flutter tests pass. The timing test verifies that the result is still visible at 999 ms and clears at 1000 ms. Galaxy camera regression passed in 57 seconds (59 with teardown), including no completion text/button and automatic result dismissal. The normal build is installed in place on Galaxy and tablet; built APK SHA-256 is `d4fd56ab91e669a649645544367e85e3ab3da5cb6b2d29e1088609ea7f337496`. Tablet runtime was not repeated for this timer/UI-only change.
+
 ## Latest viewport processing feedback - October 8, 2026
 
 Source: `ecc39c2`. After successful capture, the normal viewport shows the private original with Processing photo and an indeterminate progress indicator. It replaces that image with the completed processed photo while saving, then shows Photo saved and Back to camera. The result remains until dismissed or another capture starts. Burst keeps the live viewport during the sequence. Failures enter the existing recovery review. The native renderer does not stream intermediate frames or report percentage progress; the indicator communicates active work and stage changes.
