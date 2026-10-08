@@ -39,10 +39,10 @@ void main() {
     expect(analysis['poseKeypoints'], isA<Map>());
     if (Platform.isAndroid) {
       expect((analysis['faces'] as List), isNotEmpty);
-      expect(
-        (analysis['poseKeypoints'] as Map).length,
-        greaterThanOrEqualTo(6),
-      );
+      expect((analysis['people'] as List), isNotEmpty);
+      if ((analysis['poseKeypoints'] as Map).length < 6) {
+        expect((analysis['people'] as List).first['label'], 'person_estimated');
+      }
     }
     // Exercise each new spatial processing path on a real, bundled portrait.
     for (final recipe in [

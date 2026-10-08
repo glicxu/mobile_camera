@@ -1,4 +1,5 @@
 import 'package:dali_camera/main.dart';
+import 'dart:io';
 import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:dali_camera/camera_controller.dart';
 import 'package:flutter/material.dart';
@@ -35,6 +36,20 @@ void main() {
         closeTo(camera.aspectRatio, .01),
         reason: 'Overlay surface must match the complete oriented camera image',
       );
+      // Compare independent native use-case geometry, not one Flutter value twice.
+      for (var i = 0; i < 80 && camera.lastFrame == null; i++) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      if (Platform.isAndroid) {
+        final frame = camera.lastFrame!;
+        expect(frame['previewAspectRatio'], isA<num>());
+        expect(
+          (frame['imageWidth'] as num) / (frame['imageHeight'] as num),
+          closeTo((frame['previewAspectRatio'] as num).toDouble(), .01),
+          reason:
+              'Preview and analysis must share the same oriented aspect ratio',
+        );
+      }
       const soakSeconds = int.fromEnvironment('DALI_SOAK_SECONDS');
       final soak = Stopwatch()..start();
       String? previousFrame;

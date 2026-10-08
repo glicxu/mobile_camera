@@ -175,7 +175,10 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 previewView?.let { preview.setSurfaceProvider(it.surfaceProvider) }
                 captureUseCase = ImageCapture.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3)
                     .setTargetRotation(rotation).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build()
-                val analysis = ImageAnalysis.Builder().setTargetResolution(Size(640, 480)).setTargetRotation(rotation)
+                // Match preview's sensor-space ratio. A fixed 640x480 target is
+                // interpreted after target rotation and selected a portrait sensor
+                // buffer on the tablet, unlike the preview's landscape sensor buffer.
+                val analysis = ImageAnalysis.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3).setTargetRotation(rotation)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
                 analysisUseCase = analysis
                 analysis.setAnalyzer(executor) { image -> analyze(image, epoch) }
@@ -272,6 +275,11 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         val height = if (rotation % 180 == 0) proxy.height else proxy.width
         if (aspect != width.toDouble() / height) android.util.Log.i("DaliCamera", "Analysis image ${width}x${height}, rotation=$rotation, preview=${previewView?.width}x${previewView?.height}")
         aspect = width.toDouble() / height
+        val previewInfo = previewUseCase?.resolutionInfo
+        val previewAspect = previewInfo?.let {
+            if (it.rotationDegrees % 180 == 0) it.resolution.width.toDouble() / it.resolution.height
+            else it.resolution.height.toDouble() / it.resolution.width
+        }
         val image = InputImage.fromMediaImage(media, rotation)
         val faceTask = faceDetector.process(image); val poseTask = poseDetector.process(image)
         com.google.android.gms.tasks.Tasks.whenAllComplete(faceTask, poseTask).addOnCompleteListener(executor) {
@@ -309,7 +317,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 val payload = JSONObject().put("schemaVersion", 1).put("frameId", "$epoch:$now")
                     .put("imageWidth", width).put("imageHeight", height).put("displayRotationDegrees", rotation).put("front", front)
                     .put("motionStatus", if (motionAvailable) "valid" else "unsupported")
-                    .put("configurationId", config).put("aspectRatio", aspect).put("people", people).put("faces", faceBoxes)
+                    .put("configurationId", config).put("aspectRatio", aspect).put("previewAspectRatio", previewAspect ?: JSONObject.NULL).put("people", people).put("faces", faceBoxes)
                     .put("roll", roll).put("motion", motion).put("stable", motion < 0.22)
                     .put("backgroundLuminance", if (count > 0) sum / count else JSONObject.NULL)
                     .put("peopleScope", "single").put("groupScope", "faces").put("saliencyStatus", "unsupported").put("luminanceScale", 1)
