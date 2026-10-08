@@ -14,6 +14,8 @@ adb -s YOUR_DEVICE_ID install -r build/app/outputs/flutter-apk/app-debug.apk
 APK: `apps/dali_camera/build/app/outputs/flutter-apk/app-debug.apk`.
 App identifier: `com.dalicamera.dali_camera`.
 
+For a smaller download on the tested Samsung devices, use `app-arm64-v8a-debug.apk` in the same directory. Generate device-specific APKs with `flutter build apk --debug --split-per-abi`.
+
 Open Dali Camera, dismiss Welcome and grant camera access. Android 10+ does not require broad gallery-read access to save this app's photos. Android 8/9 asks for storage permission when saving; denied access retains the original for retry. The system photo picker grants access to the selected file only.
 
 For the physical iPhone comparison, see [Flutter iPhone testing](flutter_iphone_testing.md). For Flutter iOS, run `flutter build ios --debug --no-codesign` on a Mac, then open `apps/dali_camera/ios/Runner.xcworkspace`, select your signing team and iPhone, and Run. An unsigned CI build cannot be installed directly.
