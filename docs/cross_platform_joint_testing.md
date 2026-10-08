@@ -1,5 +1,15 @@
 # Joint phone testing - parity candidate
 
+## Latest shutter feedback - October 8, 2026
+
+Source: `62eb0b5`. The shutter previously replaced its ring with a spinner whenever the shared `busy` flag was true. That flag covers gallery saving, effects, analysis and other operations; the spinner did not indicate that the camera was still exposing a photo.
+
+The shutter now keeps its stable circular appearance and remains disabled while capture/save/processing is busy. An actual successful capture advances a separate acknowledgment sequence. The viewport briefly flashes white (fades within 180 ms) and shows a Photo taken confirmation. Reduced-motion mode uses the text confirmation without flashing. Capture failures do not produce a success acknowledgment. Timer, voice and each successful burst frame use the same callback path. Normal shutter taps retain the camera preview while automatically saving; the early-review behavior recorded below applies when review is requested.
+
+Flutter analysis and 31 tests pass, covering delayed saving/no spinner, failed capture and reduced-motion feedback. Galaxy camera regression at `b1cc4ee` passed in 45 seconds (46 including teardown), including successful-capture acknowledgment, timer, stable shutter, export, library wrap and burst release. The initial run exposed a gallery-test race; the test now waits for image loading to finish before navigation. Normal apps on the Galaxy and tablet are updated in place without clearing data. Installed APKs match SHA-256 `39badbbbb36450eaa8815d7e8726271c8b82e989179782b98554e7631b7d209d`. Native rendering/recovery was not repeated for this UI-only feedback change; the preceding `6309bb3` pass remains its backend evidence.
+
+Retest: tap the shutter and look for one viewport flash/Photo taken confirmation, then the separate Saving original/Preparing effects status. The shutter should remain still, with another capture blocked until processing completes. Test a timer capture and hold/release burst; reduced-motion mode should show text without a white flash.
+
 ## Latest Android capture-speed fix - October 8, 2026
 
 Source: `6309bb3`, branch `codex/cross-platform-20261007`. Supersedes the production candidate recorded below. A user reported a slow shutter-to-save transition. Galaxy profiling showed the original camera capture/gallery save completed in 1056 ms, followed by 10063 ms preparing a Fresh-filter copy. The UI previously waited for effects and analysis before entering review.

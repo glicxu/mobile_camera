@@ -7,6 +7,10 @@ Reference: native iOS app at `d53a977`. Starting Flutter source: `be9c765`.
 
 Current per-action contract: [comprehensive source/action audit](cross_platform_action_audit.md). Its destinations and state transitions supersede the historical aggregate checks below. Current software additions: lazy Photos library, native beautifier dropdown/disclosures, image labels/fullscreen, actual lens metadata and active pose swipes. Final Android tablet and Galaxy camera/rendering validation passes; the same candidate is installed on both. iOS validation is deferred by the current priority.
 
+## Shutter feedback follow-up
+
+The user requested immediate visual assurance that a photo was captured. `62eb0b5` removes the shutter spinner tied to the general busy flag, retains capture guards and adds a short viewport flash/Photo taken confirmation after successful camera capture. Saving and processing remain separate statuses. Reduced-motion uses text without flashing; failures do not acknowledge success. Analysis/31 Flutter tests pass; device results are recorded in [joint testing](cross_platform_joint_testing.md).
+
 ## Android capture-speed follow-up
 
 The user reported a slow save after pressing the shutter. Fixed in `6309bb3`: open review with the saved original before effects complete, report effects/analysis progress separately, skip identity color work and batch spatial bitmap reads. Galaxy debug Fresh-filter preparation decreased from 10.063 to 5.066 seconds in the measured samples; capture/gallery commit remained about 1.1 seconds. Analysis/28 Flutter tests and Galaxy camera/rendering/recovery checks pass. See the [latest build and timing evidence](cross_platform_joint_testing.md). More effects, release profiling and the user's retry remain acceptance work.
