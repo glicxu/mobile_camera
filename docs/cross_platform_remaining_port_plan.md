@@ -10,8 +10,12 @@ Reference: native iOS app at `d53a977`. Starting Flutter source: `be9c765`.
 | Phase | Status | Evidence / next work |
 | --- | --- | --- |
 | P0 | In progress | [Initial UI/defaults audit](cross_platform_ui_inventory.md); physical reference screenshots and exhaustive action inventory still pending |
-| P1 | In progress | Three selection controls before guidance; all situation choices; filter menu/settings; montage cards, native descriptions, angle/light reference grid; extracted widgets. Eight Flutter tests pass. Physical styling and all Effects actions remain pending |
-| P2–P7 | Pending | Existing features retained; no claim that disabled modes or Beautifier are implemented |
+| P1 | In progress | Three selection controls before guidance; all situation choices; filter menu/settings; montage cards, native descriptions, angle/light reference grid; extracted widgets. Nine local Flutter tests pass. Physical styling and all Effects actions remain pending |
+| P2 | In progress | Shared scene rules, three-frame Auto classifier, ambiguous hold, active-guidance freeze, scene resets, Action/Close-up Auto filters; real Swift transition comparison in CI. Full coaching fixtures/calibration pending |
+| P3 | In progress | iOS full-body rectangles, saliency and optical horizon; group geometry and motion tracker; explicit availability. Android multi-person/scenic pipeline and richer face/pose analysis pending |
+| P4 | In progress | Native iOS filter sequence/coefficients through the typed bridge. Android rendering approximation and full Enhance/Beautify remain pending |
+| P5/P6 | Pending | Live depth/beautification and richer exposure/voice/settings parity remain pending |
+| P7 | In progress | Previous/next/swipe review, pending-original guard, failed-render selected-copy preservation. Multi-import, rich treatments/analysis and per-photo settings remain pending |
 | P8 | Pending | Current automated checks cover the first UI increment; full Android/iPhone acceptance is outstanding |
 
 The attached Galaxy S10+ disconnected before device validation of this increment. The Samsung SM-T290 passed the updated camera integration flow in 66 seconds, including package browsing, Food selection, controls, timer/style, review/export, and burst. Its first attempt failed at camera readiness after a permission reset; rerun passed with camera permission granted. No physical iPhone validation is available in this Windows workspace.
@@ -19,6 +23,12 @@ The attached Galaxy S10+ disconnected before device validation of this increment
 Installation incident: Flutter's integration runner encountered a lower universal APK version than the previously installed ABI-split APK and automatically uninstalled the tablet app. This cleared private app data/settings; gallery photos are separate. An initial Gradle-property isolation probe also failed before APK-identity validation was added. The final Windows helper builds a separate `com.dalicamera.dali_camera.test` app and verifies its actual APK identity with aapt before invoking Flutter. Normal updates use only `adb install -r`, with no uninstall fallback. Use disposable private test data for integration tests and `adb install -r` for normal updates. The normal UI build is restored after testing.
 
 Earlier P1 normal ARM64 debug APK (superseded by subsequent builds): `apps/dali_camera/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`, SHA-256 `57efd5f929d87d598ffcf7f8f3d58b92d3c29849bd37b3f1b37d534cc671e620`. Installed on the tablet with `adb install -r`; build and tests are local evidence, not physical iPhone or CI acceptance. This supersedes the earlier APK for this UI checkpoint only.
+
+Current code checkpoint: `16aac8f`. Local shared analysis/33 tests and Flutter analysis/eight tests pass. The isolated tablet camera flow passes (81 seconds), followed by the extended native bridge suite including the new filter API (19 seconds). The normal APK was rebuilt and updated using `adb install -r`: SHA-256 `15930f49d0272f0902b931c3eec32eec4cc6100f64836bfa282ec097d1ba59e9`, package `com.dalicamera.dali_camera`, version code 2001. These checks do not establish full detector/rendering parity. The new UI, classifier and Vision requests need the [physical Mac/iPhone checkpoint](cross_platform_iphone_checkpoint.md) before calibration can be accepted.
+
+A ninth local Flutter regression check also passes: capture routes the situation-specific Auto filter parameters to the typed bridge, and a failed filter render retains the saved original while manual capture remains available. The Mac/iPhone comparison is requested from the user, who will run it locally.
+
+[CI run 37818899173](https://github.com/glicxu/mobile_camera/actions/runs/37818899173) passed all jobs for production source `16aac8fb710a88f8573f362a8bd676c31432756f`: catalog validation, shared analysis/33 tests, Flutter analysis/eight tests, Android APK build, unsigned iOS device build, 51 native iOS unit tests, iPhone simulator bridge checks, nine native coaching fixtures and 24 native situation-transition fixtures. The ninth Flutter regression test was added and verified locally after this run's source checkpoint. Physical iPhone comparison and Galaxy phone validation remain pending; successful CI does not close the remaining phases.
 
 ## Goal and completion rules
 
@@ -32,7 +42,7 @@ This plan supersedes the remaining-work order and outdated scope exclusions in t
 
 Keep the working preview, capture/original recovery, save/share, basic coaching, catalogs, timer/burst, voice commands, recent originals, watermark, tap focus, zoom, and capability-gated manual shutter/ISO. The shared catalog already contains 76 people references in 11 packages, 24 landscape recipes in four packages, and six Food recipes. Catalog content being present does not mean its browsing UI matches iOS.
 
-Current filters approximate the native render using a color matrix; current effects appear in review copies. Advanced beautification, depth, complete situation guidance, and the full native review workflow are not ported.
+Android filters approximate the native render using a color matrix and spatial processing. iOS now uses the native Core Image filter sequence; physical comparison is pending. Current effects appear in review copies. Advanced beautification, depth, complete situation guidance, and the full native review workflow are not ported.
 
 ## Ordered implementation phases
 

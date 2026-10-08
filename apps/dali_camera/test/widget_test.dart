@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 class FakeHost extends CameraHostApi {
   bool failSave = false;
   bool failRender = false;
+  List<double>? filterParameters;
   int captures = 0;
   PhotoHandle? retained;
   int released = 0;
@@ -71,10 +72,54 @@ class FakeHost extends CameraHostApi {
       unsaved: false,
     );
   }
+
+  @override
+  Future<PhotoHandle> renderFilter(
+    PhotoHandle original,
+    List<double> matrix,
+    List<double> parameters,
+    String? watermarkPath,
+  ) async {
+    if (failRender) throw StateError('Renderer unavailable');
+    filterParameters = parameters;
+    return PhotoHandle(
+      path: 'filtered.jpg',
+      id: 'filtered-${original.id}',
+      unsaved: false,
+    );
+  }
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'Capture routes situation Auto parameters and retains original on filter failure',
+    () async {
+      final host = FakeHost();
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      camera.setSituation(PhotographicSituation.action);
+      camera.filter = 'auto';
+      await camera.capturePhoto(review: false);
+      final expected = PhotoStyle.preset(camera.catalog, 'vivid', 'action');
+      expect(
+        host.filterParameters,
+        PhotoStyle.fields
+            .map((field) => expected.value(field).toDouble())
+            .toList(),
+      );
+      expect(camera.styled, isTrue);
+      expect(camera.original!.unsaved, isFalse);
+      host.failRender = true;
+      await camera.capturePhoto(review: false);
+      expect(camera.original!.id, 'original-2');
+      expect(camera.original!.unsaved, isFalse);
+      expect(camera.selected, same(camera.original));
+      expect(camera.styled, isFalse);
+      expect(camera.canCapture, isTrue);
+      camera.dispose();
+    },
+  );
   test(
     'Review navigation protects pending originals and failed variants',
     () async {
