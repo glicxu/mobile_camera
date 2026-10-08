@@ -957,6 +957,65 @@ void main() {
       expect(host.retained, isNull);
     },
   );
+  test('References preserve contextual advice and person overlays', () async {
+    final camera = CameraController(host: FakeHost(), register: false);
+    await camera.initialize();
+    final frame = jsonEncode({
+      'schemaVersion': 1,
+      'configurationId': 'test',
+      'frameId': 'context',
+      'timestamp': 100000,
+      'imageWidth': 480,
+      'imageHeight': 640,
+      'displayRotationDegrees': 0,
+      'front': false,
+      'peopleStatus': 'valid',
+      'people': [],
+      'peopleScope': 'multiple',
+      'faceStatus': 'valid',
+      'faces': [],
+      'poseStatus': 'unsupported',
+    });
+    for (final situation in [
+      PhotographicSituation.food,
+      PhotographicSituation.landscape,
+    ]) {
+      camera.setSituation(situation);
+      camera.choose(
+        camera.catalog.entries.firstWhere(
+          (entry) => entry.kind == situation.catalogKind,
+        ),
+      );
+      camera.analysis(frame);
+      expect(
+        camera.advice.type,
+        'situation',
+        reason: 'Recipe instructions must not replace measured scene advice',
+      );
+      expect(camera.contextualGuidance, isNotNull);
+      expect(camera.message, isNull);
+    }
+    for (final situation in [
+      PhotographicSituation.group,
+      PhotographicSituation.action,
+    ]) {
+      camera.setSituation(situation);
+      camera.choose(
+        camera.catalog.entries.firstWhere((entry) => entry.kind == 'pose'),
+      );
+      camera.analysis(frame);
+      expect(camera.advice.type, isNot('situation'));
+      expect(
+        camera.canAdvanceGuidance,
+        isFalse,
+        reason:
+            'Missing subject must interrupt group/action posture progression',
+      );
+      expect(camera.contextualGuidance, isNotNull);
+      expect(camera.message, isNull);
+    }
+    camera.dispose();
+  });
   test('Stale session measurements cannot replace current advice', () async {
     final camera = CameraController(host: FakeHost(), register: false);
     await camera.initialize();

@@ -47,6 +47,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   );
   String get catalogKind => activeSituation.catalogKind ?? 'pose';
   String guidanceDetail = '';
+  SituationGuidance? contextualGuidance;
   void setSituation(PhotographicSituation value) {
     if (shootingMode == value) return;
     shootingMode = value;
@@ -368,6 +369,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     starting = true;
     cameraError = null;
     lastFrame = null;
+    contextualGuidance = null;
     engine.reset();
     subjectMotionTracker.reset();
     notifyListeners();
@@ -1088,6 +1090,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   void choose(CatalogEntry? entry) {
     cancelSequence();
     guidanceDetail = '';
+    contextualGuidance = null;
     guidance = CatalogSession(entry, catalog);
     engine.reset();
     advice =
@@ -1317,10 +1320,12 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         }
       }
       guidanceDetail = '';
-      if (!activeSituation.supportsPoseGuidance) {
-        final situation = situationGuidance(activeSituation, signals);
-        guidanceDetail = situation.detail;
-        advice = guidance.advice ?? situation.advice;
+      contextualGuidance = activeSituation.supportsPoseGuidance
+          ? null
+          : situationGuidance(activeSituation, signals);
+      if (!activeSituation.showsPersonOverlay) {
+        guidanceDetail = contextualGuidance!.detail;
+        advice = contextualGuidance!.advice;
       } else if (data['peopleStatus'] == 'unavailable') {
         advice = const Advice(
           type: 'detector_unavailable',

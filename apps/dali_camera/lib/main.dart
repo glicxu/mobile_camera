@@ -334,7 +334,7 @@ class _CameraScreenState extends State<CameraScreen>
                   else
                     const Center(child: Text('Use an Android or iOS phone.')),
                   if (camera.coachingEnabled &&
-                      camera.activeSituation.supportsPoseGuidance)
+                      camera.activeSituation.showsPersonOverlay)
                     CoachingOverlay(
                       advice: camera.advice,
                       guidedAction: camera.canAdvanceGuidance

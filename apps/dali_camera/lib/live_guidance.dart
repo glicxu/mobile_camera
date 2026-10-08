@@ -79,10 +79,12 @@ class _SceneCard extends StatelessWidget {
   final CameraController camera;
   @override
   Widget build(BuildContext context) {
-    final color = guidanceColor(camera.advice.tone);
+    final advice = camera.contextualGuidance?.advice ?? camera.advice;
+    final detail = camera.contextualGuidance?.detail ?? camera.guidanceDetail;
+    final color = guidanceColor(advice.tone);
     final situation = camera.activeSituation;
-    final icon = camera.advice.direction != null
-        ? coachingDirectionIcon(camera.advice.direction!)
+    final icon = advice.direction != null
+        ? coachingDirectionIcon(advice.direction!)
         : switch (situation) {
             PhotographicSituation.group => Icons.groups,
             PhotographicSituation.action => Icons.directions_run,
@@ -124,18 +126,18 @@ class _SceneCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                _StatusLight(color: color, label: camera.advice.statusTitle),
+                _StatusLight(color: color, label: advice.statusTitle),
               ],
             ),
             const SizedBox(height: 8),
             Text(
-              camera.advice.instruction,
+              advice.instruction,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              camera.guidanceDetail.isNotEmpty
-                  ? camera.guidanceDetail
+              detail.isNotEmpty
+                  ? detail
                   : 'Dali is analyzing the live camera view.',
               style: const TextStyle(fontSize: 14, color: Colors.white70),
             ),
