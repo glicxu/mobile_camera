@@ -40,7 +40,23 @@ class ManualCameraTools extends StatelessWidget {
           Text(
             'Tv ${seconds < 1 ? '1/${(1 / seconds).round()}' : seconds.toStringAsFixed(1)}s · ISO ${iso.round()}',
           ),
+          if (state.currentAperture != null)
+            Text(
+              'Av f/${state.currentAperture!.toStringAsFixed(1)} · Fixed aperture',
+            ),
+          if (state.exposureOffset != null)
+            Text(
+              'Exposure meter: ${state.exposureOffset! >= 0 ? '+' : ''}${state.exposureOffset!.toStringAsFixed(1)} EV',
+            ),
           if (fixed) ...[
+            SwitchListTile(
+              title: const Text('Link ISO to shutter'),
+              subtitle: const Text(
+                'Keep the exposure level as shutter time changes.',
+              ),
+              value: camera.linkedISO,
+              onChanged: camera.controlBusy ? null : camera.setLinkedISO,
+            ),
             const Text('Shutter time'),
             Slider(
               min: math.log(state.minimumShutter!),
@@ -48,7 +64,7 @@ class ManualCameraTools extends StatelessWidget {
               value: math.log(seconds),
               onChanged: camera.controlBusy
                   ? null
-                  : (value) => camera.manual(math.exp(value), iso),
+                  : (value) => camera.changeShutter(math.exp(value)),
             ),
             const Text('ISO'),
             Slider(
@@ -57,8 +73,20 @@ class ManualCameraTools extends StatelessWidget {
               value: iso,
               onChanged: camera.controlBusy
                   ? null
-                  : (value) => camera.manual(seconds, value),
+                  : (value) => camera.changeISO(value),
             ),
+            if (camera.linkedISO) ...[
+              Text(
+                'Linked exposure adjustment: ${camera.linkedEV.toStringAsFixed(1)} EV',
+              ),
+              Slider(
+                min: -2,
+                max: 2,
+                divisions: 40,
+                value: camera.linkedEV,
+                onChanged: camera.controlBusy ? null : camera.changeLinkedEV,
+              ),
+            ],
           ],
           TextButton(
             onPressed: camera.controlBusy ? null : camera.returnAuto,

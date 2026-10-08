@@ -7,6 +7,43 @@ import kotlin.math.*
 
 /** Image measurements only: device attitude is deliberately never used as a horizon. */
 internal object PhotoGeometry {
+    fun scenic(image: Bitmap): JSONObject {
+        val packet = JSONObject().put("openAreaStatus", "valid").put("saliencyStatus", "valid").put("horizonStatus", "valid").put("luminanceScale", 255)
+        val w = min(120, image.width); val h = max(1, image.height * w / image.width)
+        val small = Bitmap.createScaledBitmap(image, w, h, true)
+        try {
+            val colors = IntArray(w * h); small.getPixels(colors, 0, w, 0, 0, w, h)
+            val r = colors.map { Color.red(it).toDouble() }; val g = colors.map { Color.green(it).toDouble() }; val b = colors.map { Color.blue(it).toDouble() }
+            val meanR = r.average(); val meanG = g.average(); val meanB = b.average()
+            packet.put("backgroundLuminance", .2126 * meanR + .7152 * meanG + .0722 * meanB)
+            var upper = 0; var open = 0
+            for (y in 0 until max(1, h / 3)) for (x in 0 until w) { val i = y * w + x; upper++; if (b[i] > r[i] * 1.08 && b[i] > g[i] * .95 || .2126 * r[i] + .7152 * g[i] + .0722 * b[i] > 170) open++ }
+            packet.put("openAreaRatio", open.toDouble() / max(1, upper))
+            val scores = DoubleArray(colors.size) { i -> sqrt((r[i] - meanR).pow(2) + (g[i] - meanG).pow(2) + (b[i] - meanB).pow(2)) }
+            val mean = scores.average(); val deviation = sqrt(scores.sumOf { (it - mean).pow(2) } / scores.size)
+            val visited = BooleanArray(scores.size); var best = emptyList<Int>()
+            if (deviation > 12) for (start in scores.indices) {
+                if (visited[start] || scores[start] < mean + deviation) continue
+                val component = ArrayList<Int>(); val queue = java.util.ArrayDeque<Int>(); queue.add(start); visited[start] = true
+                while (queue.isNotEmpty()) {
+                    val i = queue.removeFirst(); component.add(i); val x = i % w; val y = i / w
+                    for ((nx, ny) in listOf(x - 1 to y, x + 1 to y, x to y - 1, x to y + 1)) {
+                        if (nx !in 0 until w || ny !in 0 until h) continue
+                        val next = ny * w + nx
+                        if (!visited[next] && scores[next] >= mean + deviation) { visited[next] = true; queue.add(next) }
+                    }
+                }
+                if (component.size > best.size) best = component
+            }
+            if (best.size > colors.size * .015 && best.size < colors.size * .50) {
+                val left = best.minOf { it % w }; val right = best.maxOf { it % w } + 1; val top = best.minOf { it / w }; val bottom = best.maxOf { it / w } + 1
+                packet.put("salientObject", JSONObject().put("x", left.toDouble() / w).put("y", top.toDouble() / h).put("width", (right - left).toDouble() / w).put("height", (bottom - top).toDouble() / h)
+                    .put("confidence", min(.85, .35 + deviation / 255)).put("label", "color-contrast saliency").put("method", "connectedColorContrast"))
+            }
+        } finally { if (small !== image) small.recycle() }
+        horizon(image)?.let { packet.put("horizon", it).put("horizonConfidence", it.getDouble("confidence")) }
+        return packet
+    }
     fun horizon(image: Bitmap): JSONObject? {
         val w = min(240, image.width); val h = max(3, image.height * w / image.width)
         val small = Bitmap.createScaledBitmap(image, w, h, true)
@@ -25,12 +62,12 @@ internal object PhotoGeometry {
                         val gx = luma[y * w + x + 1] - luma[y * w + x - 1]
                         if (abs(gy) < 25 || abs(gx + slope * gy) > abs(gy) * .30) continue
                         val bin = (y - slope * x + w / 2).roundToInt()
-                        if (bin in bins.indices) { bins[bin] += min(100.0, abs(gy)); column.add(bin) }
+                        if (bin in bins.indices) { bins[bin] += min(100.0, abs(gy)); for (near in bin - 1..bin + 1) if (near in bins.indices) column.add(near) }
                     }
                     for (bin in column) coverage[bin]++
                 }
                 for (i in 1 until bins.size - 1) {
-                    val support = (coverage[i - 1] + coverage[i] + coverage[i + 1]).toDouble() / (w / 2)
+                    val support = coverage[i].toDouble() / (w / 2)
                     val score = bins[i - 1] + bins[i] + bins[i + 1]
                     if (support >= .60 && score > bestScore) { bestScore = score; bestAngle = angle; bestCoverage = support }
                 }

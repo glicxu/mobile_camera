@@ -35,6 +35,8 @@ class CameraSnapshot {
     this.currentISO,
     this.currentShutter,
     this.manualExposure,
+    this.currentAperture,
+    this.exposureOffset,
   });
   bool ready;
   bool front;
@@ -56,6 +58,8 @@ class CameraSnapshot {
   double? currentISO;
   double? currentShutter;
   bool? manualExposure;
+  double? currentAperture;
+  double? exposureOffset;
 }
 
 class PhotoHandle {
@@ -124,6 +128,8 @@ abstract class CameraHostApi {
   );
   void setVoicePhrase(String phrase);
   void releasePhoto(PhotoHandle photo);
+  @async
+  void reconcilePrivatePhotos(List<String> retainedPaths);
   @async
   CameraSnapshot setZoom(String configurationId, double zoom);
   @async

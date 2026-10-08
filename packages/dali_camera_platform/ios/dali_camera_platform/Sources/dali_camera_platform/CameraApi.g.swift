@@ -154,6 +154,8 @@ struct CameraSnapshot: Hashable {
   var currentISO: Double? = nil
   var currentShutter: Double? = nil
   var manualExposure: Bool? = nil
+  var currentAperture: Double? = nil
+  var exposureOffset: Double? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -178,6 +180,8 @@ struct CameraSnapshot: Hashable {
     let currentISO: Double? = nilOrValue(pigeonVar_list[17])
     let currentShutter: Double? = nilOrValue(pigeonVar_list[18])
     let manualExposure: Bool? = nilOrValue(pigeonVar_list[19])
+    let currentAperture: Double? = nilOrValue(pigeonVar_list[20])
+    let exposureOffset: Double? = nilOrValue(pigeonVar_list[21])
 
     return CameraSnapshot(
       ready: ready,
@@ -199,7 +203,9 @@ struct CameraSnapshot: Hashable {
       maximumShutter: maximumShutter,
       currentISO: currentISO,
       currentShutter: currentShutter,
-      manualExposure: manualExposure
+      manualExposure: manualExposure,
+      currentAperture: currentAperture,
+      exposureOffset: exposureOffset
     )
   }
   func toList() -> [Any?] {
@@ -224,6 +230,8 @@ struct CameraSnapshot: Hashable {
       currentISO,
       currentShutter,
       manualExposure,
+      currentAperture,
+      exposureOffset,
     ]
   }
   static func == (lhs: CameraSnapshot, rhs: CameraSnapshot) -> Bool {
@@ -365,6 +373,7 @@ protocol CameraHostApi {
   func renderFilter(original: PhotoHandle, matrix: [Double], parameters: [Double], watermarkPath: String?, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func setVoicePhrase(phrase: String) throws
   func releasePhoto(photo: PhotoHandle) throws
+  func reconcilePrivatePhotos(retainedPaths: [String], completion: @escaping (Result<Void, Error>) -> Void)
   func setZoom(configurationId: String, zoom: Double, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
   func meter(configurationId: String, x: Double, y: Double, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
   func setManualExposure(configurationId: String, seconds: Double?, iso: Double?, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
@@ -662,6 +671,23 @@ class CameraHostApiSetup {
       }
     } else {
       releasePhotoChannel.setMessageHandler(nil)
+    }
+    let reconcilePrivatePhotosChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.reconcilePrivatePhotos\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      reconcilePrivatePhotosChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let retainedPathsArg = args[0] as! [String]
+        api.reconcilePrivatePhotos(retainedPaths: retainedPathsArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      reconcilePrivatePhotosChannel.setMessageHandler(nil)
     }
     let setZoomChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setZoom\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

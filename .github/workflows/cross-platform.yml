@@ -64,6 +64,12 @@ jobs:
           /tmp/export-dali-situations "$GITHUB_WORKSPACE/fixtures/swift-situations.json"
           cd packages/dali_camera_core
           dart run tool/verify_situation_fixtures.dart ../../fixtures/swift-situations.json
+      - name: Compare rich native coaching
+        run: |
+          swiftc -parse-as-library DaliCamera/Models.swift DaliCamera/CoachingEngine.swift tools/ExportRichCoachingFixtures.swift -o /tmp/export-dali-rich
+          /tmp/export-dali-rich "$GITHUB_WORKSPACE/fixtures/swift-rich.json"
+          cd packages/dali_camera_core
+          dart run tool/verify_rich_coaching_fixtures.dart ../../fixtures/swift-rich.json
       - name: Compare native pose geometry
         run: |
           swiftc -parse-as-library DaliCamera/Models.swift packages/dali_camera_platform/ios/dali_camera_platform/Sources/dali_camera_platform/ReferencePoseGeometry.swift tools/ExportPoseFixtures.swift -o /tmp/export-dali-pose

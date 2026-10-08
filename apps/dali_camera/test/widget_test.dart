@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 class FakeHost extends CameraHostApi {
   bool failSave = false;
   bool failRender = false;
+  bool voiceAvailable = false;
   List<double>? filterParameters;
   Map<String, dynamic>? effectsRecipe;
   int captures = 0;
@@ -36,13 +37,15 @@ class FakeHost extends CameraHostApi {
   @override
   Future<void> setVoicePhrase(String phrase) async {}
   @override
+  Future<void> reconcilePrivatePhotos(List<String> retainedPaths) async {}
+  @override
   Future<void> setDepthPreview(
     String configurationId,
     int level,
     String? subjectRect,
   ) async {}
   @override
-  Future<bool> setVoiceEnabled(bool enabled) async => false;
+  Future<bool> setVoiceEnabled(bool enabled) async => enabled && voiceAvailable;
   @override
   Future<PhotoHandle?> recover() async => retained;
   @override
@@ -132,8 +135,61 @@ class FakeHost extends CameraHostApi {
   }
 }
 
+class ManualHost extends FakeHost {
+  @override
+  Future<CameraSnapshot> start(bool front) async => (await super.start(front))
+    ..minimumISO = 20
+    ..maximumISO = 1600
+    ..currentISO = 100
+    ..minimumShutter = 1 / 4000
+    ..maximumShutter = .5
+    ..currentShutter = 1 / 125;
+  @override
+  Future<CameraSnapshot> setManualExposure(
+    String configurationId,
+    double? seconds,
+    double? iso,
+  ) async => (await start(false))
+    ..manualExposure = seconds != null
+    ..currentISO = iso ?? 100
+    ..currentShutter = seconds ?? 1 / 125;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('Linked ISO preserves exposure and resets in Auto', () async {
+    final camera = CameraController(host: ManualHost(), register: false);
+    await camera.initialize();
+    camera.setLinkedISO(true);
+    await camera.changeShutter(1 / 250);
+    expect(camera.snapshot!.currentISO, 200);
+    await camera.changeLinkedEV(1);
+    expect(camera.snapshot!.currentISO, 400);
+    await camera.returnAuto();
+    expect(camera.linkedISO, isFalse);
+    expect(camera.snapshot!.manualExposure, isFalse);
+    camera.dispose();
+  });
+  test(
+    'Voice command completes after listening ends and preference survives pause',
+    () async {
+      final host = FakeHost()..voiceAvailable = true;
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      await camera.setVoice(true);
+      camera.voiceState(false, 'Processing voice command');
+      camera.voiceShutter();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(host.captures, 1);
+      expect(camera.voicePreferred, isTrue);
+      await camera.returnToCamera();
+      expect(camera.voice, isTrue);
+      await camera.setVoice(false);
+      camera.voiceShutter();
+      expect(host.captures, 1);
+      camera.dispose();
+    },
+  );
   test(
     'Capture and review effects retain originals and use separate settings',
     () async {

@@ -56,7 +56,7 @@ final class StillPhotoProcessor {
         ]
         for (signal, state) in analysis.availability { packet[signal + "Status"] = state }
         if let group = measurements.groupAnalysis {
-            var value = reflected(group); value["groupBounds"] = group.groupBounds.map(rect) ?? [:]
+            var value = reflected(group); value["groupBounds"] = group.groupBounds.map(rect) as Any? ?? NSNull()
             packet["groupAnalysis"] = value
         }
         if let face = measurements.faceAnalysis { packet["faceAnalysis"] = reflected(face) }

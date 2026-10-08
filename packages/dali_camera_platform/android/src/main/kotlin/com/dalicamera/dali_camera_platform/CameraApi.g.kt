@@ -102,7 +102,9 @@ data class CameraSnapshot (
   val maximumShutter: Double? = null,
   val currentISO: Double? = null,
   val currentShutter: Double? = null,
-  val manualExposure: Boolean? = null
+  val manualExposure: Boolean? = null,
+  val currentAperture: Double? = null,
+  val exposureOffset: Double? = null
 )
  {
   companion object {
@@ -127,7 +129,9 @@ data class CameraSnapshot (
       val currentISO = pigeonVar_list[17] as Double?
       val currentShutter = pigeonVar_list[18] as Double?
       val manualExposure = pigeonVar_list[19] as Boolean?
-      return CameraSnapshot(ready, front, configurationId, aspectRatio, minimumEV, maximumEV, currentEV, supportsLock, locked, minimumZoom, maximumZoom, currentZoom, supportsTap, minimumISO, maximumISO, minimumShutter, maximumShutter, currentISO, currentShutter, manualExposure)
+      val currentAperture = pigeonVar_list[20] as Double?
+      val exposureOffset = pigeonVar_list[21] as Double?
+      return CameraSnapshot(ready, front, configurationId, aspectRatio, minimumEV, maximumEV, currentEV, supportsLock, locked, minimumZoom, maximumZoom, currentZoom, supportsTap, minimumISO, maximumISO, minimumShutter, maximumShutter, currentISO, currentShutter, manualExposure, currentAperture, exposureOffset)
     }
   }
   fun toList(): List<Any?> {
@@ -152,6 +156,8 @@ data class CameraSnapshot (
       currentISO,
       currentShutter,
       manualExposure,
+      currentAperture,
+      exposureOffset,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -293,6 +299,7 @@ interface CameraHostApi {
   fun renderFilter(original: PhotoHandle, matrix: List<Double>, parameters: List<Double>, watermarkPath: String?, callback: (Result<PhotoHandle>) -> Unit)
   fun setVoicePhrase(phrase: String)
   fun releasePhoto(photo: PhotoHandle)
+  fun reconcilePrivatePhotos(retainedPaths: List<String>, callback: (Result<Unit>) -> Unit)
   fun setZoom(configurationId: String, zoom: Double, callback: (Result<CameraSnapshot>) -> Unit)
   fun meter(configurationId: String, x: Double, y: Double, callback: (Result<CameraSnapshot>) -> Unit)
   fun setManualExposure(configurationId: String, seconds: Double?, iso: Double?, callback: (Result<CameraSnapshot>) -> Unit)
@@ -636,6 +643,25 @@ interface CameraHostApi {
               CameraApiPigeonUtils.wrapError(exception)
             }
             reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.reconcilePrivatePhotos$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val retainedPathsArg = args[0] as List<String>
+            api.reconcilePrivatePhotos(retainedPathsArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(CameraApiPigeonUtils.wrapResult(null))
+              }
+            }
           }
         } else {
           channel.setMessageHandler(null)

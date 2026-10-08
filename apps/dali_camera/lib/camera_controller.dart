@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dali_camera_core/dali_camera_core.dart';
@@ -81,10 +82,14 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   };
   final Map<String, Map<String, dynamic>> reviewTreatments = {
     'enhance': {'strength': 0, 'flags': <String, bool>{}},
-    'portrait': {'strength': 0, 'flags': <String, bool>{}},
+    'portrait': {
+      'strength': 0,
+      'flags': <String, bool>{'lipPlumping': true},
+    },
     'landscape': {'strength': 0, 'flags': <String, bool>{}},
   };
   String reviewTreatment = 'enhance';
+  PosePackageId coachingPackage = PosePackageId.neutral;
   String get captureTreatment => beautifier == 'off'
       ? 'original'
       : beautifier == 'custom'
@@ -137,6 +142,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   bool _depthUpdating = false;
   bool controlBusy = false;
   bool manualWorkspace = false;
+  bool linkedISO = false;
+  double linkedExposureProduct = 100 / 125;
+  double linkedEV = 0;
   double? focusX;
   double? focusY;
   String? message;
@@ -170,17 +178,25 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         history.removeWhere((photo) => photo.id == original!.id);
         history.insert(0, original!);
       }
+      await host.reconcilePrivatePhotos(
+        history.map((photo) => photo.path).toList(),
+      );
     } catch (e) {
       message = 'Recovery needs attention: $e';
     }
     notifyListeners();
-    if (!reviewing) await start();
+    if (!reviewing) {
+      await start();
+    } else {
+      await _analyzeStill();
+    }
   }
 
   Future<void> start() async {
     if (starting || reviewing || !foreground || busy) return;
     starting = true;
     cameraError = null;
+    lastFrame = null;
     engine.reset();
     subjectMotionTracker.reset();
     notifyListeners();
@@ -586,6 +602,31 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       final result =
           jsonDecode(await host.analyzePhoto(source)) as Map<String, dynamic>;
       if (original?.id == source.id && result['sourceId'] == source.id) {
+        if (result['imageWidth'] != null) {
+          final measured = NativeFrame(result);
+          if (measured.poseAnalysis != null)
+            result['poseAnalysis'] = measured.poseAnalysis!.toJson();
+          result['issues'] = engine
+              .issues(
+                measured.measurements,
+                includePosture: true,
+                posePackage: coachingPackage,
+              )
+              .where(
+                (issue) =>
+                    !(issue.type == 'face_missing' &&
+                        result['faceStatus'] != 'valid'),
+              )
+              .map(
+                (issue) => {
+                  'type': issue.type,
+                  'instruction': issue.instruction,
+                  'recipient': issue.recipient,
+                  'severity': issue.severity,
+                },
+              )
+              .toList();
+        }
         photoAnalysis = result;
       }
     } catch (error) {
@@ -622,6 +663,34 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       busy = false;
       notifyListeners();
     }
+  }
+
+  void setCoachingPackage(PosePackageId value) {
+    coachingPackage = value;
+    final analysis = photoAnalysis;
+    if (analysis != null && analysis['imageWidth'] != null) {
+      analysis['issues'] = engine
+          .issues(
+            NativeFrame(analysis).measurements,
+            includePosture: true,
+            posePackage: value,
+          )
+          .where(
+            (issue) =>
+                !(issue.type == 'face_missing' &&
+                    analysis['faceStatus'] != 'valid'),
+          )
+          .map(
+            (issue) => {
+              'type': issue.type,
+              'instruction': issue.instruction,
+              'recipient': issue.recipient,
+              'severity': issue.severity,
+            },
+          )
+          .toList();
+    }
+    persistSettings();
   }
 
   Future<void> _release(PhotoHandle photo) async {
@@ -679,6 +748,12 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         customBeautifier = 'portrait';
       }
       reviewTreatment = prefs.getString('reviewTreatment') ?? 'enhance';
+      final savedPackage = prefs.getString('coachingPackage');
+      coachingPackage =
+          PosePackageId.values
+              .where((value) => value.name == savedPackage)
+              .firstOrNull ??
+          PosePackageId.neutral;
       if (!reviewTreatments.containsKey(reviewTreatment)) {
         reviewTreatment = 'enhance';
       }
@@ -740,6 +815,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       await prefs.setString('beautifier', beautifier);
       await prefs.setString('customBeautifier', customBeautifier);
       await prefs.setString('reviewTreatment', reviewTreatment);
+      await prefs.setString('coachingPackage', coachingPackage.name);
       await prefs.setInt('depthLevel', depthLevel);
       await prefs.setString('captureTreatments', jsonEncode(captureTreatments));
       await prefs.setString('reviewTreatments', jsonEncode(reviewTreatments));
@@ -846,11 +922,40 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   Future<void> manual(double seconds, double iso) => _control(
     (current) => host.setManualExposure(current.configurationId, seconds, iso),
   );
+  void setLinkedISO(bool value) {
+    linkedISO = value;
+    linkedExposureProduct =
+        (snapshot?.currentISO ?? 100) * (snapshot?.currentShutter ?? 1 / 125);
+    linkedEV = 0;
+    notifyListeners();
+  }
+
+  Future<void> changeShutter(double seconds) => manual(
+    seconds,
+    linkedISO
+        ? (linkedExposureProduct / seconds * math.pow(2, linkedEV))
+              .clamp(snapshot!.minimumISO!, snapshot!.maximumISO!)
+              .toDouble()
+        : snapshot?.currentISO ?? 100,
+  );
+  Future<void> changeISO(double iso) {
+    linkedExposureProduct = iso * (snapshot?.currentShutter ?? 1 / 125);
+    linkedEV = 0;
+    return manual(snapshot?.currentShutter ?? 1 / 125, iso);
+  }
+
+  Future<void> changeLinkedEV(double ev) {
+    linkedEV = ev;
+    return changeShutter(snapshot?.currentShutter ?? 1 / 125);
+  }
+
   Future<void> returnAuto({bool stayInManual = false}) async {
     await _control(
       (current) => host.setManualExposure(current.configurationId, null, null),
     );
     if (snapshot?.manualExposure != true) {
+      linkedISO = false;
+      linkedEV = 0;
       manualWorkspace = stayInManual;
       focusX = null;
       focusY = null;
@@ -979,7 +1084,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   @override
   void voiceShutter() {
-    if (voice && canCapture) requestShutter();
+    if (voicePreferred && canCapture) requestShutter();
   }
 
   @override
@@ -991,7 +1096,11 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   Future<void> updateDepthPreview() async {
     final current = snapshot;
-    if (_depthUpdating || current == null || reviewing) return;
+    if (_depthUpdating ||
+        current == null ||
+        reviewing ||
+        lastFrame?['configurationId'] != current.configurationId)
+      return;
     _depthUpdating = true;
     try {
       Map? subject;

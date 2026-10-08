@@ -251,6 +251,13 @@ void main() {
     expect(recovered?.id, derived.id);
     expect(recovered?.unsaved, isTrue);
     await host.releasePhoto(recovered!);
+    final orphan = await host.renderEffects(
+      original,
+      jsonEncode({'version': 1, 'treatment': 'original'}),
+    );
+    await host.reconcilePrivatePhotos([]);
+    expect(await File(orphan.path).exists(), isFalse);
+    expect(await file.readAsBytes(), bytes);
     expect(
       await File(derived.path).exists(),
       isTrue,

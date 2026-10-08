@@ -61,6 +61,8 @@ class CameraSnapshot {
     this.currentISO,
     this.currentShutter,
     this.manualExposure,
+    this.currentAperture,
+    this.exposureOffset,
   });
 
   bool ready;
@@ -103,6 +105,10 @@ class CameraSnapshot {
 
   bool? manualExposure;
 
+  double? currentAperture;
+
+  double? exposureOffset;
+
   List<Object?> _toList() {
     return <Object?>[
       ready,
@@ -125,6 +131,8 @@ class CameraSnapshot {
       currentISO,
       currentShutter,
       manualExposure,
+      currentAperture,
+      exposureOffset,
     ];
   }
 
@@ -154,6 +162,8 @@ class CameraSnapshot {
       currentISO: result[17] as double?,
       currentShutter: result[18] as double?,
       manualExposure: result[19] as bool?,
+      currentAperture: result[20] as double?,
+      exposureOffset: result[21] as double?,
     );
   }
 
@@ -732,6 +742,28 @@ class CameraHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[photo]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> reconcilePrivatePhotos(List<String> retainedPaths) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.reconcilePrivatePhotos$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[retainedPaths]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);

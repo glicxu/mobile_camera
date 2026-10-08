@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'camera_controller.dart';
+import 'package:dali_camera_core/dali_camera_core.dart';
 
 const treatmentTitles = {
   'enhance': 'General Enhance',
@@ -200,13 +201,41 @@ class PhotoAnalysisCard extends StatelessWidget {
     }
     final faces = analysis['faces'] as List? ?? [];
     final points = analysis['poseKeypoints'] as Map? ?? {};
+    final faceCount =
+        (analysis['groupAnalysis'] as Map?)?['faceCount'] as int? ??
+        faces.length;
     final luminance = analysis['backgroundLuminance'] as num?;
     return ExpansionTile(
       title: const Text('Photo analysis'),
       subtitle: Text(
-        '${faces.length} ${faces.length == 1 ? 'face' : 'faces'} · ${points.length} pose landmarks',
+        '$faceCount ${faceCount == 1 ? 'face' : 'faces'} · ${points.length} pose landmarks',
       ),
       children: [
+        DropdownButton<PosePackageId>(
+          value: camera.coachingPackage,
+          items: [
+            for (final value in PosePackageId.values)
+              DropdownMenuItem(
+                value: value,
+                child: Text(
+                  value == PosePackageId.neutral
+                      ? 'Natural'
+                      : value == PosePackageId.groupPortrait
+                      ? 'Group'
+                      : value.name[0].toUpperCase() + value.name.substring(1),
+                ),
+              ),
+          ],
+          onChanged: camera.busy
+              ? null
+              : (value) {
+                  if (value != null) camera.setCoachingPackage(value);
+                },
+        ),
+        for (final signal in ['people', 'face', 'pose', 'horizon', 'saliency'])
+          if (analysis['${signal}Status'] == 'unavailable' ||
+              analysis['${signal}Status'] == 'unsupported')
+            Text('$signal detection ${analysis['${signal}Status']}'),
         if (luminance != null)
           Text(
             'Background brightness: ${(luminance * (analysis['luminanceScale'] == 255 ? 1 : 255)).round()} / 255',
@@ -220,6 +249,21 @@ class PhotoAnalysisCard extends StatelessWidget {
           Text(
             'Horizon tilt: ${((analysis['horizon'] as Map)['angleDegrees'] as num).toStringAsFixed(1)}°',
           ),
+        if (analysis['faceLuminance'] is num)
+          Text(
+            'Face brightness: ${(analysis['faceLuminance'] as num).round()} / 255',
+          ),
+        if (analysis['poseAnalysis'] is Map) ...[
+          if ((analysis['poseAnalysis'] as Map)['shoulderLineAngleDegrees']
+              is num)
+            Text(
+              'Shoulder angle: ${((analysis['poseAnalysis'] as Map)['shoulderLineAngleDegrees'] as num).toStringAsFixed(1)}°',
+            ),
+          if ((analysis['poseAnalysis'] as Map)['armVisibilityScore'] is num)
+            Text(
+              'Arm visibility: ${(((analysis['poseAnalysis'] as Map)['armVisibilityScore'] as num) * 100).round()}%',
+            ),
+        ],
         for (final issue
             in (analysis['issues'] as List? ?? []).whereType<Map>())
           Padding(

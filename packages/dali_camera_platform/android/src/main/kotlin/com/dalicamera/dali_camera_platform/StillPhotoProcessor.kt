@@ -70,7 +70,7 @@ internal class StillPhotoProcessor : AutoCloseable {
         val packet = JSONObject().put("schemaVersion", 1).put("sourceId", id).put("frameId", "still-$id").put("configurationId", "still-$id")
             .put("timestamp", System.currentTimeMillis()).put("imageWidth", bitmap.width).put("imageHeight", bitmap.height).put("displayRotationDegrees", 0).put("front", false)
             .put("people", people).put("peopleScope", "single").put("groupScope", "faces").put("peopleStatus", if (pose != null || found != null) "valid" else "unavailable")
-            .put("faces", JSONArray((found ?: emptyList()).map { rect(it.boundingBox, bitmap, "face") })).put("faceStatus", if (found != null) "valid" else "unavailable")
+            .put("faces", JSONArray((found ?: emptyList()).sortedByDescending { it.boundingBox.width() * it.boundingBox.height() }.map { rect(it.boundingBox, bitmap, "face") })).put("faceStatus", if (found != null) "valid" else "unavailable")
             .put("poseStatus", if (pose != null) "valid" else "unavailable").put("poseKeypoints", points).put("motionStatus", "unsupported")
             .put("saliencyStatus", "unsupported").put("horizonStatus", "unsupported").put("openAreaStatus", "valid").put("luminanceScale", 255)
         var sum = 0.0; var count = 0; var open = 0; var upper = 0; var faceSum = 0.0; var faceCount = 0
@@ -94,9 +94,8 @@ internal class StillPhotoProcessor : AutoCloseable {
                 .put("eyeVisibilityScore", (if (left >= 3) .5 else 0.0) + (if (right >= 3) .5 else 0.0)).put("occlusionScore", if (left >= 3 && right >= 3) 0.0 else .6)
                 .put("yawEstimate", prominent.headEulerAngleY / 90.0).put("pitchEstimate", prominent.headEulerAngleX / 90.0))
         }
-        val horizon = PhotoGeometry.horizon(bitmap)
-        packet.put("horizonStatus", "valid")
-        if (horizon != null) packet.put("horizon", horizon)
+        val scene = PhotoGeometry.scenic(bitmap)
+        for (key in scene.keys()) packet.put(key, scene.get(key))
         PhotoGeometry.reframe(people.optJSONObject(0), bitmap.width < bitmap.height)?.let { packet.put("reframe", it) }
         return packet
     }
@@ -146,6 +145,32 @@ internal class StillPhotoProcessor : AutoCloseable {
         val output = Bitmap.createBitmap(pixels, w, h, Bitmap.Config.ARGB_8888)
         if (small !== image) small.recycle()
         return output
+    }
+    fun previewBlur(image: Bitmap, level: Int): Bitmap = blur(image, 2.0 + level * .8)
+    private fun tonePass(image: Bitmap, shadows: Double, highlights: Double, mask: ((Int, Int) -> Double)? = null) {
+        val row = IntArray(image.width)
+        for (y in 0 until image.height) {
+            image.getPixels(row, 0, image.width, 0, y, image.width, 1)
+            for (x in row.indices) {
+                val c = row[x]; val l = (.2126 * Color.red(c) + .7152 * Color.green(c) + .0722 * Color.blue(c)) / 255
+                val delta = (shadows * (1 - l).pow(2) * .18 + (highlights - 1) * l.pow(4) * .25) * (mask?.invoke(x, y) ?: 1.0)
+                fun channel(v: Int) = (v + delta * 255).roundToInt().coerceIn(0, 255)
+                row[x] = Color.argb(Color.alpha(c), channel(Color.red(c)), channel(Color.green(c)), channel(Color.blue(c)))
+            }
+            image.setPixels(row, 0, image.width, 0, y, image.width, 1)
+        }
+    }
+    private fun channelPass(image: Bitmap, red: Double, green: Double, blue: Double, blueOffset: Double, mask: ((Int, Int) -> Double)? = null) {
+        val row = IntArray(image.width)
+        for (y in 0 until image.height) {
+            image.getPixels(row, 0, image.width, 0, y, image.width, 1)
+            for (x in row.indices) {
+                val c = row[x]; val a = mask?.invoke(x, y) ?: 1.0
+                fun channel(v: Int, scale: Double, offset: Double = 0.0) = (v + ((v * scale + offset * 255) - v) * a).roundToInt().coerceIn(0, 255)
+                row[x] = Color.argb(Color.alpha(c), channel(Color.red(c), red), channel(Color.green(c), green), channel(Color.blue(c), blue, blueOffset))
+            }
+            image.setPixels(row, 0, image.width, 0, y, image.width, 1)
+        }
     }
     private fun spatial(image: Bitmap, radius: Double, amount: Double, sharpen: Boolean = false, mask: ((Int, Int) -> Double)? = null) {
         val blurred = blur(image, radius)
@@ -200,17 +225,22 @@ internal class StillPhotoProcessor : AutoCloseable {
         val flags = request.optJSONObject("flags") ?: JSONObject(); val strength = request.optInt("strength", 0).coerceIn(0, 5) / 5.0
         val filter = request.optJSONArray("filter") ?: JSONArray(List(7) { 0 })
         check(filter.length() == 7); val p = DoubleArray(7) { index -> filter.getDouble(index).also { check(it.isFinite()) }.coerceIn(if (index in listOf(0, 1, 3)) -5.0 else 0.0, 5.0) / 5 }
-        val analysis = analyze(original)
+        val analysis = if (treatment == "original" && request.optInt("depth", 0) == 0) JSONObject() else analyze(original)
         val source = load(original.path)
         var image = try { source.copy(Bitmap.Config.ARGB_8888, true) ?: error("Cannot allocate photo result") } finally { source.recycle() }
         fun flag(name: String) = flags.optBoolean(name, true)
         try {
             if (p[4] > 0) spatial(image, 1.5 + 3 * p[4], .16 + .28 * p[4])
-            colorPass(image, .055 * p[0], 1 + .30 * p[2], 1 + .13 * p[3] - .04 * p[4], p[1], .20 * p[2], p[6])
-            if (p[5] > 0) spatial(image, .8 + 1.8 * p[5], .12 + .45 * p[5], true)
+            if (p[0] != 0.0) tonePass(image, max(0.0, .22 * p[0]), 1 - max(0.0, .10 * p[0]))
+            colorPass(image, .055 * p[0], 1 + .30 * p[2], 1 + .13 * p[3] - .04 * p[4])
+            if (p[2] > 0) colorPass(image, vibrance = .36 * p[2])
+            if (p[1] != 0.0) colorPass(image, warmth = p[1])
+            if (p[6] > 0) channelPass(image, 1 - .05 * p[6], 1 + .02 * p[6], 1 + .18 * p[6], .018 * p[6])
+            if (p[5] > 0) spatial(image, 1.1 + 1.9 * p[5], .10 + .34 * p[5], true)
             when (treatment) {
                 "enhance" -> if (strength > 0) {
                     if (flag("noiseReduction")) spatial(image, 1.2 + strength, .08 + .20 * strength)
+                    if (flag("autoTone")) tonePass(image, .08 + .20 * strength, 1 - .16 * strength)
                     val exposure = ((.5 - analysis.optDouble("backgroundLuminance", 127.5) / 255) * .16).coerceIn(-.045, .055)
                     colorPass(image, if (flag("autoTone")) exposure * strength else 0.0, if (flag("vibrance")) 1 + .025 * strength else 1.0,
                         if (flag("autoTone")) 1 + .065 * strength else 1.0, if (flag("warmth")) .20 * strength else 0.0, if (flag("vibrance")) .22 * strength else 0.0)
@@ -245,10 +275,18 @@ internal class StillPhotoProcessor : AutoCloseable {
                 }
                 "landscape" -> if (strength > 0) {
                     val s = if (strength <= .6) strength / .6 else 1 + (strength - .6) * .875
-                    if (flag("landscapeColor")) colorPass(image, saturation = 1 + .08 * s, contrast = 1 + .07 * s, vibrance = .16 + .42 * s)
+                    if (flag("landscapeColor") && analysis.optDouble("openAreaRatio") >= .08) { colorPass(image, vibrance = .16 + .42 * s); colorPass(image, saturation = 1 + .08 * s, contrast = 1 + .07 * s) }
                     if (flag("sky") && analysis.optDouble("openAreaRatio") >= .08) {
-                        val sky: (Int, Int) -> Double = { x, y -> val c = image.getPixel(x, y); val chroma = ((Color.blue(c) - .45 * Color.red(c) - .10 * Color.green(c)) / 255.0 - .08).coerceIn(0.0, 1.0); chroma * ((.72 - y.toDouble() / image.height) / .38).coerceIn(0.0, 1.0) }
-                        colorPass(image, -.018 * s.pow(1.3), 1 + .16 * s, 1 + .06 * s, vibrance = .28 + .55 * s.pow(1.3), blue = s.pow(1.3), mask = sky)
+                        val curve = s.pow(1.3); val high = s.pow(4); val confidence = ((analysis.optDouble("openAreaRatio") - .08) / .42).coerceIn(.25, 1.0)
+                        val maskCopy = Bitmap.createScaledBitmap(image, max(1, image.width / 8), max(1, image.height / 8), true)
+                        try {
+                            val sky: (Int, Int) -> Double = { x, y -> val c = maskCopy.getPixel(x * maskCopy.width / image.width, y * maskCopy.height / image.height); val chroma = ((1.05 * Color.blue(c) - .45 * Color.red(c) - .10 * Color.green(c)) / 255.0 - .08).coerceIn(0.0, 1.0); chroma * ((.72 - y.toDouble() / image.height) / .38).coerceIn(0.0, 1.0) * min(1.0, (.50 + .50 * curve) * confidence) }
+                            channelPass(image, max(.15, 1 - .18 * curve - .20 * high), max(.55, 1 - .03 * curve - .08 * high), min(3.2, 1 + .35 * curve + .55 * high), min(.25, .02 * curve + .10 * high), sky)
+                            colorPass(image, vibrance = min(1.8, .28 + .55 * curve + .45 * high), mask = sky)
+                            colorPass(image, saturation = min(2.2, 1 + .28 * curve + .35 * high), contrast = min(1.5, 1 + .10 * curve + .12 * high), mask = sky)
+                            tonePass(image, .08 * curve, max(.20, 1 - .30 * curve - .18 * high), sky)
+                            spatial(image, 1.1 + 1.8 * curve, .12 + .35 * curve + .20 * high, true, sky)
+                        } finally { if (maskCopy !== image) maskCopy.recycle() }
                     }
                 }
                 "reframe" -> {
@@ -268,13 +306,31 @@ internal class StillPhotoProcessor : AutoCloseable {
             }
             val depth = request.optInt("depth", 0).coerceIn(0, 5)
             if (depth > 0) {
-                val subject = analysis.getJSONArray("people").optJSONObject(0) ?: analysis.getJSONArray("faces").optJSONObject(0)
+                val person = analysis.getJSONArray("people").optJSONObject(0)
+                val face = analysis.getJSONArray("faces").optJSONObject(0)
                 val focus = request.optJSONObject("focus")
-                if (subject != null || focus != null) {
-                    val cx = focus?.optDouble("x") ?: (subject!!.getDouble("x") + subject.getDouble("width") / 2)
-                    val cy = focus?.optDouble("y") ?: (subject!!.getDouble("y") + subject.getDouble("height") / 2)
-                    val rx = subject?.getDouble("width")?.times(.66) ?: .18; val ry = subject?.getDouble("height")?.times(.60) ?: .24
-                    spatial(image, (3 + depth * 4).toDouble(), 1.0, mask = { x, y -> (((x.toDouble() / image.width - cx).absoluteValue / rx - .8).coerceAtLeast(0.0) + ((y.toDouble() / image.height - cy).absoluteValue / ry - .8).coerceAtLeast(0.0)).times(5).coerceIn(0.0, 1.0) })
+                val fx = focus?.getDouble("x")?.also { check(it.isFinite()) }?.coerceIn(0.0, 1.0)
+                val fy = focus?.getDouble("y")?.also { check(it.isFinite()) }?.coerceIn(0.0, 1.0)
+                val selected = if (fx != null && fy != null) listOfNotNull(person, analysis.optJSONObject("salientObject"), face).firstOrNull {
+                    fx >= it.getDouble("x") - .04 && fx <= it.getDouble("x") + it.getDouble("width") + .04 && fy >= it.getDouble("y") - .04 && fy <= it.getDouble("y") + it.getDouble("height") + .04
+                } else null
+                val subject = selected ?: person ?: face
+                if (subject != null || fx != null && fy != null) {
+                    val x = subject?.getDouble("x") ?: fx!! - .18; val y = subject?.getDouble("y") ?: fy!! - .24
+                    val w = subject?.getDouble("width") ?: .36; val h = subject?.getDouble("height") ?: .48
+                    val dx = if (selected != null) .22 else if (person != null) .16 else if (face != null) 1.1 else 0.0
+                    val dy = if (selected != null) .18 else if (person != null) .10 else if (face != null) .45 else 0.0
+                    val rightFactor = if (selected == null && person == null && face != null) 2.1 else 1 + dx
+                    val bottomFactor = if (selected == null && person == null && face != null) 4.25 else 1 + dy
+                    val left = (x - w * dx).coerceIn(0.0, 1.0) * image.width; val top = (y - h * dy).coerceIn(0.0, 1.0) * image.height
+                    val right = (x + w * rightFactor).coerceIn(0.0, 1.0) * image.width; val bottom = (y + h * bottomFactor).coerceIn(0.0, 1.0) * image.height
+                    val cx = (left + right) / 2; val cy = (top + bottom) / 2; val rx = (right - left) / 2; val ry = (bottom - top) / 2
+                    val radius = min(rx, ry) * .56; val feather = max(image.width, image.height) * .018
+                    if (rx > 0 && ry > 0) spatial(image, (3 + depth * 4).toDouble(), 1.0, mask = { px, py ->
+                        val qx = abs(px - cx) - rx + radius; val qy = abs(py - cy) - ry + radius
+                        val distance = hypot(max(qx, 0.0), max(qy, 0.0)) + min(max(qx, qy), 0.0) - radius
+                        ((distance / feather + 1) / 2).coerceIn(0.0, 1.0)
+                    })
                 }
             }
             return image

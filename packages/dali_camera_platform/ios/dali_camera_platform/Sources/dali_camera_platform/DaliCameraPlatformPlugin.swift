@@ -68,7 +68,8 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             maximumISO: device?.isExposureModeSupported(.custom) == true ? Double(device!.activeFormat.maxISO) : nil,
             minimumShutter: device?.isExposureModeSupported(.custom) == true ? CMTimeGetSeconds(device!.activeFormat.minExposureDuration) : nil,
             maximumShutter: device?.isExposureModeSupported(.custom) == true ? min(0.5, CMTimeGetSeconds(device!.activeFormat.maxExposureDuration)) : nil,
-            currentISO: Double(device?.iso ?? 100), currentShutter: device.map { CMTimeGetSeconds($0.exposureDuration) }, manualExposure: device?.exposureMode == .custom)
+            currentISO: Double(device?.iso ?? 100), currentShutter: device.map { CMTimeGetSeconds($0.exposureDuration) }, manualExposure: device?.exposureMode == .custom,
+            currentAperture: device.map { Double($0.lensAperture) }, exposureOffset: device.map { Double($0.exposureTargetOffset) })
     }
     func start(front: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
@@ -433,6 +434,24 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         }
     }
     func setVoicePhrase(phrase: String) throws { speech.customPhrase = phrase }
+    func reconcilePrivatePhotos(retainedPaths: [String], completion: @escaping (Result<Void, Error>) -> Void) {
+        queue.async {
+            do {
+                var keep = Set(retainedPaths.map { URL(fileURLWithPath: $0).standardizedFileURL.path })
+                if let pending = try self.recover() { keep.insert(URL(fileURLWithPath: pending.path).standardizedFileURL.path) }
+                if FileManager.default.fileExists(atPath: self.directory.path) {
+                    for url in try FileManager.default.contentsOfDirectory(at: self.directory, includingPropertiesForKeys: [.isRegularFileKey]) {
+                        guard url.standardizedFileURL.deletingLastPathComponent() == self.directory.standardizedFileURL,
+                              try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true,
+                              !keep.contains(url.standardizedFileURL.path),
+                              (url.lastPathComponent.hasPrefix("photo-") && url.pathExtension == "jpg") || url.lastPathComponent.hasPrefix("import-") else { continue }
+                        try FileManager.default.removeItem(at: url)
+                    }
+                }
+                DispatchQueue.main.async { completion(.success(())) }
+            } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+        }
+    }
     func releasePhoto(photo: PhotoHandle) throws {
         let url = URL(fileURLWithPath: photo.path).standardizedFileURL
         guard url.deletingLastPathComponent() == directory.standardizedFileURL, (url.pathExtension == "jpg" || url.lastPathComponent.hasPrefix("import-")), try recover()?.id != photo.id else { return }
@@ -547,7 +566,7 @@ private final class PreviewContainer: UIView {
         let content = preview.layerRectConverted(fromMetadataOutputRect: CGRect(x: 0, y: 0, width: 1, height: 1))
         let subject = CGRect(x: content.minX + subjectRect.minX * content.width, y: content.minY + subjectRect.minY * content.height, width: subjectRect.width * content.width, height: subjectRect.height * content.height)
         let path = UIBezierPath(rect: content)
-        path.append(UIBezierPath(roundedRect: subject, cornerRadius: min(subject.width, subject.height) * .28))
+        path.append(UIBezierPath(roundedRect: subject, cornerRadius: min(subject.width, subject.height) * 0.28))
         let mask = CAShapeLayer(); mask.frame = bounds; mask.path = path.cgPath; mask.fillRule = .evenOdd
         depth.layer.mask = mask
     }

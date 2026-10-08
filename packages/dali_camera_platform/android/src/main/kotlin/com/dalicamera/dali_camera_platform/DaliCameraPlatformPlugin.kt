@@ -73,6 +73,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private var manualExposure = false
     @Volatile private var meteredISO = 100.0
     @Volatile private var meteredSeconds = 1.0 / 125.0
+    @Volatile private var meteredAperture: Double? = null
     private var pendingStart: ((Result<CameraSnapshot>) -> Unit)? = null
     private var pendingPicker: ((Result<PhotoHandle?>) -> Unit)? = null
     private var pendingBatchPicker: ((Result<PhotoImport>) -> Unit)? = null
@@ -166,6 +167,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                         focusDistance = result.get(CaptureResult.LENS_FOCUS_DISTANCE)
                         result.get(CaptureResult.SENSOR_SENSITIVITY)?.let { meteredISO = it.toDouble() }
                         result.get(CaptureResult.SENSOR_EXPOSURE_TIME)?.let { meteredSeconds = it / 1e9 }
+                        meteredAperture = result.get(CaptureResult.LENS_APERTURE)?.toDouble()
                     }
                 })
                 val preview = previewBuilder.build()
@@ -230,7 +232,8 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             supportsTap = camera2?.getCameraCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AF)?.let { it > 0 } == true,
             minimumISO = iso?.lower?.toDouble(), maximumISO = iso?.upper?.toDouble(),
             minimumShutter = time?.lower?.let { it / 1e9 }, maximumShutter = time?.upper?.let { min(it / 1e9, 0.5) },
-            currentISO = meteredISO, currentShutter = meteredSeconds, manualExposure = manualExposure)
+            currentISO = meteredISO, currentShutter = meteredSeconds, manualExposure = manualExposure,
+            currentAperture = meteredAperture, exposureOffset = null)
     }
     override fun setControls(configurationId: String, ev: Double, locked: Boolean, callback: (Result<CameraSnapshot>) -> Unit) {
         try {
@@ -310,6 +313,25 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     .put("peopleStatus", if (poseTask.isSuccessful) "valid" else "unavailable")
                     .put("faceStatus", if (faceTask.isSuccessful) "valid" else "unavailable")
                     .put("horizonStatus", "unsupported").put("openAreaStatus", "unsupported").put("timestamp", System.currentTimeMillis())
+                val bitmap = analysisImage(proxy, front)
+                try {
+                    val scene = PhotoGeometry.scenic(bitmap)
+                    for (key in scene.keys()) payload.put(key, scene.get(key))
+                    val face = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+                    if (face != null) {
+                        val box = rect(face.boundingBox, "face")
+                        var faceSum = 0.0; var samples = 0
+                        val left = (box.getDouble("x") * bitmap.width).toInt().coerceIn(0, bitmap.width - 1)
+                        val right = ((box.getDouble("x") + box.getDouble("width")) * bitmap.width).toInt().coerceIn(left + 1, bitmap.width)
+                        val top = (box.getDouble("y") * bitmap.height).toInt().coerceIn(0, bitmap.height - 1)
+                        val bottom = ((box.getDouble("y") + box.getDouble("height")) * bitmap.height).toInt().coerceIn(top + 1, bitmap.height)
+                        for (y in top until bottom) for (x in left until right) { val c = bitmap.getPixel(x, y); faceSum += .2126 * Color.red(c) + .7152 * Color.green(c) + .0722 * Color.blue(c); samples++ }
+                        if (samples > 0) payload.put("faceLuminance", faceSum / samples)
+                        val eyeCount = listOf(FaceLandmark.LEFT_EYE, FaceLandmark.RIGHT_EYE).count { face.getLandmark(it) != null }
+                        payload.put("faceAnalysis", JSONObject().put("confidence", 1.0).put("eyeVisibilityScore", eyeCount / 2.0).put("occlusionScore", if (eyeCount == 2) 0.0 else .6)
+                            .put("yawEstimate", face.headEulerAngleY / 90.0 * if (front) -1 else 1).put("pitchEstimate", face.headEulerAngleX / 90.0).put("landmarkPointCount", face.allLandmarks.size))
+                    }
+                } finally { bitmap.recycle() }
                 main.post {
                     if (epoch == generation && active) {
                         events.analysis(payload.toString()) {}
@@ -526,26 +548,23 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     }
     override fun render(original: PhotoHandle, rotationDegrees: Double, crop: Boolean, strength: Double, callback: (Result<PhotoHandle>) -> Unit) {
         executor.execute {
+            var bitmap: Bitmap? = null
+            var destination: File? = null
             try {
-                val bitmap = BitmapFactory.decodeFile(original.path) ?: error("Cannot decode photo")
-                val orientation = ExifInterface(original.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-                val matrix = Matrix()
-                when (orientation) {
-                    2 -> matrix.setScale(-1f, 1f); 3 -> matrix.setRotate(180f); 4 -> matrix.setScale(1f, -1f)
-                    5 -> { matrix.setRotate(90f); matrix.postScale(-1f, 1f) }; 6 -> matrix.setRotate(90f)
-                    7 -> { matrix.setRotate(270f); matrix.postScale(-1f, 1f) }; 8 -> matrix.setRotate(270f)
-                }
-                matrix.postRotate(rotationDegrees.toFloat())
-                var output = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-                if (crop) { val x = (output.width * 0.08).toInt(); val y = (output.height * 0.08).toInt(); output = Bitmap.createBitmap(output, x, y, output.width - 2*x, output.height - 2*y) }
+                check(rotationDegrees.isFinite() && strength.isFinite()) { "Invalid rendering settings" }
+                var output = stillProcessor.load(original.path); bitmap = output
+                fun replace(result: Bitmap) { if (result !== output) output.recycle(); output = result; bitmap = result }
+                if (rotationDegrees != 0.0) replace(Bitmap.createBitmap(output, 0, 0, output.width, output.height, Matrix().apply { setRotate(rotationDegrees.toFloat()) }, true))
+                if (crop) { val x = (output.width * 0.08).toInt(); val y = (output.height * 0.08).toInt(); replace(Bitmap.createBitmap(output, x, y, output.width - 2*x, output.height - 2*y)) }
                 if (strength > 0) {
                     val processed = Bitmap.createBitmap(output.width, output.height, Bitmap.Config.ARGB_8888)
                     val paint = Paint().apply { colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(1f + strength.toFloat() * 0.12f) }) }
-                    Canvas(processed).drawBitmap(output, 0f, 0f, paint); output = processed
+                    Canvas(processed).drawBitmap(output, 0f, 0f, paint); replace(processed)
                 }
-                val file = photoFile(); file.outputStream().use { check(output.compress(Bitmap.CompressFormat.JPEG, 95, it)) }
+                val file = photoFile(); destination = file; file.outputStream().use { check(output.compress(Bitmap.CompressFormat.JPEG, 95, it)) }
                 main.post { callback(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false))) }
-            } catch (e: Exception) { main.post { callback(Result.failure(e)) } }
+            } catch (e: Throwable) { destination?.delete(); main.post { callback(Result.failure(if (e is OutOfMemoryError) IllegalStateException("Not enough memory to process this photo. Original retained.") else e)) } }
+            finally { bitmap?.recycle() }
         }
     }
     override fun setZoom(configurationId: String, zoom: Double, callback: (Result<CameraSnapshot>) -> Unit) {
@@ -601,6 +620,20 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         } catch (e: Exception) { callback(Result.failure(e)) }
     }
     override fun setVoicePhrase(phrase: String) { customVoicePhrase = phrase.take(120) }
+    override fun reconcilePrivatePhotos(retainedPaths: List<String>, callback: (Result<Unit>) -> Unit) {
+        executor.execute {
+            try {
+                val keep = retainedPaths.map { File(it).canonicalPath }.toMutableSet()
+                recover()?.let { keep.add(File(it.path).canonicalPath) }
+                val root = context.filesDir.canonicalFile
+                for (file in root.listFiles() ?: emptyArray()) {
+                    if (file.canonicalFile.parentFile != root || !file.isFile || file.canonicalPath in keep) continue
+                    if (file.name.startsWith("photo-") && file.extension == "jpg" || file.name.startsWith("import-")) check(file.delete()) { "Cannot clean an unused private copy" }
+                }
+                main.post { callback(Result.success(Unit)) }
+            } catch (error: Exception) { main.post { callback(Result.failure(error)) } }
+        }
+    }
     override fun releasePhoto(photo: PhotoHandle) {
         val file = File(photo.path).canonicalFile
         if (file.parentFile == photoFile().parentFile?.canonicalFile && (file.extension in listOf("jpg", "jpeg", "png", "heic", "heif", "webp") || file.name.startsWith("import-")) && recover()?.id != photo.id) {
@@ -612,7 +645,9 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             callback(Result.failure(IllegalArgumentException("Invalid filter parameters"))); return
         }
         // Android spatial/color parity remains subject to visual calibration.
-        renderStyle(original, matrix, parameters[4].coerceIn(0.0, 5.0), parameters[5].coerceIn(0.0, 5.0), watermarkPath, callback)
+        val recipe = JSONObject().put("version", 1).put("treatment", "original").put("filter", JSONArray(parameters))
+        if (watermarkPath != null) recipe.put("watermarkPath", watermarkPath)
+        renderEffects(original, recipe.toString(), callback)
     }
     override fun renderStyle(original: PhotoHandle, matrix: List<Double>, softness: Double, detail: Double, watermarkPath: String?, callback: (Result<PhotoHandle>) -> Unit) {
         executor.execute {
@@ -704,21 +739,18 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         val now = SystemClock.elapsedRealtime()
         if (depthPending || now - lastDepth < 500) return
         val source = previewView?.bitmap ?: return
-        depthPending = true; lastDepth = now; val epoch = generation
+        depthPending = true; lastDepth = now; val epoch = generation; val requestedLevel = overlay.level; val requestedRotation = displayRotation
         depthExecutor.execute {
             var blurred: Bitmap? = null
             try {
                 val scale = min(1.0, 320.0 / max(source.width, source.height))
                 val small = Bitmap.createScaledBitmap(source, max(1, (source.width * scale).toInt()), max(1, (source.height * scale).toInt()), true)
                 if (small !== source) source.recycle()
-                // Downsample/upsample supplies a bounded low-tier-device preview blur.
-                val tiny = Bitmap.createScaledBitmap(small, max(1, small.width / (3 + overlay.level)), max(1, small.height / (3 + overlay.level)), true)
-                blurred = Bitmap.createScaledBitmap(tiny, small.width, small.height, true)
-                if (tiny !== blurred && tiny !== small) tiny.recycle()
+                blurred = stillProcessor.previewBlur(small, requestedLevel)
                 if (small !== blurred) small.recycle()
             } catch (_: Throwable) { if (!source.isRecycled) source.recycle() }
             val result = blurred
-            main.post { depthPending = false; if (epoch == generation && active && depthView === overlay && overlay.level > 0) overlay.replace(result) else result?.recycle() }
+            main.post { depthPending = false; if (epoch == generation && requestedRotation == displayRotation && active && depthView === overlay && overlay.level > 0) overlay.replace(result) else result?.recycle() }
         }
     }
 }

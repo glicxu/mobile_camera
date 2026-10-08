@@ -9,6 +9,7 @@ import 'capture_settings.dart';
 import 'camera_selection_row.dart';
 import 'reference_chooser.dart';
 import 'photo_effect_controls.dart';
+import 'review_comparison.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +48,7 @@ class _CameraScreenState extends State<CameraScreen>
     with WidgetsBindingObserver {
   late final CameraController camera;
   bool compare = false;
+  bool splitComparison = false;
   bool initialized = false;
   bool manualToolsVisible = false;
   Orientation? orientation;
@@ -527,29 +529,27 @@ class _CameraScreenState extends State<CameraScreen>
                     },
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => Scaffold(
-                          appBar: AppBar(title: const Text('Photo')),
-                          body: Center(
-                            child: InteractiveViewer(
-                              maxScale: 5,
-                              child: Image.file(
-                                File(photo.path),
-                                cacheWidth: 2400,
-                              ),
-                            ),
-                          ),
+                        builder: (_) => FullScreenReview(
+                          before: camera.original!.path,
+                          after: camera.selected!.path,
+                          initialMode: splitComparison
+                              ? 'split'
+                              : compare
+                              ? 'before'
+                              : 'after',
                         ),
                       ),
                     ),
                     child: SizedBox(
                       height: MediaQuery.sizeOf(context).height * .42,
-                      child: Image.file(
-                        File(photo.path),
-                        cacheWidth: 1600,
-                        fit: BoxFit.contain,
-                        semanticLabel: compare
-                            ? 'Original photo'
-                            : 'Selected photo',
+                      child: ReviewComparison(
+                        before: camera.original!.path,
+                        after: camera.selected!.path,
+                        mode: splitComparison
+                            ? 'split'
+                            : compare
+                            ? 'before'
+                            : 'after',
                       ),
                     ),
                   ),
@@ -608,10 +608,23 @@ class _CameraScreenState extends State<CameraScreen>
                 ),
                 PhotoEffectControls(camera: camera, review: true),
                 PhotoAnalysisCard(camera: camera),
-                SwitchListTile(
-                  title: const Text('Compare with original'),
-                  value: compare,
-                  onChanged: (v) => setState(() => compare = v),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'before', label: Text('Before')),
+                    ButtonSegment(value: 'after', label: Text('After')),
+                    ButtonSegment(value: 'split', label: Text('Split')),
+                  ],
+                  selected: {
+                    splitComparison
+                        ? 'split'
+                        : compare
+                        ? 'before'
+                        : 'after',
+                  },
+                  onSelectionChanged: (values) => setState(() {
+                    compare = values.single == 'before';
+                    splitComparison = values.single == 'split';
+                  }),
                 ),
                 if (camera.message != null)
                   Semantics(liveRegion: true, child: Text(camera.message!)),
