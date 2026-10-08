@@ -486,11 +486,13 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             try {
                 val photos = mutableListOf<LibraryPhoto>()
                 context.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME), null, null,
-                    "${MediaStore.Images.Media.DATE_ADDED} DESC, ${MediaStore.Images.Media._ID} DESC")?.use { cursor ->
+                    arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.DATE_ADDED), null, null,
+                    "${MediaStore.Images.Media.DATE_TAKEN} DESC, ${MediaStore.Images.Media.DATE_ADDED} DESC, ${MediaStore.Images.Media._ID} DESC")?.use { cursor ->
                     while (cursor.moveToNext()) {
                         val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0))
-                        photos.add(LibraryPhoto(uri.toString(), cursor.getString(1) ?: "Photo"))
+                        val timestamp = cursor.getLong(2).takeIf { it > 0 } ?: (cursor.getLong(3) * 1000)
+                        val title = if (timestamp > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(timestamp)) else cursor.getString(1) ?: "Photo"
+                        photos.add(LibraryPhoto(uri.toString(), title))
                     }
                 }
                 main.post { callback(Result.success(PhotoLibrary(photos, if (photos.isEmpty()) "empty" else access))) }

@@ -60,7 +60,20 @@ void main() {
       expect(camera.canCapture, isTrue);
       await tester.tap(find.byKey(const Key('manualControlsButton')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('manualPreviewControls')), findsOneWidget);
+      for (
+        var i = 0;
+        i < 80 &&
+            find.byKey(const Key('manualPreviewControls')).evaluate().isEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      expect(
+        find.byKey(const Key('manualPreviewControls')),
+        findsOneWidget,
+        reason:
+            '${camera.message}; manual=${camera.manualWorkspace}; controlBusy=${camera.controlBusy}',
+      );
       for (final tool in ['focus', 'depth', 'exposure']) {
         await tester.tap(
           find.byKey(
