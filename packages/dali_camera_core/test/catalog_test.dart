@@ -9,9 +9,11 @@ void main() {
     () {
       expect(catalog.entries.where((e) => e.kind == 'pose').length, 76);
       expect(catalog.entries.where((e) => e.kind == 'landscape').length, 24);
+      expect(catalog.entries.where((e) => e.kind == 'food').length, 6);
+      expect(catalog.packages('food'), {'food': 'Food photography'});
       expect(catalog.packages('pose').length, 11);
       expect(catalog.packages('landscape').length, 4);
-      expect(catalog.entries.map((e) => e.key).toSet().length, 100);
+      expect(catalog.entries.map((e) => e.key).toSet().length, 106);
       for (final entry in catalog.entries) {
         expect(entry.cues.length, 2);
         expect(catalog.angleInstruction(entry), isNotEmpty);

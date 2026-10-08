@@ -64,11 +64,15 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private var capturing = false
     @Volatile private var focusDistance: Float? = null
     private var lockedState = false
+    private var manualExposure = false
+    @Volatile private var meteredISO = 100.0
+    @Volatile private var meteredSeconds = 1.0 / 125.0
     private var pendingStart: ((Result<CameraSnapshot>) -> Unit)? = null
     private var pendingPicker: ((Result<PhotoHandle?>) -> Unit)? = null
     private var pendingSave: Pair<PhotoHandle, (Result<Unit>) -> Unit>? = null
     private var speech: SpeechRecognizer? = null
     private var listening = false
+    private var customVoicePhrase = ""
     private var lastVoice = 0L
     private var speechEpoch = 0L
     private val executor = Executors.newSingleThreadExecutor()
@@ -143,11 +147,13 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 provider = future.get(); provider!!.unbindAll()
                 val rotation = previewView?.display?.rotation ?: android.view.Surface.ROTATION_0
                 displayRotation = rotation
-                focusDistance = null; lockedState = false
+                focusDistance = null; lockedState = false; manualExposure = false
                 val previewBuilder = Preview.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3).setTargetRotation(rotation)
                 Camera2Interop.Extender(previewBuilder).setSessionCaptureCallback(object : CameraCaptureSession.CaptureCallback() {
                     override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                         focusDistance = result.get(CaptureResult.LENS_FOCUS_DISTANCE)
+                        result.get(CaptureResult.SENSOR_SENSITIVITY)?.let { meteredISO = it.toDouble() }
+                        result.get(CaptureResult.SENSOR_EXPOSURE_TIME)?.let { meteredSeconds = it / 1e9 }
                     }
                 })
                 val preview = previewBuilder.build()
@@ -198,14 +204,23 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         val camera2 = camera?.let { Camera2CameraInfo.from(it.cameraInfo) }
         val lockSupported = camera2?.getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE) == true &&
             camera2.getCameraCharacteristic(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.contains(CaptureRequest.CONTROL_AF_MODE_OFF) == true && focusDistance != null
+        val zoom = camera?.cameraInfo?.zoomState?.value
+        val manual = camera2?.getCameraCharacteristic(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR) == true
+        val iso = if (manual) camera2?.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE) else null
+        val time = if (manual) camera2?.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE) else null
         return CameraSnapshot(active, front, config, aspect,
             (exposure?.exposureCompensationRange?.lower ?: 0) * step,
             (exposure?.exposureCompensationRange?.upper ?: 0) * step,
-            (exposure?.exposureCompensationIndex ?: 0) * step, lockSupported, lockedState)
+            (exposure?.exposureCompensationIndex ?: 0) * step, lockSupported, lockedState,
+            minimumZoom = zoom?.minZoomRatio?.toDouble(), maximumZoom = zoom?.maxZoomRatio?.toDouble(), currentZoom = zoom?.zoomRatio?.toDouble(),
+            supportsTap = camera2?.getCameraCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AF)?.let { it > 0 } == true,
+            minimumISO = iso?.lower?.toDouble(), maximumISO = iso?.upper?.toDouble(),
+            minimumShutter = time?.lower?.let { it / 1e9 }, maximumShutter = time?.upper?.let { min(it / 1e9, 0.5) },
+            currentISO = meteredISO, currentShutter = meteredSeconds, manualExposure = manualExposure)
     }
     override fun setControls(configurationId: String, ev: Double, locked: Boolean, callback: (Result<CameraSnapshot>) -> Unit) {
         try {
-            check(config == configurationId && active) { "Camera changed; refresh controls" }
+            check(config == configurationId && active && !manualExposure) { "Camera changed or manual exposure active; refresh controls" }
             check(!locked || snapshot().supportsLock) { "Focus/exposure lock unavailable" }
             val cam = camera!!; val state = cam.cameraInfo.exposureState
             val index = if (state.isExposureCompensationSupported) (ev / state.exposureCompensationStep.toDouble()).roundToInt()
@@ -404,6 +419,100 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             } catch (e: Exception) { main.post { callback(Result.failure(e)) } }
         }
     }
+    override fun setZoom(configurationId: String, zoom: Double, callback: (Result<CameraSnapshot>) -> Unit) {
+        try {
+            check(config == configurationId && active && zoom.isFinite()) { "Camera changed or invalid zoom" }
+            val cam = camera!!; val state = cam.cameraInfo.zoomState.value!!
+            val future = cam.cameraControl.setZoomRatio(zoom.toFloat().coerceIn(state.minZoomRatio, state.maxZoomRatio))
+            future.addListener({ try { future.get(); check(config == configurationId && active); callback(Result.success(snapshot())) } catch (e: Exception) { callback(Result.failure(e)) } }, ContextCompat.getMainExecutor(context))
+        } catch (e: Exception) { callback(Result.failure(e)) }
+    }
+    override fun meter(configurationId: String, x: Double, y: Double, callback: (Result<CameraSnapshot>) -> Unit) {
+        try {
+            check(config == configurationId && active && x.isFinite() && y.isFinite()) { "Camera changed or invalid focus point" }
+            val cam = camera!!; val view = previewView ?: error("No preview")
+            val point = view.meteringPointFactory.createPoint(x.coerceIn(0.0, 1.0).toFloat() * view.width, y.coerceIn(0.0, 1.0).toFloat() * view.height)
+            val action = FocusMeteringAction.Builder(point, if (manualExposure) FocusMeteringAction.FLAG_AF else FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE).disableAutoCancel().build()
+            check(cam.cameraInfo.isFocusMeteringSupported(action)) { "Focus point unavailable" }
+            val future = cam.cameraControl.startFocusAndMetering(action)
+            future.addListener({ try { future.get(); check(config == configurationId && active); callback(Result.success(snapshot())) } catch (e: Exception) { callback(Result.failure(e)) } }, ContextCompat.getMainExecutor(context))
+        } catch (e: Exception) { callback(Result.failure(e)) }
+    }
+    override fun setManualExposure(configurationId: String, seconds: Double?, iso: Double?, callback: (Result<CameraSnapshot>) -> Unit) {
+        try {
+            check(config == configurationId && active) { "Camera changed; refresh controls" }
+            val cam = camera!!; val state = snapshot()
+            val enabling = seconds != null && iso != null
+            val options = CaptureRequestOptions.Builder()
+            if (enabling) {
+                check(seconds!!.isFinite() && iso!!.isFinite() && state.minimumISO != null && state.minimumShutter != null) { "Manual exposure unavailable" }
+                val duration = (seconds.coerceIn(state.minimumShutter!!, state.maximumShutter!!) * 1e9).toLong()
+                options.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                    .setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, duration)
+                    .setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, iso.toInt().coerceIn(state.minimumISO!!.toInt(), state.maximumISO!!.toInt()))
+                    .setCaptureRequestOption(CaptureRequest.SENSOR_FRAME_DURATION, max(duration, 33333333L))
+            } else {
+                options.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, false)
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+            }
+            val future = Camera2CameraControl.from(cam.cameraControl).setCaptureRequestOptions(options.build())
+            future.addListener({
+                try {
+                    future.get(); check(config == configurationId && active)
+                    manualExposure = enabling; lockedState = false
+                    if (!enabling) {
+                        cam.cameraControl.cancelFocusAndMetering()
+                        val reset = cam.cameraControl.setExposureCompensationIndex(0)
+                        reset.addListener({ try { reset.get(); check(config == configurationId && active); callback(Result.success(snapshot())) } catch (e: Exception) { callback(Result.failure(e)) } }, ContextCompat.getMainExecutor(context))
+                    } else callback(Result.success(snapshot()))
+                } catch (e: Exception) { callback(Result.failure(e)) }
+            }, ContextCompat.getMainExecutor(context))
+        } catch (e: Exception) { callback(Result.failure(e)) }
+    }
+    override fun setVoicePhrase(phrase: String) { customVoicePhrase = phrase.take(120) }
+    override fun releasePhoto(photo: PhotoHandle) {
+        val file = File(photo.path).canonicalFile
+        if (file.parentFile == photoFile().parentFile?.canonicalFile && file.extension in listOf("jpg", "jpeg", "png", "heic", "heif") && recover()?.id != photo.id) {
+            if (file.exists()) check(file.delete()) { "Cannot release private copy" }
+        }
+    }
+    override fun renderStyle(original: PhotoHandle, matrix: List<Double>, softness: Double, detail: Double, watermarkPath: String?, callback: (Result<PhotoHandle>) -> Unit) {
+        executor.execute {
+            try {
+                check(matrix.size == 20 && matrix.all { it.isFinite() } && softness.isFinite() && detail.isFinite()) { "Invalid style" }
+                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(original.path, options)
+                options.inSampleSize = 1
+                while (max(options.outWidth, options.outHeight) / options.inSampleSize > 3200) options.inSampleSize *= 2
+                options.inJustDecodeBounds = false
+                val source = BitmapFactory.decodeFile(original.path, options) ?: error("Cannot decode photo")
+                val orientation = ExifInterface(original.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, 1)
+                val transform = Matrix()
+                when (orientation) {
+                    2 -> transform.setScale(-1f, 1f); 3 -> transform.setRotate(180f); 4 -> transform.setScale(1f, -1f)
+                    5 -> { transform.setRotate(90f); transform.postScale(-1f, 1f) }; 6 -> transform.setRotate(90f)
+                    7 -> { transform.setRotate(270f); transform.postScale(-1f, 1f) }; 8 -> transform.setRotate(270f)
+                }
+                val upright = Bitmap.createBitmap(source, 0, 0, source.width, source.height, transform, true)
+                val output = Bitmap.createBitmap(upright.width, upright.height, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(output)
+                canvas.drawBitmap(upright, 0f, 0f, Paint().apply { colorFilter = ColorMatrixColorFilter(matrix.map { it.toFloat() }.toFloatArray()) })
+                if (softness > 0 || detail > 0) StyleRenderer.finish(output, softness.coerceIn(0.0, 5.0), detail.coerceIn(0.0, 5.0))
+                if (watermarkPath != null) {
+                    val mark = BitmapFactory.decodeFile(watermarkPath) ?: error("Cannot load watermark")
+                    val width = output.width * 0.28f; val height = width * mark.height / mark.width
+                    val margin = max(18f, output.width * 0.025f)
+                    canvas.drawBitmap(mark, null, RectF(output.width-width-margin, output.height-height-margin, output.width-margin, output.height-margin), Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = 219 })
+                    mark.recycle()
+                }
+                val file = photoFile(); file.outputStream().use { check(output.compress(Bitmap.CompressFormat.JPEG, 95, it)) }
+                if (upright !== source) upright.recycle(); source.recycle(); output.recycle()
+                main.post { callback(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false))) }
+            } catch (e: Exception) { main.post { callback(Result.failure(e)) } }
+        }
+    }
     override fun openSettings() { activity!!.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }
     override fun setVoiceEnabled(enabled: Boolean, callback: (Result<Boolean>) -> Unit) {
         val epoch = ++speechEpoch
@@ -431,7 +540,10 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             override fun onResults(results: Bundle?) {
                 if (epoch != speechEpoch || !listening || !active) return
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.lowercase() ?: ""
-                val words = text.split(Regex("[^a-z]+")); val command = words.lastOrNull() == "cheese" || Regex("\\btake (a )?(photo|picture)\\b").containsMatchIn(text)
+                val words = text.split(Regex("[^\\p{L}]+" )).filter { it.isNotEmpty() }
+                val custom = customVoicePhrase.lowercase().split(Regex("[^\\p{L}]+" )).filter { it.isNotEmpty() }
+                val command = words.contains("cheese") || Regex("\\b(take|capture|snap) (a )?(photo|picture)\\b").containsMatchIn(text) ||
+                    (custom.isNotEmpty() && (" " + words.joinToString(" ") + " ").contains(" " + custom.joinToString(" ") + " "))
                 if (command && SystemClock.elapsedRealtime() - lastVoice > 3000) { lastVoice = SystemClock.elapsedRealtime(); events.voiceShutter() {} }
                 if (listening && active) main.postDelayed({ listen() }, 500)
             }

@@ -11,6 +11,7 @@ final class SpeechShutterService {
     private var enabled = false
     private var token = UUID()
     private var lastCommand = Date.distantPast
+    var customPhrase = ""
     var onShutter: (() -> Void)?
 
     func setEnabled(_ value: Bool, completion: @escaping (Result<Bool, Error>) -> Void) {
@@ -51,7 +52,9 @@ final class SpeechShutterService {
             DispatchQueue.main.async {
                 guard self.enabled, self.token == epoch else { return }
                 let words = transcript.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }
-                let command = words.last == "cheese" || transcript.range(of: #"\btake (a )?(photo|picture)\b"#, options: .regularExpression) != nil
+                let custom = self.customPhrase.lowercased().components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }
+                let normalized = " " + words.joined(separator: " ") + " "
+                let command = words.contains("cheese") || transcript.range(of: #"\b(take|capture|snap) (a )?(photo|picture)\b"#, options: .regularExpression) != nil || (!custom.isEmpty && normalized.contains(" " + custom.joined(separator: " ") + " "))
                 if command && Date().timeIntervalSince(self.lastCommand) > 3 {
                     self.lastCommand = Date(); self.onShutter?(); self.restart(after: 3)
                 } else if final || error != nil { self.restart(after: 1) }

@@ -87,6 +87,57 @@ void main() {
         expect(camera.snapshot!.currentEV, closeTo(0, .1));
         expect(camera.snapshot!.locked, isFalse);
       }
+      final capabilities = camera.snapshot!;
+      if (capabilities.supportsTap == true) {
+        final result = await camera.host.meter(capabilities.configurationId, .5, .5);
+        expect(result.ready, isTrue);
+      }
+      if (capabilities.maximumZoom != null && capabilities.maximumZoom! > capabilities.minimumZoom!) {
+        await camera.zoom((capabilities.minimumZoom! + .5).clamp(capabilities.minimumZoom!, capabilities.maximumZoom!));
+        expect(camera.snapshot!.currentZoom, greaterThanOrEqualTo(capabilities.minimumZoom!));
+        await camera.zoom(1);
+      }
+      if (capabilities.minimumISO != null && capabilities.minimumShutter != null) {
+        final seconds = (1/125).clamp(capabilities.minimumShutter!, capabilities.maximumShutter!);
+        final iso = 100.0.clamp(capabilities.minimumISO!, capabilities.maximumISO!);
+        await camera.manual(seconds, iso);
+        expect(camera.snapshot!.manualExposure, isTrue, reason: camera.message);
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        await tester.pump();
+        final applied = await camera.host.setManualExposure(capabilities.configurationId, seconds, iso);
+        expect(applied.currentShutter, closeTo(seconds, .002), reason: 'Sensor must report the requested shutter time');
+        expect(applied.currentISO, closeTo(iso, 10), reason: 'Sensor must report the requested ISO');
+        await camera.returnAuto();
+        expect(camera.snapshot!.manualExposure, isFalse);
+        expect(camera.snapshot!.currentEV, closeTo(0, .1));
+      }
+      await tester.ensureVisible(find.text('Food'));
+      await tester.tap(find.text('Food'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Food recipes'));
+      await tester.tap(find.text('Food recipes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Food photography'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Hero plate'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('steam and serving traffic'), findsOneWidget);
+      await tester.tap(find.text('Use this reference'));
+      await tester.pumpAndSettle();
+      expect(camera.guidance.entry!.kind, 'food');
+      camera.filter = 'fresh';
+      camera.watermark = true;
+      camera.timerSeconds = 3;
+      await camera.requestShutter();
+      expect(camera.reviewing, isFalse);
+      expect(camera.original!.unsaved, isFalse);
+      expect(camera.styled, isTrue, reason: camera.message);
+      expect(camera.selected!.id, isNot(camera.original!.id));
+      await camera.saveSelected();
+      expect(camera.message, 'Selected copy saved to Photos');
+      expect(camera.history, isNotEmpty);
+      camera.filter = 'off'; camera.watermark = false; camera.timerSeconds = 0;
+      camera.food = false; camera.choose(null);
       await camera.switchLens();
       await tester.pumpAndSettle();
       expect(camera.snapshot?.front, isTrue);

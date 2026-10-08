@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:ui' as ui;
+import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:dali_camera_platform/dali_camera_platform.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -47,6 +48,73 @@ void main() {
       output.width / output.height,
       closeTo(input.width / input.height, .02),
     );
+    final style = await host.renderStyle(
+      original,
+      PhotoStyle.preset(SharedCatalog(), 'fresh', 'food').matrix,
+      0,
+      1,
+      null,
+    );
+    expect(await file.readAsBytes(), bytes);
+    final styleCodec = await ui.instantiateImageCodec(
+      await File(style.path).readAsBytes(),
+    );
+    final styled = (await styleCodec.getNextFrame()).image;
+    expect(styled.width, input.width);
+    expect(styled.height, input.height);
+    final originalPixels = await input.toByteData();
+    final stylePixels = await styled.toByteData();
+    expect(
+      stylePixels!.buffer.asUint8List(),
+      isNot(originalPixels!.buffer.asUint8List()),
+    );
+    styled.dispose();
+    styleCodec.dispose();
+    await host.releasePhoto(style);
+    expect(await File(style.path).exists(), isFalse);
+    await host.releasePhoto(original);
+    expect(
+      await file.exists(),
+      isTrue,
+      reason:
+          'Cleanup cannot delete a file outside the private photo directory',
+    );
+    await expectLater(
+      host.renderStyle(original, [1], 0, 0, null),
+      throwsA(isA<PlatformException>()),
+    );
+    final watermarkAsset = await rootBundle.load(
+      'assets/branding/dali-cam-watermark.png',
+    );
+    final markFile = File(
+      '${Directory.systemTemp.path}/dali-bridge-watermark.png',
+    );
+    await markFile.writeAsBytes(
+      watermarkAsset.buffer.asUint8List(
+        watermarkAsset.offsetInBytes,
+        watermarkAsset.lengthInBytes,
+      ),
+    );
+    final watermarked = await host.renderStyle(
+      original,
+      PhotoStyle.identity,
+      0,
+      0,
+      markFile.path,
+    );
+    final markCodec = await ui.instantiateImageCodec(
+      await File(watermarked.path).readAsBytes(),
+    );
+    final markImage = (await markCodec.getNextFrame()).image;
+    final markPixels = await markImage.toByteData();
+    expect(
+      markPixels!.buffer.asUint8List(),
+      isNot(originalPixels.buffer.asUint8List()),
+    );
+    markImage.dispose();
+    markCodec.dispose();
+    await host.releasePhoto(watermarked);
+    await markFile.delete();
     input.dispose();
     output.dispose();
     inputCodec.dispose();
@@ -64,7 +132,13 @@ void main() {
     final recovered = await host.recover();
     expect(recovered?.id, derived.id);
     expect(recovered?.unsaved, isTrue);
-    await host.discard(recovered!);
+    await host.releasePhoto(recovered!);
+    expect(
+      await File(derived.path).exists(),
+      isTrue,
+      reason: 'Pending original must survive history cleanup',
+    );
+    await host.discard(recovered);
     expect(await host.recover(), isNull);
     expect(await File(derived.path).exists(), isFalse);
     await file.delete();

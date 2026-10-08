@@ -13,6 +13,31 @@ class Advice {
   final String instruction;
   final AdviceTone tone;
 
+  String get statusTitle => switch (tone) {
+    AdviceTone.waiting => 'Checking',
+    AdviceTone.ready => 'Looks good',
+    AdviceTone.warning || AdviceTone.danger => 'Needs attention',
+  };
+  String? get direction {
+    final text = instruction.toLowerCase();
+    if (text.contains('move') && text.contains('left')) return 'left';
+    if (text.contains('move') && text.contains('right')) return 'right';
+    if (text.contains('raise') || text.contains('move up')) return 'up';
+    if (text.contains('lower') || text.contains('move down')) return 'down';
+    if (text.contains('step closer') || text.contains('move closer')) {
+      return 'closer';
+    }
+    if (text.contains('step back') ||
+        text.contains('farther back') ||
+        text.contains('move back') ||
+        type == 'feet_cropped') {
+      return 'farther';
+    }
+    if (text.contains('tilt left')) return 'rotateLeft';
+    if (text.contains('tilt right')) return 'rotateRight';
+    return null;
+  }
+
   @override
   bool operator ==(Object other) =>
       other is Advice &&

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'camera_controller.dart';
+import 'capture_settings.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +45,7 @@ class _CameraScreenState extends State<CameraScreen>
   late final CameraController camera;
   bool compare = false;
   bool initialized = false;
+  bool manualToolsVisible = false;
   Orientation? orientation;
   @override
   void initState() {
@@ -158,6 +160,29 @@ class _CameraScreenState extends State<CameraScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Row(
+                            children: [
+                              Icon(
+                                camera.advice.tone == AdviceTone.ready
+                                    ? Icons.check_circle
+                                    : camera.advice.tone == AdviceTone.waiting
+                                    ? Icons.pending
+                                    : Icons.warning_amber,
+                                color: camera.advice.tone == AdviceTone.ready
+                                    ? Colors.greenAccent
+                                    : camera.advice.tone == AdviceTone.waiting
+                                    ? Colors.white70
+                                    : Colors.amber,
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(child: Text(camera.advice.statusTitle)),
+                              if (camera.advice.direction != null) ...[
+                                const SizedBox(width: 8),
+                                Icon(directionIcon(camera.advice.direction!)),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 8),
                           Text(
                             camera.advice.recipient.toUpperCase(),
                             style: Theme.of(context).textTheme.labelLarge,
@@ -178,9 +203,10 @@ class _CameraScreenState extends State<CameraScreen>
                   children: [
                     ChoiceChip(
                       label: const Text('People'),
-                      selected: !camera.landscape,
+                      selected: !camera.landscape && !camera.food,
                       onSelected: (_) {
                         camera.landscape = false;
+                        camera.food = false;
                         camera.choose(null);
                       },
                     ),
@@ -189,13 +215,25 @@ class _CameraScreenState extends State<CameraScreen>
                       selected: camera.landscape,
                       onSelected: (_) {
                         camera.landscape = true;
+                        camera.food = false;
+                        camera.choose(null);
+                      },
+                    ),
+                    ChoiceChip(
+                      label: const Text('Food'),
+                      selected: camera.food,
+                      onSelected: (_) {
+                        camera.food = true;
+                        camera.landscape = false;
                         camera.choose(null);
                       },
                     ),
                     FilledButton.tonal(
                       onPressed: () => chooser(),
                       child: Text(
-                        camera.landscape
+                        camera.food
+                            ? 'Food recipes'
+                            : camera.landscape
                             ? 'Landscape packages'
                             : 'Posture packages',
                       ),
@@ -240,6 +278,20 @@ class _CameraScreenState extends State<CameraScreen>
                     ],
                   ),
                 ],
+                if (camera.countdown > 0) ...[
+                  Text(
+                    'Photo in ${camera.countdown}s',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  TextButton(
+                    onPressed: camera.cancelSequence,
+                    child: const Text('Cancel timer'),
+                  ),
+                ],
+                if (camera.bursting)
+                  Text(
+                    '${camera.burstCount} burst photos saved. Release to stop.',
+                  ),
                 if (camera.message != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -274,16 +326,23 @@ class _CameraScreenState extends State<CameraScreen>
                 child: SizedBox(
                   width: 76,
                   height: 76,
-                  child: FilledButton(
-                    key: const Key('shutter'),
-                    onPressed: camera.canCapture ? camera.capturePhoto : null,
-                    style: FilledButton.styleFrom(
-                      shape: const CircleBorder(),
-                      padding: EdgeInsets.zero,
+                  child: GestureDetector(
+                    onLongPressStart: (_) => camera.beginLongPress(),
+                    onLongPressEnd: (_) => camera.endLongPress(),
+                    onLongPressCancel: camera.endLongPress,
+                    child: FilledButton(
+                      key: const Key('shutter'),
+                      onPressed: camera.canCapture
+                          ? camera.requestShutter
+                          : null,
+                      style: FilledButton.styleFrom(
+                        shape: const CircleBorder(),
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: camera.busy
+                          ? const CircularProgressIndicator()
+                          : const Icon(Icons.camera, size: 36),
                     ),
-                    child: camera.busy
-                        ? const CircularProgressIndicator()
-                        : const Icon(Icons.camera, size: 36),
                   ),
                 ),
               ),
@@ -301,23 +360,60 @@ class _CameraScreenState extends State<CameraScreen>
       builder: (context, bounds) => Center(
         child: AspectRatio(
           aspectRatio: camera.aspectRatio,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (!camera.livePreviewEnabled)
-                const ColoredBox(color: Colors.black)
-              else if (Platform.isAndroid)
-                const AndroidView(viewType: 'dali/camera')
-              else if (Platform.isIOS)
-                const UiKitView(viewType: 'dali/camera')
-              else
-                const Center(child: Text('Use an Android or iOS phone.')),
-              IgnorePointer(
-                child: CustomPaint(
-                  painter: FramePainter(camera.debug ? camera.lastFrame : null),
-                ),
+          child: LayoutBuilder(
+            builder: (context, previewBounds) => GestureDetector(
+              onTapUp: camera.snapshot?.supportsTap == true
+                  ? (details) => camera.meter(
+                      details.localPosition.dx / previewBounds.maxWidth,
+                      details.localPosition.dy / previewBounds.maxHeight,
+                    )
+                  : null,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (!camera.livePreviewEnabled)
+                    const ColoredBox(color: Colors.black)
+                  else if (Platform.isAndroid)
+                    const AndroidView(viewType: 'dali/camera')
+                  else if (Platform.isIOS)
+                    const UiKitView(viewType: 'dali/camera')
+                  else
+                    const Center(child: Text('Use an Android or iOS phone.')),
+                  if (camera.focusX != null && camera.focusY != null)
+                    Positioned(
+                      left: camera.focusX! * previewBounds.maxWidth - 16,
+                      top: camera.focusY! * previewBounds.maxHeight - 16,
+                      child: const IgnorePointer(
+                        child: Icon(
+                          Icons.center_focus_strong,
+                          size: 32,
+                          color: Colors.amber,
+                        ),
+                      ),
+                    ),
+                  if (camera.manualWorkspace && manualToolsVisible)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      bottom: 8,
+                      width: previewBounds.maxWidth.clamp(0, 240).toDouble(),
+                      child: Card(
+                        color: const Color(0xee080b0f),
+                        child: SingleChildScrollView(
+                          child: ManualCameraTools(camera: camera),
+                        ),
+                      ),
+                    ),
+                  IgnorePointer(
+                    child: CustomPaint(
+                      painter: FramePainter(
+                        camera.debug ? camera.lastFrame : null,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -336,6 +432,16 @@ class _CameraScreenState extends State<CameraScreen>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (camera.manualWorkspace)
+                TextButton(
+                  onPressed: () =>
+                      setState(() => manualToolsVisible = !manualToolsVisible),
+                  child: Text(
+                    camera.snapshot?.manualExposure == true
+                        ? 'Manual M'
+                        : 'Manual',
+                  ),
+                ),
               IconButton(
                 tooltip: 'Camera settings',
                 onPressed: settings,
@@ -390,6 +496,11 @@ class _CameraScreenState extends State<CameraScreen>
               icon: const Icon(Icons.arrow_back),
             ),
             const Expanded(child: Text('Photo review')),
+            IconButton(
+              tooltip: 'Recent photos',
+              onPressed: camera.busy ? null : recentPhotos,
+              icon: const Icon(Icons.collections),
+            ),
             TextButton(
               onPressed: camera.busy ? null : camera.pick,
               child: const Text('Photos'),
@@ -448,7 +559,9 @@ class _CameraScreenState extends State<CameraScreen>
                     ),
                     ChoiceChip(
                       label: const Text('Tighter crop'),
-                      selected: camera.selected?.id != camera.original?.id,
+                      selected:
+                          !camera.styled &&
+                          camera.selected?.id != camera.original?.id,
                       onSelected: camera.busy
                           ? null
                           : (_) {
@@ -457,6 +570,7 @@ class _CameraScreenState extends State<CameraScreen>
                     ),
                   ],
                 ),
+                CaptureStyleControls(camera: camera, review: true),
                 SwitchListTile(
                   title: const Text('Compare with original'),
                   value: compare,
@@ -531,7 +645,7 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> chooser() async {
-    final kind = camera.landscape ? 'landscape' : 'pose';
+    final kind = camera.catalogKind;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -542,7 +656,11 @@ class _CameraScreenState extends State<CameraScreen>
           children: [
             ListTile(
               title: Text(
-                kind == 'pose' ? 'Posture packages' : 'Landscape packages',
+                kind == 'food'
+                    ? 'Food recipes'
+                    : kind == 'pose'
+                    ? 'Posture packages'
+                    : 'Landscape packages',
               ),
               trailing: IconButton(
                 tooltip: 'Close packages',
@@ -657,96 +775,197 @@ class _CameraScreenState extends State<CameraScreen>
           ),
         ),
       );
-  Future<void> settings() => showModalBottomSheet<void>(
+  Future<void> recentPhotos() => showModalBottomSheet<void>(
     context: context,
     useSafeArea: true,
     isScrollControlled: true,
-    builder: (ctx) => AnimatedBuilder(
-      animation: camera,
-      builder: (ctx, _) {
-        final snapshot = camera.snapshot;
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Camera settings',
-                style: Theme.of(ctx).textTheme.titleLarge,
-              ),
-              if (snapshot != null &&
-                  snapshot.minimumEV < snapshot.maximumEV) ...[
-                Text('Exposure ${(snapshot.currentEV).toStringAsFixed(1)} EV'),
-                Slider(
-                  value: snapshot.currentEV.clamp(
-                    snapshot.minimumEV,
-                    snapshot.maximumEV,
+    builder: (ctx) => SizedBox(
+      height: MediaQuery.sizeOf(ctx).height * .65,
+      child: Column(
+        children: [
+          const ListTile(
+            title: Text('Recent photos'),
+            subtitle: Text(
+              'Up to 25 saved originals. Gallery copies stay in Photos.',
+            ),
+          ),
+          Expanded(
+            child: GridView.count(
+              crossAxisCount: 3,
+              children: camera.history
+                  .map(
+                    (photo) => InkWell(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        camera.openHistory(photo);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.file(
+                              File(photo.path),
+                              cacheWidth: 320,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  const Icon(Icons.broken_image),
+                            ),
+                            if (photo.unsaved)
+                              const Align(
+                                alignment: Alignment.bottomCenter,
+                                child: Text('Save needed'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> settings() {
+    camera.cancelSequence();
+    return showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (ctx) => AnimatedBuilder(
+        animation: camera,
+        builder: (ctx, _) {
+          final snapshot = camera.snapshot;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Camera settings',
+                  style: Theme.of(ctx).textTheme.titleLarge,
+                ),
+                if (snapshot?.minimumISO != null &&
+                    snapshot?.minimumShutter != null)
+                  ListTile(
+                    title: const Text('Focus and Exposure'),
+                    subtitle: Text(
+                      camera.manualWorkspace ? 'Manual workspace' : 'Auto',
+                    ),
+                    trailing: TextButton(
+                      onPressed: camera.controlBusy
+                          ? null
+                          : () {
+                              camera.manualWorkspace = true;
+                              manualToolsVisible = true;
+                              Navigator.pop(ctx);
+                              refresh();
+                            },
+                      child: const Text('Manual'),
+                    ),
                   ),
-                  min: snapshot.minimumEV,
-                  max: snapshot.maximumEV,
+                if ((snapshot?.maximumZoom ?? 1) >
+                    (snapshot?.minimumZoom ?? 1)) ...[
+                  Text(
+                    'Zoom ${(snapshot?.currentZoom ?? 1).toStringAsFixed(1)}?',
+                  ),
+                  Slider(
+                    min: snapshot!.minimumZoom!,
+                    max: snapshot.maximumZoom!,
+                    value: snapshot.currentZoom!.clamp(
+                      snapshot.minimumZoom!,
+                      snapshot.maximumZoom!,
+                    ),
+                    onChanged: camera.controlBusy ? null : camera.zoom,
+                  ),
+                ],
+                ShutterSettings(camera: camera),
+                CaptureStyleControls(camera: camera),
+                if (snapshot != null &&
+                    snapshot.minimumEV < snapshot.maximumEV) ...[
+                  Text(
+                    'Exposure ${(snapshot.currentEV).toStringAsFixed(1)} EV',
+                  ),
+                  Slider(
+                    value: snapshot.currentEV.clamp(
+                      snapshot.minimumEV,
+                      snapshot.maximumEV,
+                    ),
+                    min: snapshot.minimumEV,
+                    max: snapshot.maximumEV,
+                    onChanged: (v) async {
+                      await camera.controls(v, snapshot.locked);
+                    },
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await camera.controls(0, false);
+                    },
+                    child: const Text('Return to Auto'),
+                  ),
+                ],
+                if (snapshot?.supportsLock == true &&
+                    snapshot?.manualExposure != true)
+                  SwitchListTile(
+                    title: const Text('Focus / exposure lock'),
+                    value: snapshot!.locked,
+                    onChanged: (v) async {
+                      await camera.controls(snapshot.currentEV, v);
+                    },
+                  ),
+                SwitchListTile(
+                  title: const Text('Debug overlay'),
+                  value: camera.debug,
+                  onChanged: (v) {
+                    camera.debug = v;
+                    refresh();
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Voice shutter'),
+                  subtitle: const Text(
+                    'On-device speech availability depends on your phone.',
+                  ),
+                  value: camera.voice,
                   onChanged: (v) async {
-                    await camera.controls(v, snapshot.locked);
+                    await camera.setVoice(v);
                   },
                 ),
                 TextButton(
-                  onPressed: () async {
-                    await camera.controls(0, false);
+                  onPressed: () {
+                    Clipboard.setData(
+                      ClipboardData(text: jsonEncode(camera.log)),
+                    );
+                    Navigator.pop(ctx);
                   },
-                  child: const Text('Return to Auto'),
+                  child: const Text('Copy diagnostic log'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Done'),
                 ),
               ],
-              if (snapshot?.supportsLock == true)
-                SwitchListTile(
-                  title: const Text('Focus / exposure lock'),
-                  value: snapshot!.locked,
-                  onChanged: (v) async {
-                    await camera.controls(snapshot.currentEV, v);
-                  },
-                ),
-              SwitchListTile(
-                title: const Text('Debug overlay'),
-                value: camera.debug,
-                onChanged: (v) {
-                  camera.debug = v;
-                  refresh();
-                },
-              ),
-              SwitchListTile(
-                title: const Text('Voice shutter'),
-                subtitle: const Text(
-                  'On-device speech availability depends on your phone.',
-                ),
-                value: camera.voice,
-                onChanged: (v) async {
-                  await camera.setVoice(v);
-                },
-              ),
-              TextButton(
-                onPressed: () {
-                  Clipboard.setData(
-                    ClipboardData(text: jsonEncode(camera.log)),
-                  );
-                  Navigator.pop(ctx);
-                },
-                child: const Text('Copy diagnostic log'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Done'),
-              ),
-            ],
-          ),
-        );
-      },
-    ),
-  );
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> help() => showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Take a photo with Dali'),
       content: const SingleChildScrollView(
         child: Text(
-          'Frame your subject and follow one short cue at a time. The shutter stays available while you try optional poses.\n\nChoose a posture or landscape reference for ideas about framing and light. Done / Next confirms a creative step; Dali does not verify the pose.\n\nTap your latest photo to review, save, or share it. Failed saves keep the original for retry.',
+          'Frame your subject and follow one short cue at a time. The shutter stays available while you try optional poses.\n\nChoose a posture, landscape, or Food reference for framing and light. Tap the shutter for one photo; hold for a paced burst. Timer and custom voice phrase are in Camera settings. Filters and watermark make a review copy; save it separately. Done / Next confirms a creative step; Dali does not verify the pose.\n\nTap your latest photo to review, save, or share it. Recent photos keeps up to 25 saved originals. Failed saves keep the original for retry.',
         ),
       ),
       actions: [
@@ -758,6 +977,17 @@ class _CameraScreenState extends State<CameraScreen>
     ),
   );
 }
+
+IconData directionIcon(String direction) => switch (direction) {
+  'left' => Icons.arrow_back,
+  'right' => Icons.arrow_forward,
+  'up' => Icons.arrow_upward,
+  'down' => Icons.arrow_downward,
+  'closer' => Icons.zoom_in,
+  'farther' => Icons.zoom_out,
+  'rotateLeft' => Icons.rotate_left,
+  _ => Icons.rotate_right,
+};
 
 class FramePainter extends CustomPainter {
   FramePainter(this.frame);

@@ -50,6 +50,17 @@ class CameraSnapshot {
     required this.currentEV,
     required this.supportsLock,
     required this.locked,
+    this.minimumZoom,
+    this.maximumZoom,
+    this.currentZoom,
+    this.supportsTap,
+    this.minimumISO,
+    this.maximumISO,
+    this.minimumShutter,
+    this.maximumShutter,
+    this.currentISO,
+    this.currentShutter,
+    this.manualExposure,
   });
 
   bool ready;
@@ -70,6 +81,28 @@ class CameraSnapshot {
 
   bool locked;
 
+  double? minimumZoom;
+
+  double? maximumZoom;
+
+  double? currentZoom;
+
+  bool? supportsTap;
+
+  double? minimumISO;
+
+  double? maximumISO;
+
+  double? minimumShutter;
+
+  double? maximumShutter;
+
+  double? currentISO;
+
+  double? currentShutter;
+
+  bool? manualExposure;
+
   List<Object?> _toList() {
     return <Object?>[
       ready,
@@ -81,6 +114,17 @@ class CameraSnapshot {
       currentEV,
       supportsLock,
       locked,
+      minimumZoom,
+      maximumZoom,
+      currentZoom,
+      supportsTap,
+      minimumISO,
+      maximumISO,
+      minimumShutter,
+      maximumShutter,
+      currentISO,
+      currentShutter,
+      manualExposure,
     ];
   }
 
@@ -99,6 +143,17 @@ class CameraSnapshot {
       currentEV: result[6]! as double,
       supportsLock: result[7]! as bool,
       locked: result[8]! as bool,
+      minimumZoom: result[9] as double?,
+      maximumZoom: result[10] as double?,
+      currentZoom: result[11] as double?,
+      supportsTap: result[12] as bool?,
+      minimumISO: result[13] as double?,
+      maximumISO: result[14] as double?,
+      minimumShutter: result[15] as double?,
+      maximumShutter: result[16] as double?,
+      currentISO: result[17] as double?,
+      currentShutter: result[18] as double?,
+      manualExposure: result[19] as bool?,
     );
   }
 
@@ -442,6 +497,158 @@ class CameraHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[configurationId, ev, locked]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as CameraSnapshot?)!;
+    }
+  }
+
+  Future<PhotoHandle> renderStyle(PhotoHandle original, List<double> matrix, double softness, double detail, String? watermarkPath) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.renderStyle$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[original, matrix, softness, detail, watermarkPath]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as PhotoHandle?)!;
+    }
+  }
+
+  Future<void> setVoicePhrase(String phrase) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setVoicePhrase$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[phrase]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> releasePhoto(PhotoHandle photo) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.releasePhoto$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[photo]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<CameraSnapshot> setZoom(String configurationId, double zoom) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setZoom$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[configurationId, zoom]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as CameraSnapshot?)!;
+    }
+  }
+
+  Future<CameraSnapshot> meter(String configurationId, double x, double y) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.meter$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[configurationId, x, y]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as CameraSnapshot?)!;
+    }
+  }
+
+  Future<CameraSnapshot> setManualExposure(String configurationId, double? seconds, double? iso) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setManualExposure$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[configurationId, seconds, iso]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);

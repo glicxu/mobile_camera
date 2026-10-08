@@ -9,3 +9,4 @@ export 'src/photo_workflow.dart';
 export 'src/preview_geometry.dart';
 export 'src/catalog.dart';
 export 'src/native_frame.dart';
+export 'src/photo_style.dart';

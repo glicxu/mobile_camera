@@ -2,7 +2,7 @@
 const sharedCatalogJson = r'''
 {
   "schemaVersion": 1,
-  "sourceSha256": "6ebd44c0a6eaa9b83636f8fabe0d10970b7ef2633a05f49f3b567bbb07e0d5a2",
+  "sourceSha256": "335522d6260dd6cc78b711936ce38b22ce8a24dd38deecbf7cc2701ba3fec846",
   "posePackages": {
     "masculine": "Male / Masculine",
     "feminine": "Female / Feminine",
@@ -94,6 +94,125 @@ const sharedCatalogJson = r'''
     "softOvercast": {
       "title": "Soft overcast",
       "instruction": "Use even cloud light to preserve natural color and fine detail."
+    }
+  },
+  "filters": {
+    "natural": {
+      "title": "Natural",
+      "settings": {
+        "exposure": 0,
+        "warmth": 0,
+        "color": 1,
+        "contrast": 1,
+        "softness": 0,
+        "detail": 1,
+        "blueSky": 0
+      }
+    },
+    "soft": {
+      "title": "Soft",
+      "settings": {
+        "exposure": 1,
+        "warmth": 1,
+        "color": 1,
+        "contrast": -1,
+        "softness": 3,
+        "detail": 0,
+        "blueSky": 0
+      }
+    },
+    "bright": {
+      "title": "Bright",
+      "settings": {
+        "exposure": 3,
+        "warmth": 0,
+        "color": 1,
+        "contrast": 1,
+        "softness": 0,
+        "detail": 1,
+        "blueSky": 0
+      }
+    },
+    "vivid": {
+      "title": "Vivid",
+      "settings": {
+        "exposure": 0,
+        "warmth": 0,
+        "color": 4,
+        "contrast": 3,
+        "softness": 0,
+        "detail": 2,
+        "blueSky": 0
+      }
+    },
+    "blueSky": {
+      "title": "Blue Sky",
+      "settings": {
+        "exposure": 0,
+        "warmth": -1,
+        "color": 3,
+        "contrast": 2,
+        "softness": 0,
+        "detail": 2,
+        "blueSky": 5
+      }
+    },
+    "golden": {
+      "title": "Golden",
+      "settings": {
+        "exposure": 0,
+        "warmth": 4,
+        "color": 2,
+        "contrast": 1,
+        "softness": 1,
+        "detail": 1,
+        "blueSky": 0
+      }
+    },
+    "fresh": {
+      "title": "Fresh",
+      "settings": {
+        "exposure": 1,
+        "warmth": 1,
+        "color": 3,
+        "contrast": 2,
+        "softness": 0,
+        "detail": 2,
+        "blueSky": 0
+      }
+    },
+    "nightClear": {
+      "title": "Night Clear",
+      "settings": {
+        "exposure": 2,
+        "warmth": -1,
+        "color": 1,
+        "contrast": 2,
+        "softness": 2,
+        "detail": 2,
+        "blueSky": 0
+      }
+    }
+  },
+  "foodPackages": {
+    "food": "Food photography"
+  },
+  "foodLighting": {
+    "softWindow": {
+      "title": "Soft window side light",
+      "instruction": "Place the food beside a large window and turn off mixed-color room lights."
+    },
+    "broadOverhead": {
+      "title": "Broad diffused light",
+      "instruction": "Use a large diffused source so every dish stays evenly lit with controlled glare."
+    },
+    "rakingSide": {
+      "title": "Low side light",
+      "instruction": "Let soft light skim across the food to reveal layers, crumbs, and surface texture."
+    },
+    "diffusedBacklight": {
+      "title": "Diffused back-side light",
+      "instruction": "Place a diffused light behind and to one side so steam, pours, and glossy edges separate from the background."
     }
   },
   "items": [
@@ -2595,6 +2714,126 @@ const sharedCatalogJson = r'''
       "asset": "assets/catalog/landscape-plant-detail.jpg",
       "sourceAssetSha256": "07f448cafb9c6c1a50d2050753f72c72ba56c9162800d73d3a4e4f6e75a9730b",
       "assetSha256": "07f448cafb9c6c1a50d2050753f72c72ba56c9162800d73d3a4e4f6e75a9730b"
+    },
+    {
+      "id": "FD1",
+      "name": "heroPlate",
+      "kind": "food",
+      "title": "Hero plate",
+      "cues": [
+        "Turn the plate until its best edge faces the camera.",
+        "Frame the entire plate at a 45-degree angle and leave a little breathing room."
+      ],
+      "recommendedCameraAngle": "fortyFive",
+      "recommendedLight": "softWindow",
+      "safetyNote": "Set hot plates on a stable surface and keep the phone clear of steam and serving traffic.",
+      "exampleAssetName": "FoodHeroPlate",
+      "recipient": "Photographer",
+      "conflicts": [],
+      "package": "food",
+      "asset": "assets/catalog/food-hero-plate.jpg",
+      "sourceAssetSha256": "11de3c6ced9449eab6c710b5907762200bb736981ab8111302f079684fc7653a",
+      "assetSha256": "11de3c6ced9449eab6c710b5907762200bb736981ab8111302f079684fc7653a"
+    },
+    {
+      "id": "FD2",
+      "name": "overheadFlatLay",
+      "kind": "food",
+      "title": "Overhead flat lay",
+      "cues": [
+        "Hold the phone parallel to the table.",
+        "Balance the main dish with smaller items and keep the frame edges clean."
+      ],
+      "recommendedCameraAngle": "overhead",
+      "recommendedLight": "broadOverhead",
+      "safetyNote": "Use a secure overhead position; never stand on a chair or hold the phone above an active flame.",
+      "exampleAssetName": "FoodOverheadFlatLay",
+      "recipient": "Photographer",
+      "conflicts": [],
+      "package": "food",
+      "asset": "assets/catalog/food-overhead-flat-lay.jpg",
+      "sourceAssetSha256": "29b7dc5e4508d8e320395c6eb32804bd28710f79925480d416da633ea40d0267",
+      "assetSha256": "29b7dc5e4508d8e320395c6eb32804bd28710f79925480d416da633ea40d0267"
+    },
+    {
+      "id": "FD3",
+      "name": "textureDetail",
+      "kind": "food",
+      "title": "Texture detail",
+      "cues": [
+        "Move close to one cut edge, layer, or crisp surface.",
+        "Focus on that texture and simplify everything behind it."
+      ],
+      "recommendedCameraAngle": "side",
+      "recommendedLight": "rakingSide",
+      "safetyNote": "Move the phone toward the food only after knives and hot cookware are set safely aside.",
+      "exampleAssetName": "FoodTextureDetail",
+      "recipient": "Photographer",
+      "conflicts": [],
+      "package": "food",
+      "asset": "assets/catalog/food-texture-detail.jpg",
+      "sourceAssetSha256": "7ddc84843b93bbb370ab8e21d3e4dbe86eaeb1dc06b1d2889501005fc8ee3cc8",
+      "assetSha256": "7ddc84843b93bbb370ab8e21d3e4dbe86eaeb1dc06b1d2889501005fc8ee3cc8"
+    },
+    {
+      "id": "FD4",
+      "name": "tableStory",
+      "kind": "food",
+      "title": "Table story",
+      "cues": [
+        "Keep one dish as the clear hero.",
+        "Use a glass, napkin, or side plate to create foreground and background depth."
+      ],
+      "recommendedCameraAngle": "fortyFive",
+      "recommendedLight": "softWindow",
+      "safetyNote": "Set hot plates on a stable surface and keep the phone clear of steam and serving traffic.",
+      "exampleAssetName": "FoodTableStory",
+      "recipient": "Photographer",
+      "conflicts": [],
+      "package": "food",
+      "asset": "assets/catalog/food-table-story.jpg",
+      "sourceAssetSha256": "58352783c72d0d35848641bf090719dbe06c62096a2829870cfb530d31df3a23",
+      "assetSha256": "58352783c72d0d35848641bf090719dbe06c62096a2829870cfb530d31df3a23"
+    },
+    {
+      "id": "FD5",
+      "name": "ingredientFrame",
+      "kind": "food",
+      "title": "Ingredient frame",
+      "cues": [
+        "Place the finished dish near the center.",
+        "Arrange only a few relevant ingredients around it as a loose frame."
+      ],
+      "recommendedCameraAngle": "overhead",
+      "recommendedLight": "broadOverhead",
+      "safetyNote": "Use a secure overhead position; never stand on a chair or hold the phone above an active flame.",
+      "exampleAssetName": "FoodIngredientFrame",
+      "recipient": "Photographer",
+      "conflicts": [],
+      "package": "food",
+      "asset": "assets/catalog/food-ingredient-frame.jpg",
+      "sourceAssetSha256": "183d7578625d37f05704d009eb5e86c3a41ade76b2f08b5c3e613929ac57272c",
+      "assetSha256": "183d7578625d37f05704d009eb5e86c3a41ade76b2f08b5c3e613929ac57272c"
+    },
+    {
+      "id": "FD6",
+      "name": "pourAction",
+      "kind": "food",
+      "title": "Pour or action detail",
+      "cues": [
+        "Set the phone before the pour begins.",
+        "Keep the landing point sharp and leave room for the stream above it."
+      ],
+      "recommendedCameraAngle": "fortyFive",
+      "recommendedLight": "diffusedBacklight",
+      "safetyNote": "Keep the phone supported and away from hot liquid, splashes, and the pourer's working space.",
+      "exampleAssetName": "FoodPourAction",
+      "recipient": "Photographer",
+      "conflicts": [],
+      "package": "food",
+      "asset": "assets/catalog/food-pour-action.jpg",
+      "sourceAssetSha256": "5bc31489b2d34b1416ceba9c29eda0e20b9c4418e0c33c520c4ef3a6f085601f",
+      "assetSha256": "5bc31489b2d34b1416ceba9c29eda0e20b9c4418e0c33c520c4ef3a6f085601f"
     }
   ]
 }

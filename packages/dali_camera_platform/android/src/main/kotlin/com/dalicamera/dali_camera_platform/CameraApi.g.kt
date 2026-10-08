@@ -91,7 +91,18 @@ data class CameraSnapshot (
   val maximumEV: Double,
   val currentEV: Double,
   val supportsLock: Boolean,
-  val locked: Boolean
+  val locked: Boolean,
+  val minimumZoom: Double? = null,
+  val maximumZoom: Double? = null,
+  val currentZoom: Double? = null,
+  val supportsTap: Boolean? = null,
+  val minimumISO: Double? = null,
+  val maximumISO: Double? = null,
+  val minimumShutter: Double? = null,
+  val maximumShutter: Double? = null,
+  val currentISO: Double? = null,
+  val currentShutter: Double? = null,
+  val manualExposure: Boolean? = null
 )
  {
   companion object {
@@ -105,7 +116,18 @@ data class CameraSnapshot (
       val currentEV = pigeonVar_list[6] as Double
       val supportsLock = pigeonVar_list[7] as Boolean
       val locked = pigeonVar_list[8] as Boolean
-      return CameraSnapshot(ready, front, configurationId, aspectRatio, minimumEV, maximumEV, currentEV, supportsLock, locked)
+      val minimumZoom = pigeonVar_list[9] as Double?
+      val maximumZoom = pigeonVar_list[10] as Double?
+      val currentZoom = pigeonVar_list[11] as Double?
+      val supportsTap = pigeonVar_list[12] as Boolean?
+      val minimumISO = pigeonVar_list[13] as Double?
+      val maximumISO = pigeonVar_list[14] as Double?
+      val minimumShutter = pigeonVar_list[15] as Double?
+      val maximumShutter = pigeonVar_list[16] as Double?
+      val currentISO = pigeonVar_list[17] as Double?
+      val currentShutter = pigeonVar_list[18] as Double?
+      val manualExposure = pigeonVar_list[19] as Boolean?
+      return CameraSnapshot(ready, front, configurationId, aspectRatio, minimumEV, maximumEV, currentEV, supportsLock, locked, minimumZoom, maximumZoom, currentZoom, supportsTap, minimumISO, maximumISO, minimumShutter, maximumShutter, currentISO, currentShutter, manualExposure)
     }
   }
   fun toList(): List<Any?> {
@@ -119,6 +141,17 @@ data class CameraSnapshot (
       currentEV,
       supportsLock,
       locked,
+      minimumZoom,
+      maximumZoom,
+      currentZoom,
+      supportsTap,
+      minimumISO,
+      maximumISO,
+      minimumShutter,
+      maximumShutter,
+      currentISO,
+      currentShutter,
+      manualExposure,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -213,6 +246,12 @@ interface CameraHostApi {
   fun pickPhoto(callback: (Result<PhotoHandle?>) -> Unit)
   fun render(original: PhotoHandle, rotationDegrees: Double, crop: Boolean, strength: Double, callback: (Result<PhotoHandle>) -> Unit)
   fun setControls(configurationId: String, ev: Double, locked: Boolean, callback: (Result<CameraSnapshot>) -> Unit)
+  fun renderStyle(original: PhotoHandle, matrix: List<Double>, softness: Double, detail: Double, watermarkPath: String?, callback: (Result<PhotoHandle>) -> Unit)
+  fun setVoicePhrase(phrase: String)
+  fun releasePhoto(photo: PhotoHandle)
+  fun setZoom(configurationId: String, zoom: Double, callback: (Result<CameraSnapshot>) -> Unit)
+  fun meter(configurationId: String, x: Double, y: Double, callback: (Result<CameraSnapshot>) -> Unit)
+  fun setManualExposure(configurationId: String, seconds: Double?, iso: Double?, callback: (Result<CameraSnapshot>) -> Unit)
   fun openSettings()
   fun setVoiceEnabled(enabled: Boolean, callback: (Result<Boolean>) -> Unit)
 
@@ -400,6 +439,131 @@ interface CameraHostApi {
             val evArg = args[1] as Double
             val lockedArg = args[2] as Boolean
             api.setControls(configurationIdArg, evArg, lockedArg) { result: Result<CameraSnapshot> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.renderStyle$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val originalArg = args[0] as PhotoHandle
+            val matrixArg = args[1] as List<Double>
+            val softnessArg = args[2] as Double
+            val detailArg = args[3] as Double
+            val watermarkPathArg = args[4] as String?
+            api.renderStyle(originalArg, matrixArg, softnessArg, detailArg, watermarkPathArg) { result: Result<PhotoHandle> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setVoicePhrase$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val phraseArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.setVoicePhrase(phraseArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              CameraApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.releasePhoto$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val photoArg = args[0] as PhotoHandle
+            val wrapped: List<Any?> = try {
+              api.releasePhoto(photoArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              CameraApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setZoom$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val configurationIdArg = args[0] as String
+            val zoomArg = args[1] as Double
+            api.setZoom(configurationIdArg, zoomArg) { result: Result<CameraSnapshot> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.meter$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val configurationIdArg = args[0] as String
+            val xArg = args[1] as Double
+            val yArg = args[2] as Double
+            api.meter(configurationIdArg, xArg, yArg) { result: Result<CameraSnapshot> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setManualExposure$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val configurationIdArg = args[0] as String
+            val secondsArg = args[1] as Double?
+            val isoArg = args[2] as Double?
+            api.setManualExposure(configurationIdArg, secondsArg, isoArg) { result: Result<CameraSnapshot> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))

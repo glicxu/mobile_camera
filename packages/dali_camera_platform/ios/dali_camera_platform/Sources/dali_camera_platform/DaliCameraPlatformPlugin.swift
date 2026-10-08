@@ -55,7 +55,14 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             minimumEV: Double(device?.minExposureTargetBias ?? 0), maximumEV: Double(device?.maxExposureTargetBias ?? 0),
             currentEV: Double(device?.exposureTargetBias ?? 0),
             supportsLock: device?.isFocusModeSupported(.locked) == true && device?.isExposureModeSupported(.locked) == true,
-            locked: device?.focusMode == .locked && device?.exposureMode == .locked)
+            locked: device?.focusMode == .locked && device?.exposureMode == .locked,
+            minimumZoom: Double(device?.minAvailableVideoZoomFactor ?? 1), maximumZoom: Double(device?.maxAvailableVideoZoomFactor ?? 1), currentZoom: Double(device?.videoZoomFactor ?? 1),
+            supportsTap: device?.isFocusPointOfInterestSupported == true,
+            minimumISO: device?.isExposureModeSupported(.custom) == true ? Double(device!.activeFormat.minISO) : nil,
+            maximumISO: device?.isExposureModeSupported(.custom) == true ? Double(device!.activeFormat.maxISO) : nil,
+            minimumShutter: device?.isExposureModeSupported(.custom) == true ? CMTimeGetSeconds(device!.activeFormat.minExposureDuration) : nil,
+            maximumShutter: device?.isExposureModeSupported(.custom) == true ? min(0.5, CMTimeGetSeconds(device!.activeFormat.maxExposureDuration)) : nil,
+            currentISO: Double(device?.iso ?? 100), currentShutter: device.map { CMTimeGetSeconds($0.exposureDuration) }, manualExposure: device?.exposureMode == .custom)
     }
     func start(front: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
@@ -138,7 +145,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     }
     func recover() throws -> PhotoHandle? {
         guard FileManager.default.fileExists(atPath: manifest.path) else { return nil }
-        let data = try JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as! [String: String]
+        guard let data = try JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as? [String: String] else { throw failure("Invalid recovery manifest; original retained") }
         guard let path = data["path"], let id = data["id"], FileManager.default.fileExists(atPath: path) else { throw failure("Recovery original missing") }
         return PhotoHandle(path: path, id: id, unsaved: true)
     }
@@ -202,7 +209,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     func setControls(configurationId: String, ev: Double, locked: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
         queue.async {
             do {
-                guard self.active, configurationId == self.configuration, let device = self.device else { throw self.failure("Camera changed; refresh controls") }
+                guard self.active, configurationId == self.configuration, let device = self.device, device.exposureMode != .custom else { throw self.failure("Camera changed or manual exposure active; refresh controls") }
                 try device.lockForConfiguration(); defer { device.unlockForConfiguration() }
                 device.setExposureTargetBias(Float(ev).clamped(device.minExposureTargetBias, device.maxExposureTargetBias), completionHandler: nil)
                 if device.isFocusModeSupported(locked ? .locked : .continuousAutoFocus) { device.focusMode = locked ? .locked : .continuousAutoFocus }
@@ -210,6 +217,92 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 DispatchQueue.main.async { completion(.success(self.snapshot())) }
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
+    }
+    func renderStyle(original: PhotoHandle, matrix: [Double], softness: Double, detail: Double, watermarkPath: String?, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
+        queue.async {
+            do {
+                guard matrix.count == 20, matrix.allSatisfy({ $0.isFinite }), softness.isFinite, detail.isFinite,
+                      var image = CIImage(contentsOf: URL(fileURLWithPath: original.path), options: [.applyOrientationProperty: true]) else { throw self.failure("Invalid style or photo") }
+                let extent = image.extent
+                image = image.applyingFilter("CIColorMatrix", parameters: [
+                    "inputRVector": CIVector(x: matrix[0], y: matrix[1], z: matrix[2], w: matrix[3]),
+                    "inputGVector": CIVector(x: matrix[5], y: matrix[6], z: matrix[7], w: matrix[8]),
+                    "inputBVector": CIVector(x: matrix[10], y: matrix[11], z: matrix[12], w: matrix[13]),
+                    "inputAVector": CIVector(x: matrix[15], y: matrix[16], z: matrix[17], w: matrix[18]),
+                    "inputBiasVector": CIVector(x: matrix[4]/255, y: matrix[9]/255, z: matrix[14]/255, w: matrix[19]/255)
+                ])
+                if softness > 0 { image = image.clampedToExtent().applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: min(5, softness) * 0.3]).cropped(to: extent) }
+                if detail > 0 { image = image.applyingFilter("CIUnsharpMask", parameters: [kCIInputRadiusKey: 2, kCIInputIntensityKey: min(5, detail) * 0.08]).cropped(to: extent) }
+                if let watermarkPath, var mark = CIImage(contentsOf: URL(fileURLWithPath: watermarkPath)) {
+                    let scale = extent.width * 0.28 / mark.extent.width
+                    mark = mark.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                    let margin = max(18, extent.width * 0.025)
+                    mark = mark.transformed(by: CGAffineTransform(translationX: extent.maxX - mark.extent.maxX - margin, y: extent.minY - mark.extent.minY + margin))
+                    mark = mark.applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0.86)])
+                    image = mark.composited(over: image)
+                }
+                guard let output = self.ci.createCGImage(image, from: extent), let data = UIImage(cgImage: output).jpegData(compressionQuality: 0.95) else { throw self.failure("Cannot render style") }
+                let handle = try self.newPhoto(); try data.write(to: URL(fileURLWithPath: handle.path), options: .atomic)
+                DispatchQueue.main.async { completion(.success(handle)) }
+            } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+        }
+    }
+    func setZoom(configurationId: String, zoom: Double, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
+        queue.async {
+            do {
+                guard self.active, configurationId == self.configuration, zoom.isFinite, let device = self.device else { throw self.failure("Camera changed or invalid zoom") }
+                try device.lockForConfiguration(); defer { device.unlockForConfiguration() }
+                device.videoZoomFactor = CGFloat(zoom).clamped(device.minAvailableVideoZoomFactor, device.maxAvailableVideoZoomFactor)
+                DispatchQueue.main.async { completion(.success(self.snapshot())) }
+            } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+        }
+    }
+    func meter(configurationId: String, x: Double, y: Double, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
+        guard let layer = preview?.layer, x.isFinite, y.isFinite else { completion(.failure(failure("No preview or invalid focus point"))); return }
+        let point = layer.captureDevicePointConverted(fromLayerPoint: CGPoint(x: min(1, max(0, x)) * layer.bounds.width, y: min(1, max(0, y)) * layer.bounds.height))
+        queue.async {
+            do {
+                guard self.active, configurationId == self.configuration, let device = self.device, device.isFocusPointOfInterestSupported else { throw self.failure("Focus point unavailable or camera changed") }
+                try device.lockForConfiguration(); defer { device.unlockForConfiguration() }
+                device.focusPointOfInterest = point
+                if device.isFocusModeSupported(.autoFocus) { device.focusMode = .autoFocus }
+                if device.exposureMode != .custom && device.isExposurePointOfInterestSupported {
+                    device.exposurePointOfInterest = point
+                    if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
+                }
+                DispatchQueue.main.async { completion(.success(self.snapshot())) }
+            } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+        }
+    }
+    func setManualExposure(configurationId: String, seconds: Double?, iso: Double?, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
+        queue.async {
+            do {
+                guard self.active, configurationId == self.configuration, let device = self.device else { throw self.failure("Camera changed; refresh controls") }
+                try device.lockForConfiguration(); defer { device.unlockForConfiguration() }
+                if let seconds, let iso {
+                    guard seconds.isFinite, iso.isFinite, device.isExposureModeSupported(.custom) else { throw self.failure("Manual exposure unavailable") }
+                    let duration = min(0.5, max(CMTimeGetSeconds(device.activeFormat.minExposureDuration), min(CMTimeGetSeconds(device.activeFormat.maxExposureDuration), seconds)))
+                    device.setExposureModeCustom(duration: CMTime(seconds: duration, preferredTimescale: 1_000_000_000), iso: Float(iso).clamped(device.activeFormat.minISO, device.activeFormat.maxISO)) { _ in
+                        DispatchQueue.main.async {
+                            if self.active && configurationId == self.configuration { completion(.success(self.snapshot())) }
+                            else { completion(.failure(self.failure("Camera changed"))) }
+                        }
+                    }
+                } else {
+                    if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
+                    if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
+                    if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) { device.whiteBalanceMode = .continuousAutoWhiteBalance }
+                    device.setExposureTargetBias(0, completionHandler: nil)
+                    DispatchQueue.main.async { completion(.success(self.snapshot())) }
+                }
+            } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+        }
+    }
+    func setVoicePhrase(phrase: String) throws { speech.customPhrase = phrase }
+    func releasePhoto(photo: PhotoHandle) throws {
+        let url = URL(fileURLWithPath: photo.path).standardizedFileURL
+        guard url.deletingLastPathComponent() == directory.standardizedFileURL, url.pathExtension == "jpg", try recover()?.id != photo.id else { return }
+        if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
     }
     func openSettings() throws { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
     func setVoiceEnabled(enabled: Bool, completion: @escaping (Result<Bool, Error>) -> Void) { speech.setEnabled(enabled, completion: completion) }
@@ -248,6 +341,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         }
     }
 }
+private extension CGFloat { func clamped(_ low: CGFloat, _ high: CGFloat) -> CGFloat { min(high, max(low, self)) } }
 private extension Float { func clamped(_ low: Float, _ high: Float) -> Float { min(high, max(low, self)) } }
 private final class PreviewContainer: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }

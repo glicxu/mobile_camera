@@ -28,7 +28,7 @@ class SharedCatalog {
       .map((value) => CatalogEntry(value as Map<String, dynamic>))
       .toList();
   Map<String, String> packages(String kind) =>
-      (data[kind == 'pose' ? 'posePackages' : 'landscapePackages'] as Map)
+      (data['${kind == 'pose' ? 'pose' : kind}Packages'] as Map)
           .cast<String, String>();
   String angleTitle(CatalogEntry entry) =>
       data['angles'][entry.angle]['title'] as String;
@@ -36,9 +36,8 @@ class SharedCatalog {
       data['angles'][entry.angle]['instruction'] as String;
   String lightDescription(CatalogEntry entry) {
     final value =
-        data[entry.kind == 'pose'
-            ? 'poseLighting'
-            : 'landscapeLighting'][entry.light];
+        data['${entry.kind == 'pose' ? 'pose' : entry.kind}Lighting'][entry
+            .light];
     return '${value['title']}. ${value['instruction']}';
   }
 }
@@ -63,7 +62,7 @@ class CatalogSession {
           type: 'catalog_${entry!.key}_$index',
           recipient: complete
               ? 'Camera'
-              : index == 0 || entry!.kind == 'landscape'
+              : index == 0 || entry!.kind != 'pose'
               ? 'Photographer'
               : entry!.recipient,
           instruction: complete

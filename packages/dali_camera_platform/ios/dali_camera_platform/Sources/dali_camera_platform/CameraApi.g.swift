@@ -143,6 +143,17 @@ struct CameraSnapshot: Hashable {
   var currentEV: Double
   var supportsLock: Bool
   var locked: Bool
+  var minimumZoom: Double? = nil
+  var maximumZoom: Double? = nil
+  var currentZoom: Double? = nil
+  var supportsTap: Bool? = nil
+  var minimumISO: Double? = nil
+  var maximumISO: Double? = nil
+  var minimumShutter: Double? = nil
+  var maximumShutter: Double? = nil
+  var currentISO: Double? = nil
+  var currentShutter: Double? = nil
+  var manualExposure: Bool? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -156,6 +167,17 @@ struct CameraSnapshot: Hashable {
     let currentEV = pigeonVar_list[6] as! Double
     let supportsLock = pigeonVar_list[7] as! Bool
     let locked = pigeonVar_list[8] as! Bool
+    let minimumZoom: Double? = nilOrValue(pigeonVar_list[9])
+    let maximumZoom: Double? = nilOrValue(pigeonVar_list[10])
+    let currentZoom: Double? = nilOrValue(pigeonVar_list[11])
+    let supportsTap: Bool? = nilOrValue(pigeonVar_list[12])
+    let minimumISO: Double? = nilOrValue(pigeonVar_list[13])
+    let maximumISO: Double? = nilOrValue(pigeonVar_list[14])
+    let minimumShutter: Double? = nilOrValue(pigeonVar_list[15])
+    let maximumShutter: Double? = nilOrValue(pigeonVar_list[16])
+    let currentISO: Double? = nilOrValue(pigeonVar_list[17])
+    let currentShutter: Double? = nilOrValue(pigeonVar_list[18])
+    let manualExposure: Bool? = nilOrValue(pigeonVar_list[19])
 
     return CameraSnapshot(
       ready: ready,
@@ -166,7 +188,18 @@ struct CameraSnapshot: Hashable {
       maximumEV: maximumEV,
       currentEV: currentEV,
       supportsLock: supportsLock,
-      locked: locked
+      locked: locked,
+      minimumZoom: minimumZoom,
+      maximumZoom: maximumZoom,
+      currentZoom: currentZoom,
+      supportsTap: supportsTap,
+      minimumISO: minimumISO,
+      maximumISO: maximumISO,
+      minimumShutter: minimumShutter,
+      maximumShutter: maximumShutter,
+      currentISO: currentISO,
+      currentShutter: currentShutter,
+      manualExposure: manualExposure
     )
   }
   func toList() -> [Any?] {
@@ -180,6 +213,17 @@ struct CameraSnapshot: Hashable {
       currentEV,
       supportsLock,
       locked,
+      minimumZoom,
+      maximumZoom,
+      currentZoom,
+      supportsTap,
+      minimumISO,
+      maximumISO,
+      minimumShutter,
+      maximumShutter,
+      currentISO,
+      currentShutter,
+      manualExposure,
     ]
   }
   static func == (lhs: CameraSnapshot, rhs: CameraSnapshot) -> Bool {
@@ -280,6 +324,12 @@ protocol CameraHostApi {
   func pickPhoto(completion: @escaping (Result<PhotoHandle?, Error>) -> Void)
   func render(original: PhotoHandle, rotationDegrees: Double, crop: Bool, strength: Double, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func setControls(configurationId: String, ev: Double, locked: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
+  func renderStyle(original: PhotoHandle, matrix: [Double], softness: Double, detail: Double, watermarkPath: String?, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
+  func setVoicePhrase(phrase: String) throws
+  func releasePhoto(photo: PhotoHandle) throws
+  func setZoom(configurationId: String, zoom: Double, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
+  func meter(configurationId: String, x: Double, y: Double, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
+  func setManualExposure(configurationId: String, seconds: Double?, iso: Double?, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
   func openSettings() throws
   func setVoiceEnabled(enabled: Bool, completion: @escaping (Result<Bool, Error>) -> Void)
 }
@@ -450,6 +500,113 @@ class CameraHostApiSetup {
       }
     } else {
       setControlsChannel.setMessageHandler(nil)
+    }
+    let renderStyleChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.renderStyle\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      renderStyleChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let originalArg = args[0] as! PhotoHandle
+        let matrixArg = args[1] as! [Double]
+        let softnessArg = args[2] as! Double
+        let detailArg = args[3] as! Double
+        let watermarkPathArg: String? = nilOrValue(args[4])
+        api.renderStyle(original: originalArg, matrix: matrixArg, softness: softnessArg, detail: detailArg, watermarkPath: watermarkPathArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      renderStyleChannel.setMessageHandler(nil)
+    }
+    let setVoicePhraseChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setVoicePhrase\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setVoicePhraseChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let phraseArg = args[0] as! String
+        do {
+          try api.setVoicePhrase(phrase: phraseArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      setVoicePhraseChannel.setMessageHandler(nil)
+    }
+    let releasePhotoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.releasePhoto\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      releasePhotoChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let photoArg = args[0] as! PhotoHandle
+        do {
+          try api.releasePhoto(photo: photoArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      releasePhotoChannel.setMessageHandler(nil)
+    }
+    let setZoomChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setZoom\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setZoomChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let configurationIdArg = args[0] as! String
+        let zoomArg = args[1] as! Double
+        api.setZoom(configurationId: configurationIdArg, zoom: zoomArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      setZoomChannel.setMessageHandler(nil)
+    }
+    let meterChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.meter\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      meterChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let configurationIdArg = args[0] as! String
+        let xArg = args[1] as! Double
+        let yArg = args[2] as! Double
+        api.meter(configurationId: configurationIdArg, x: xArg, y: yArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      meterChannel.setMessageHandler(nil)
+    }
+    let setManualExposureChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setManualExposure\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setManualExposureChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let configurationIdArg = args[0] as! String
+        let secondsArg: Double? = nilOrValue(args[1])
+        let isoArg: Double? = nilOrValue(args[2])
+        api.setManualExposure(configurationId: configurationIdArg, seconds: secondsArg, iso: isoArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      setManualExposureChannel.setMessageHandler(nil)
     }
     let openSettingsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.openSettings\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

@@ -1,6 +1,6 @@
 ﻿# Cross-platform implementation progress
 
-Baseline: native iOS `da72a5d`. Updated October 8, 2026.
+Baseline: native iOS `d53a977` (merged from remote main). Updated October 8, 2026.
 
 The native app remains the reference for complete behavior. The new app is under `apps/dali_camera`; service code is in `packages/dali_camera_platform`. This inventory describes implemented code, with validation evidence recorded separately.
 
@@ -11,17 +11,21 @@ The native app remains the reference for complete behavior. The new app is under
 | Camera tilt / stability | Shared rules consume explicit sensor availability | Gravity + linear acceleration; unavailable if absent | CoreMotion device motion |
 | People reference catalog | All 76 references, 11 collections, cues, recipients, angles, lighting and settings | Shared assets | Shared assets |
 | Landscape reference catalog | All 24 recipes, four packages, cues, angles, light and safety notes | Shared assets | Shared assets |
+| Food reference catalog | All six recipes, angle, lighting, safety notes and images | Shared assets | Shared assets |
 | Manual creative progression | Angle then two cues, Next/Skip/Natural, urgent framing interruption | Shared logic | Shared logic |
 | Capture / original recovery | File-backed handles, busy guards, retry/discard states | Private original + atomic manifest | Private original + atomic manifest |
 | Save / copy / share / photo picker | Selected file is exported, original preserved | MediaStore, scoped file sharing, document picker | Photos add-only, activity sheet, PHPicker |
-| Review | Original / tighter crop, original comparison, fullscreen zoom | Native JPEG crop export | Core Image crop export |
+| Review | Original / crop / styled copy, original comparison, fullscreen zoom, recent 25 saved originals | Native JPEG crop and style export | Core Image crop and style export |
+| Named filters / watermark | Eight native preset definitions, Auto/Custom/Off, seven parameters, opt-in Dali watermark, separate selected export | Shared color matrix + spatial kernel; large styled copies sampled to at most 3200 px | Same color matrix + Core Image spatial filters |
+| Timer / long press | Off/3/5/10s, cancellation on pause/lens/reference change, paced burst (up to 25), hold Timer/Disabled | Sequential original capture/save | Sequential original capture/save |
+| Tap focus / zoom / manual M exposure | Active-camera capabilities, persistent tap reticle, clearable Manual preview controls, shutter/ISO, return to full Auto | CameraX metering/zoom; Camera2 MANUAL_SENSOR gate and sensor range clamp | AVFoundation point conversion/zoom/custom exposure and format range clamp |
 | Exposure / focus lock | Capability-driven controls | Camera2 exposure compensation and freeze current focus/exposure when available | AVFoundation exposure compensation and lock |
-| Voice shutter | Explicit opt-in, capture-state guard | On-device recognition where available on API 31+ | On-device speech where available for current locale |
+| Voice shutter | Explicit opt-in, standard commands and custom whole-word phrase, countdown/capture-state guard | On-device recognition where available on API 31+ | On-device speech where available for current locale |
 | Onboarding / help / accessibility | Welcome, Help, semantic labels, scrollable advice and fixed shutter | TalkBack labels; human acceptance pending | VoiceOver labels; human acceptance pending |
 | Diagnostic log | Bounded instruction log, user copies it explicitly | No photos or speech transcripts in log | No photos or speech transcripts in log |
 | Advanced measurement parity | Pending calibration and port of derived measurements | Single-person pose extent is not a multi-person detector; no optical horizon or scenic estimator yet | Basic adapter does not yet expose original rich pose/face/saliency/horizon pipeline |
 | Full review enhancement parity | Pending | Native crop currently available; original beautify/reframe/level behavior remains to port | Native crop currently available; original beautify/reframe/level behavior remains to port |
-| Situation-specific controls | People/Landscape currently available | Other native situations remain to port | Other native situations remain to port |
+| Situation-specific controls | People/Landscape/Food currently available | Other native situations remain to port | Other native situations remain to port |
 
 ## Validation and limitations
 
@@ -41,6 +45,11 @@ The catalogs are authored in Swift during coexistence. `tools/export_shared_cata
 
 `NativeFrame` validates compact packet schema v1 and maps measurements into the existing `FrameAnalysis` contract. A successful empty detection, an unavailable detector and an unsupported sensor are distinct. Missing scenic information does not trigger a false scene-excluded correction. The old ten-pose Dart enum is retained for compatibility; the new app uses the complete shared catalog.
 
-Android save retries use stable names to reconcile an owned gallery insertion. iOS Photos insertion has a crash window before the app can acknowledge completion; after an interrupted save, check Photos before retrying to avoid a duplicate. A saved original is not removed from private storage while the current review still needs it. Full storage-retention policy and crash-window hardening remain part of later parity work.
+Android save retries use stable names to reconcile an owned gallery insertion. iOS Photos insertion has a crash window before the app can acknowledge completion; after an interrupted save, check Photos before retrying to avoid a duplicate. A saved original is not removed from private storage while the current review still needs it. Recent history now retains up to 25 saved private originals plus any unsaved recovery copy; pruning removes only owned private files after persisting the retained list. Gallery copies are preserved. Crash-window hardening and a complete derived-copy cleanup policy remain part of later parity work.
 
 Real lighting, comfortable guidance, TalkBack/VoiceOver interaction, pixel alignment near image edges, sustained thermal behavior and the iPhone comparison require physical-device acceptance. Build success does not establish those results. Follow [Android testing](android_testing.md) and [Flutter iPhone comparison](flutter_iphone_testing.md). M4 acceptance requires the user's physical iPhone/Mac access before proceeding to M5 calibration and full enhancement parity.
+
+
+## Remote main sync: d53a977
+
+The native iOS update is merged in full; the SwiftUI modifier decomposition is retained. See [main sync inventory](cross_platform_main_sync.md) for the Flutter port and its outstanding parity items. Older validation above applies to the preceding implementation; new tests are recorded in that inventory. A merged native feature is not automatically a Flutter feature.
