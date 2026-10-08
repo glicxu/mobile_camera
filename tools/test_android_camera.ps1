@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$DeviceId,
     [string]$Flutter = 'flutter',
-    [string]$Adb = "$env:LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe"
+    [string]$Adb = "$env:LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe",
+    [ValidateRange(0, 3600)][int]$SoakSeconds = 0
 )
 $ErrorActionPreference = 'Stop'
 $appDirectory = Join-Path $PSScriptRoot '../apps/dali_camera'
@@ -13,7 +14,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Install failed' }
     & $Adb -s $DeviceId shell pm grant com.dalicamera.dali_camera android.permission.CAMERA
     if ($LASTEXITCODE -ne 0) { throw 'Camera test permission setup failed' }
-    & $Flutter test integration_test/phone_test.dart -d $DeviceId
+    & $Flutter test integration_test/phone_test.dart -d $DeviceId "--dart-define=DALI_SOAK_SECONDS=$SoakSeconds"
     if ($LASTEXITCODE -ne 0) { throw 'Phone integration test failed' }
     & $Flutter test integration_test/bridge_test.dart -d $DeviceId
     if ($LASTEXITCODE -ne 0) { throw 'Native bridge integration test failed' }

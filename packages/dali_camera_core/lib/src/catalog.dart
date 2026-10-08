@@ -61,7 +61,9 @@ class CatalogSession {
       ? null
       : Advice(
           type: 'catalog_${entry!.key}_$index',
-          recipient: index == 0 || entry!.kind == 'landscape'
+          recipient: complete
+              ? 'Camera'
+              : index == 0 || entry!.kind == 'landscape'
               ? 'Photographer'
               : entry!.recipient,
           instruction: complete
