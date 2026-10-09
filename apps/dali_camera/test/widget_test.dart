@@ -237,6 +237,14 @@ class ManualHost extends FakeHost {
   }
 }
 
+Future<void> openPhotoTool(WidgetTester tester, String tool) async {
+  await tester.tap(find.byKey(const Key('reviewEnhanceButton')));
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(find.byKey(Key('reviewTool_$tool')));
+  await tester.tap(find.byKey(Key('reviewTool_$tool')));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
@@ -407,24 +415,16 @@ void main() {
       expect(find.byType(ReviewTreatmentControls), findsNothing);
       expect(find.text('Share'), findsNothing);
       expect(find.text('Versions and imports'), findsNothing);
-      expect(
-        tester
-            .widget<FilledButton>(find.byKey(const Key('saveReviewEdits')))
-            .onPressed,
-        isNull,
-      );
+      expect(find.byKey(const Key('saveReviewEdits')), findsNothing);
       for (final tool in ['enhance', 'filters', 'beautifier', 'edit']) {
-        await tester.ensureVisible(find.byKey(Key('reviewTool_$tool')));
-        await tester.tap(find.byKey(Key('reviewTool_$tool')));
-        await tester.pumpAndSettle();
+        await openPhotoTool(tester, tool);
         expect(find.byKey(ValueKey('reviewEditor_$tool')), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.tap(find.byTooltip('Close photo tools'));
         await tester.pumpAndSettle();
         expect(find.byKey(ValueKey('reviewEditor_$tool')), findsNothing);
       }
-      await tester.tap(find.byKey(const Key('reviewTool_edit')));
-      await tester.pumpAndSettle();
+      await openPhotoTool(tester, 'edit');
       await tester.ensureVisible(find.text('Tighter crop'));
       await tester.tap(find.text('Tighter crop'));
       await tester.pumpAndSettle();
@@ -474,15 +474,13 @@ void main() {
     camera.notifyListeners();
     await tester.pumpAndSettle();
     for (final tool in ['enhance', 'filters', 'beautifier', 'edit']) {
-      await tester.ensureVisible(find.byKey(Key('reviewTool_$tool')));
-      await tester.tap(find.byKey(Key('reviewTool_$tool')));
-      await tester.pumpAndSettle();
+      await openPhotoTool(tester, tool);
       expect(find.byKey(ValueKey('reviewEditor_$tool')), findsOneWidget);
       expect(tester.takeException(), isNull, reason: tool);
       await tester.tap(find.byTooltip('Close photo tools'));
       await tester.pumpAndSettle();
     }
-    expect(find.byKey(const Key('saveReviewEdits')), findsOneWidget);
+    expect(find.byKey(const Key('saveReviewEdits')), findsNothing);
     camera.dispose();
   });
 
@@ -502,8 +500,7 @@ void main() {
       camera.customBeautifier = 'portrait';
       camera.reviewTreatment = 'portrait';
       camera.reviewTreatments['portrait']!['strength'] = 4;
-      await tester.tap(find.byKey(const Key('reviewTool_beautifier')));
-      await tester.pumpAndSettle();
+      await openPhotoTool(tester, 'beautifier');
       expect(find.text('Choose a beautifier'), findsOneWidget);
       expect(find.byType(ReviewTreatmentControls), findsNothing);
       expect(host.effectsRecipe, isNull);
@@ -540,13 +537,64 @@ void main() {
         PhotoHandle(path: 'next.jpg', id: 'next-photo', unsaved: false),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('reviewTool_beautifier')));
-      await tester.pumpAndSettle();
+      await openPhotoTool(tester, 'beautifier');
       expect(find.text('Choose a beautifier'), findsOneWidget);
       camera.requestReviewTreatment('landscape');
       await camera.variant();
       await tester.pump(const Duration(milliseconds: 250));
       expect(camera.selected!.id, camera.original!.id);
+      camera.dispose();
+    },
+  );
+
+  testWidgets(
+    'One Enhance button opens all tools and Auto uses the photo rather than capture settings',
+    (tester) async {
+      final host = FakeHost();
+      final camera = CameraController(host: host, register: false);
+      await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+      await tester.pumpAndSettle();
+      camera.filter = 'off';
+      camera.beautifier = 'off';
+      camera.watermark = false;
+      await camera.capturePhoto();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('reviewEnhanceButton')), findsOneWidget);
+      for (final tool in ['auto', 'enhance', 'filters', 'beautifier', 'edit']) {
+        expect(find.byKey(Key('reviewTool_$tool')), findsNothing);
+      }
+      await tester.tap(find.byKey(const Key('reviewEnhanceButton')));
+      await tester.pumpAndSettle();
+      for (final label in [
+        'Auto',
+        'General Enhancer',
+        'Filter',
+        'Beautifier',
+        'Crop and Edit',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      expect(find.text('Improve tone, color and detail'), findsOneWidget);
+      expect(find.text('Apply a preset color style'), findsOneWidget);
+      camera.customBeautifier = 'portrait';
+      camera.reviewTreatments['enhance']!['strength'] = 5;
+      camera.reviewTreatments['enhance']!['flags'] = {'autoTone': false};
+      camera.photoAnalysis = {'faceStatus': 'valid', 'faces': []};
+      await tester.tap(find.byKey(const Key('reviewTool_auto')));
+      await tester.pumpAndSettle();
+      expect(camera.selectedTreatment, 'enhance');
+      expect(host.effectsRecipe!['strength'], 3);
+      expect(host.effectsRecipe!['flags'], isEmpty);
+      expect(camera.reviewTreatments['enhance']!['strength'], 5);
+      expect(camera.reviewTreatments['enhance']!['flags'], {'autoTone': false});
+      expect(find.byKey(const Key('saveReviewEdits')), findsOneWidget);
+      camera.photoAnalysis = {
+        'faceStatus': 'valid',
+        'faces': [{}],
+      };
+      await camera.autoEnhanceReview();
+      expect(camera.selectedTreatment, 'portrait');
+      expect(camera.customBeautifier, 'portrait');
       camera.dispose();
     },
   );

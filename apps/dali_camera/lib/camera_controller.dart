@@ -948,7 +948,25 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     unawaited(persistSettings());
   }
 
-  Future<void> applyTreatment(String treatment) async {
+  String get autoReviewTreatment =>
+      photoAnalysis?['faceStatus'] == 'valid' &&
+          photoAnalysis?['faces'] is List &&
+          (photoAnalysis!['faces'] as List).isNotEmpty
+      ? 'portrait'
+      : 'enhance';
+
+  Future<void> autoEnhanceReview() async {
+    if (busy || original == null) return;
+    _reviewUpdate?.cancel();
+    _reviewRevision++;
+    await applyTreatment(autoReviewTreatment, strength: 3, flags: {});
+  }
+
+  Future<void> applyTreatment(
+    String treatment, {
+    int? strength,
+    Map<String, bool>? flags,
+  }) async {
     if (busy || original == null) return;
     final source = original!;
     final revision = _reviewRevision;
@@ -961,8 +979,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         jsonEncode({
           'version': 1,
           'treatment': treatment,
-          'strength': settings?['strength'] ?? 0,
-          'flags': settings?['flags'] ?? {},
+          'strength': strength ?? settings?['strength'] ?? 0,
+          'flags': flags ?? settings?['flags'] ?? {},
         }),
       );
       if (_disposed ||

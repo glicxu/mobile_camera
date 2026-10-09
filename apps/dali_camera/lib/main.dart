@@ -588,6 +588,73 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Widget reviewEditor() {
+    if (reviewTool == 'menu') {
+      return Column(
+        children: [
+          for (final tool in [
+            'auto',
+            'enhance',
+            'filters',
+            'beautifier',
+            'edit',
+          ])
+            ListTile(
+              key: Key('reviewTool_$tool'),
+              leading: Icon(
+                {
+                  'auto': Icons.auto_awesome,
+                  'enhance': Icons.auto_fix_high,
+                  'filters': Icons.filter_vintage,
+                  'beautifier': Icons.face,
+                  'edit': Icons.crop,
+                }[tool],
+              ),
+              title: Text(
+                {
+                  'auto': 'Auto',
+                  'enhance': 'General Enhancer',
+                  'filters': 'Filter',
+                  'beautifier': 'Beautifier',
+                  'edit': 'Crop and Edit',
+                }[tool]!,
+              ),
+              subtitle: tool == 'enhance' || tool == 'filters'
+                  ? Text(
+                      tool == 'enhance'
+                          ? 'Improve tone, color and detail'
+                          : 'Apply a preset color style',
+                    )
+                  : null,
+              trailing: const Icon(Icons.chevron_right),
+              onTap: camera.busy
+                  ? null
+                  : () {
+                      openReviewTool(tool);
+                      if (tool == 'auto') camera.autoEnhanceReview();
+                    },
+            ),
+        ],
+      );
+    }
+    if (reviewTool == 'auto') {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            const Text('Auto improves this photo using a balanced treatment.'),
+            const SizedBox(height: 8),
+            Text(
+              'Suggested treatment: ${treatmentTitles[camera.autoReviewTreatment]}',
+            ),
+            TextButton.icon(
+              onPressed: camera.busy ? null : camera.autoEnhanceReview,
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('Apply Auto'),
+            ),
+          ],
+        ),
+      );
+    }
     if (reviewTool == 'filters') {
       return CaptureStyleControls(
         camera: camera,
@@ -641,14 +708,19 @@ class _CameraScreenState extends State<CameraScreen>
       );
     }
     if (reviewTool == 'enhance') {
-      const kinds = ['enhance', 'landscape'];
+      const kinds = ['enhance'];
       return Column(
         children: [
-          ReviewTreatmentControls(camera: camera, allowedTreatments: kinds),
+          ReviewTreatmentControls(
+            camera: camera,
+            allowedTreatments: kinds,
+            showTreatmentSelector: false,
+          ),
           PhotoEffectControls(
             camera: camera,
             review: true,
             allowedTreatments: kinds,
+            showTreatmentSelector: false,
           ),
         ],
       );
@@ -860,7 +932,9 @@ class _CameraScreenState extends State<CameraScreen>
       if (reviewTool != null)
         ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height * .32,
+            maxHeight:
+                MediaQuery.sizeOf(context).height *
+                (reviewTool == 'menu' ? .46 : .32),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -871,10 +945,12 @@ class _CameraScreenState extends State<CameraScreen>
                   Expanded(
                     child: Text(
                       {
-                        'enhance': 'Enhance',
-                        'filters': 'Filters',
+                        'menu': 'Enhance',
+                        'auto': 'Auto',
+                        'enhance': 'General Enhancer',
+                        'filters': 'Filter',
                         'beautifier': 'Beautifier',
-                        'edit': 'Edit',
+                        'edit': 'Crop and Edit',
                       }[reviewTool]!,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
@@ -900,78 +976,30 @@ class _CameraScreenState extends State<CameraScreen>
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Row(
           children: [
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final tool in [
-                      'enhance',
-                      'filters',
-                      'beautifier',
-                      'edit',
-                    ])
-                      SizedBox(
-                        width: 64,
-                        child: TextButton(
-                          key: Key('reviewTool_$tool'),
-                          onPressed: camera.busy
-                              ? null
-                              : () => openReviewTool(tool),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 2,
-                              vertical: 6,
-                            ),
-                            backgroundColor: reviewTool == tool
-                                ? cameraTeal.withValues(alpha: .18)
-                                : null,
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                {
-                                  'enhance': Icons.auto_fix_high,
-                                  'filters': Icons.filter_vintage,
-                                  'beautifier': Icons.face,
-                                  'edit': Icons.crop,
-                                }[tool],
-                                size: 20,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                {
-                                  'enhance': 'Enhance',
-                                  'filters': 'Filters',
-                                  'beautifier': 'Beautifier',
-                                  'edit': 'Edit',
-                                }[tool]!,
-                                style: const TextStyle(fontSize: 11),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
+            FilledButton.tonalIcon(
+              key: const Key('reviewEnhanceButton'),
+              onPressed: camera.busy ? null : () => openReviewTool('menu'),
+              icon: const Icon(Icons.auto_fix_high),
+              label: const Text('Enhance'),
+            ),
+            const Spacer(),
+            const SizedBox(width: 8),
+            if (camera.original?.unsaved == true ||
+                (camera.selected != null &&
+                    camera.selected?.id != camera.original?.id))
+              FilledButton(
+                key: const Key('saveReviewEdits'),
+                onPressed:
+                    camera.busy ||
+                        camera.selected == null ||
+                        (camera.original?.unsaved != true &&
+                            camera.selected?.id == camera.original?.id)
+                    ? null
+                    : () => camera.saveSelected(),
+                child: Text(
+                  camera.original?.unsaved == true ? 'Retry save' : 'Save',
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              key: const Key('saveReviewEdits'),
-              onPressed:
-                  camera.busy ||
-                      camera.selected == null ||
-                      (camera.original?.unsaved != true &&
-                          camera.selected?.id == camera.original?.id)
-                  ? null
-                  : () => camera.saveSelected(),
-              child: Text(
-                camera.original?.unsaved == true ? 'Retry save' : 'Save',
-              ),
-            ),
           ],
         ),
       ),

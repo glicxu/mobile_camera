@@ -8,6 +8,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+Future<void> openPhotoTool(WidgetTester tester, String tool) async {
+  await tester.tap(find.byKey(const Key('reviewEnhanceButton')));
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(find.byKey(Key('reviewTool_$tool')));
+  await tester.tap(find.byKey(Key('reviewTool_$tool')));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
@@ -320,8 +328,15 @@ void main() {
       expect(camera.reviewing, isTrue);
       expect(camera.original?.unsaved, isFalse, reason: camera.message);
       expect(find.text('Photo review'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('reviewTool_beautifier')));
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('reviewEnhanceButton')), findsOneWidget);
+      expect(find.byKey(const Key('reviewTool_edit')), findsNothing);
+      await openPhotoTool(tester, 'auto');
+      expect(
+        camera.selectedTreatment,
+        camera.autoReviewTreatment,
+        reason: camera.message,
+      );
+      await openPhotoTool(tester, 'beautifier');
       expect(find.text('Choose a beautifier'), findsOneWidget);
       await tester.tap(
         find.byKey(const ValueKey('reviewBeautifierChoice_null')),
@@ -361,9 +376,7 @@ void main() {
       expect(camera.reviewingLibrary, isTrue, reason: camera.message);
       expect(find.byType(ReviewModeControls), findsNothing);
       expect(find.text('Share'), findsNothing);
-      await tester.ensureVisible(find.byKey(const Key('reviewTool_edit')));
-      await tester.tap(find.byKey(const Key('reviewTool_edit')));
-      await tester.pumpAndSettle();
+      await openPhotoTool(tester, 'edit');
       expect(
         camera.busy,
         isFalse,
