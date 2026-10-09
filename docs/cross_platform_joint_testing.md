@@ -1,5 +1,11 @@
 # Joint phone testing - parity candidate
 
+## One Enhance menu with descriptions - October 8, 2026
+
+Source: `aa23a42` (menu/controller implementation `f2d769a`, descriptions `796e3ac`). The clean photo view starts with one Enhance button. Its menu offers Auto, General Enhancer, Filter, Beautifier, and Crop and Edit, each with a short description. General Enhancer adjusts tone, color and detail; Filter applies a preset color style. Auto uses valid face analysis from the reviewed photo to choose Portrait Polish for faces, otherwise General Enhance, with balanced level 3/default options; manual and capture preferences stay unchanged. Beautifier keeps its explicit per-photo dropdown. Save appears after an edit or for pending recovery. The menu has more vertical space for descriptions and remains scrollable at larger text sizes.
+
+Analysis and all 36 Flutter tests pass, including menu destinations/descriptions, Auto recipe/settings preservation, per-photo Beautifier and large-text landscape usability. Galaxy camera regression passed in 87 seconds (89 with teardown), including actual Auto rendering, Landscape selection/None restoration, crop, save and library navigation. Descriptions and panel sizing were subsequently checked with the widget suite and normal-app visual inspection. Native processing was unchanged by those presentation refinements. Both normal Android apps were updated in place; final built APK SHA-256: `7c093d49fab59bbdeb07da43fdbc46c0c79c4551a217682d4503642bb6298da5`. Tablet runtime regression was not repeated for this UI change. Physical iPhone acceptance remains deferred.
+
 ## Explicit photo Beautifier dropdown - October 8, 2026
 
 Source: `23461d0`. Opening Beautifier previously forced Portrait Polish, even for a flower/landscape photo. Each new source now starts with Choose a beautifier and offers General Enhance, Portrait Polish, Landscape Polish and None (original). Opening the panel does not render or choose the capture profile. An explicit selection applies that treatment, starting at level 3 if its saved strength is zero, and exposes strength/options without a second type selector. None restores the original and cancels pending automatic treatment; changing the source clears the UI choice. Capture Beautifier settings stay unchanged. Landscape strength labels use Balanced/Vivid/Dramatic rather than portrait labels.
