@@ -72,6 +72,7 @@ class _CameraScreenState extends State<CameraScreen>
   bool splitComparison = false;
   String? reviewSourceId;
   String? reviewVersionId;
+  String? reviewTool;
   bool initialized = false;
   bool manualToolsVisible = false;
   int presentedCameraSheets = 0;
@@ -112,6 +113,7 @@ class _CameraScreenState extends State<CameraScreen>
         final source = camera.original?.id;
         final version = camera.selected?.id;
         if (source != reviewSourceId) {
+          reviewTool = null;
           compare = true;
           splitComparison = false;
         } else if (version != reviewVersionId) {
@@ -571,349 +573,362 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  Widget review() {
-    final photo = compare ? camera.original : camera.selected;
+  void openReviewTool(String tool) {
+    if (camera.busy) return;
+    setState(() {
+      reviewTool = reviewTool == tool ? null : tool;
+      if (tool == 'enhance') camera.reviewTreatment = 'enhance';
+      if (tool == 'beautifier') camera.reviewTreatment = 'portrait';
+    });
+  }
+
+  Widget reviewEditor() {
+    if (reviewTool == 'filters') {
+      return CaptureStyleControls(
+        camera: camera,
+        review: true,
+        initiallyExpanded: true,
+      );
+    }
+    if (reviewTool == 'enhance' || reviewTool == 'beautifier') {
+      final kinds = reviewTool == 'beautifier'
+          ? const ['portrait']
+          : const ['enhance', 'landscape'];
+      return Column(
+        children: [
+          ReviewTreatmentControls(camera: camera, allowedTreatments: kinds),
+          PhotoEffectControls(
+            camera: camera,
+            review: true,
+            allowedTreatments: kinds,
+          ),
+        ],
+      );
+    }
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          child: Row(
-            children: [
-              HeaderAction(
-                tooltip: 'Back to camera',
-                selected: true,
-                onPressed: camera.busy ? null : camera.returnToCamera,
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.camera_alt_outlined, size: 20),
-                    Text(
-                      'Camera',
-                      textScaler: TextScaler.noScaling,
-                      style: TextStyle(fontSize: 9),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              HeaderAction(
-                tooltip: 'Previous photo',
-                onPressed: camera.canPreviousPhoto
-                    ? camera.previousPhoto
-                    : null,
-                child: const Icon(Icons.chevron_left),
-              ),
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      camera.reviewIndex >= 0
-                          ? 'Photo ${camera.reviewIndex + 1} of ${camera.reviewCount}'
-                          : 'Captured photo',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: cameraTeal,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                    Text(
-                      'Photo review',
-                      style: TextStyle(fontSize: 10, color: Colors.white60),
-                    ),
-                  ],
-                ),
-              ),
-              HeaderAction(
-                tooltip: 'Next photo',
-                onPressed: camera.canNextPhoto ? camera.nextPhoto : null,
-                child: const Icon(Icons.chevron_right),
-              ),
-              const SizedBox(width: 8),
-              HeaderAction(
-                tooltip: 'Choose photos from library',
-                selected: true,
-                onPressed: camera.busy ? null : () => camera.pick(),
-                child: const Icon(Icons.photo_library_outlined),
-              ),
-            ],
-          ),
+        ReviewModeControls(
+          value: splitComparison
+              ? 'split'
+              : compare
+              ? 'before'
+              : 'after',
+          onChanged: (value) => setState(() {
+            compare = value == 'before';
+            splitComparison = value == 'split';
+          }),
         ),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ReviewModeControls(
-                  value: splitComparison
-                      ? 'split'
-                      : compare
-                      ? 'before'
-                      : 'after',
-                  onChanged: (value) => setState(() {
-                    compare = value == 'before';
-                    splitComparison = value == 'split';
-                  }),
-                ),
-                if (photo != null)
-                  DistanceSwipe(
-                    minimumDistance: 60,
-                    onSwipe: (offset) {
-                      setState(() => compare = false);
-                      if (offset > 0) {
-                        camera.nextPhoto();
-                      } else {
-                        camera.previousPhoto();
-                      }
-                    },
-                    onTap: openFullScreen,
-                    child: SizedBox(
-                      height: MediaQuery.sizeOf(context).height * .52,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          ReviewComparison(
-                            before: camera.original!.path,
-                            after: camera.selected!.path,
-                            mode: splitComparison
-                                ? 'split'
-                                : compare
-                                ? 'before'
-                                : 'after',
-                          ),
-                          Positioned(
-                            top: 10,
-                            left: 12,
-                            right: 68,
-                            child: IgnorePointer(
-                              child: Align(
-                                alignment: Alignment.topLeft,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 9,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: .58),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        (compare && !splitComparison
-                                                ? 'Original'
-                                                : treatmentTitles[camera
-                                                          .selectedTreatment] ??
-                                                      {
-                                                        'original': 'Original',
-                                                        'crop': 'Tighter crop',
-                                                        'styled': 'Filtered',
-                                                        'reframe': 'Reframed',
-                                                        'level': 'Leveled',
-                                                      }[camera
-                                                          .selectedTreatment] ??
-                                                      'After')
-                                            .toUpperCase(),
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      Text(
-                                        camera.reviewingLibrary
-                                            ? camera.reviewTitle
-                                            : camera.reviewingImport
-                                            ? 'Imported photo'
-                                            : 'Current capture',
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 10,
-                            right: 12,
-                            child: IconButton.filledTonal(
-                              tooltip: 'Open full-screen photo',
-                              icon: const Icon(Icons.open_in_full),
-                              onPressed: openFullScreen,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 16),
-                if (camera.message != null)
-                  Semantics(liveRegion: true, child: Text(camera.message!)),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    TextButton(
-                      onPressed:
-                          camera.busy ||
-                              camera.selected?.id == camera.original?.id
-                          ? null
-                          : () => openFullScreen(mode: 'split'),
-                      child: const Text('Compare'),
-                    ),
-                    FilledButton(
-                      onPressed: camera.busy
-                          ? null
-                          : () => camera.saveSelected(
-                              originalView: compare && !splitComparison,
-                            ),
-                      child: Text(
-                        camera.original?.unsaved == true
-                            ? 'Retry processing and save'
-                            : 'Save a copy',
-                      ),
-                    ),
-                    FilledButton.tonal(
-                      onPressed: camera.busy
-                          ? null
-                          : () => camera.shareSelected(
-                              originalView: compare && !splitComparison,
-                            ),
-                      child: const Text('Share'),
-                    ),
-                    if (camera.original?.unsaved == true) ...[
-                      TextButton(
-                        onPressed: camera.host.openSettings,
-                        child: const Text('Open Settings'),
-                      ),
-                      TextButton(
-                        onPressed: camera.busy
-                            ? null
-                            : () async {
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: const Text(
-                                      'Discard unsaved original?',
-                                    ),
-                                    content: const Text(
-                                      'This removes the recovery copy. Share or save it first if you want to keep it.',
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(ctx, false),
-                                        child: const Text('Keep photo'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(ctx, true),
-                                        child: const Text('Discard'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                                if (confirm == true) camera.discard();
-                              },
-                        child: const Text('Discard original'),
-                      ),
-                    ],
-                  ],
-                ),
-                FilledButton.icon(
-                  onPressed: camera.busy ? null : camera.returnToCamera,
-                  icon: const Icon(Icons.camera_alt_outlined),
-                  label: const Text('Back to Camera'),
-                ),
-                ReviewTreatmentControls(camera: camera),
-                ExpansionTile(
-                  title: const Text('Versions and imports'),
-                  children: [
-                    Text(
-                      'Choose a version',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        ChoiceChip(
-                          label: const Text('Original'),
-                          selected: camera.selected?.id == camera.original?.id,
-                          onSelected: camera.busy
-                              ? null
-                              : (_) {
-                                  camera.variant();
-                                },
-                        ),
-                        ChoiceChip(
-                          label: const Text('Tighter crop'),
-                          selected:
-                              !camera.styled &&
-                              camera.selected?.id != camera.original?.id,
-                          onSelected: camera.busy
-                              ? null
-                              : (_) {
-                                  camera.variant(crop: true);
-                                },
-                        ),
-                      ],
-                    ),
-                    CaptureStyleControls(camera: camera, review: true),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        for (final treatment in ['reframe', 'level'])
-                          ChoiceChip(
-                            label: Text(
-                              treatment == 'reframe'
-                                  ? 'Auto reframe'
-                                  : 'Level horizon',
-                            ),
-                            selected: camera.selectedTreatment == treatment,
-                            onSelected:
-                                camera.busy ||
-                                    camera.photoAnalysis?[treatment == 'reframe'
-                                            ? 'reframe'
-                                            : 'horizon'] ==
-                                        null ||
-                                    (treatment == 'level' &&
-                                        !canLevelHorizon(camera.photoAnalysis))
-                                ? null
-                                : (_) => camera.applyTreatment(treatment),
-                          ),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        TextButton(
-                          onPressed: camera.busy ? null : recentPhotos,
-                          child: const Text('Recent photos'),
-                        ),
-                        TextButton(
-                          onPressed: camera.busy ? null : choosePhotos,
-                          child: const Text('Import photos'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                if (camera.debug) ...[
-                  PhotoEffectControls(camera: camera, review: true),
-                  PhotoAnalysisCard(camera: camera),
-                ],
-                if (camera.busy) const LinearProgressIndicator(),
-              ],
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: camera.busy ? null : () => camera.variant(crop: true),
+              icon: const Icon(Icons.crop),
+              label: const Text('Tighter crop'),
             ),
-          ),
+            OutlinedButton.icon(
+              onPressed: camera.busy
+                  ? null
+                  : () => camera.variant(rotation: -90),
+              icon: const Icon(Icons.rotate_left),
+              label: const Text('Rotate left'),
+            ),
+            OutlinedButton.icon(
+              onPressed: camera.busy
+                  ? null
+                  : () => camera.variant(rotation: 90),
+              icon: const Icon(Icons.rotate_right),
+              label: const Text('Rotate right'),
+            ),
+            for (final treatment in ['reframe', 'level'])
+              OutlinedButton(
+                onPressed:
+                    camera.busy ||
+                        camera.photoAnalysis?[treatment == 'reframe'
+                                ? 'reframe'
+                                : 'horizon'] ==
+                            null ||
+                        (treatment == 'level' &&
+                            !canLevelHorizon(camera.photoAnalysis))
+                    ? null
+                    : () => camera.applyTreatment(treatment),
+                child: Text(
+                  treatment == 'reframe' ? 'Auto reframe' : 'Level horizon',
+                ),
+              ),
+            TextButton.icon(
+              onPressed: camera.busy ? null : () => camera.variant(),
+              icon: const Icon(Icons.restart_alt),
+              label: const Text('Reset edits'),
+            ),
+          ],
         ),
       ],
     );
   }
+
+  Future<void> discardReviewPhoto() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Discard unsaved photo?'),
+        content: const Text(
+          'This removes the recovery copy. Save it first to keep it.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep photo'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) await camera.discard();
+  }
+
+  Widget review() => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            IconButton(
+              tooltip: 'Back to camera',
+              onPressed: camera.busy ? null : camera.returnToCamera,
+              icon: const Icon(Icons.camera_alt_outlined),
+            ),
+            IconButton(
+              tooltip: 'Previous photo',
+              onPressed: camera.canPreviousPhoto ? camera.previousPhoto : null,
+              icon: const Icon(Icons.chevron_left),
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  const Text('Photo review'),
+                  if (camera.reviewIndex >= 0)
+                    Text(
+                      '${camera.reviewIndex + 1} of ${camera.reviewCount}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white60,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Next photo',
+              onPressed: camera.canNextPhoto ? camera.nextPhoto : null,
+              icon: const Icon(Icons.chevron_right),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Photo options',
+              enabled: !camera.busy,
+              onSelected: (value) {
+                switch (value) {
+                  case 'pick':
+                    camera.pick();
+                  case 'recent':
+                    recentPhotos();
+                  case 'import':
+                    choosePhotos();
+                  case 'settings':
+                    camera.host.openSettings();
+                  case 'discard':
+                    discardReviewPhoto();
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'pick',
+                  child: Text('Choose photos from library'),
+                ),
+                const PopupMenuItem(
+                  value: 'recent',
+                  child: Text('Recent photos'),
+                ),
+                const PopupMenuItem(
+                  value: 'import',
+                  child: Text('Import photos'),
+                ),
+                if (camera.original?.unsaved == true) ...[
+                  const PopupMenuItem(
+                    value: 'settings',
+                    child: Text('Open Settings'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'discard',
+                    child: Text('Discard unsaved photo'),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+      Expanded(
+        child: camera.original == null || camera.selected == null
+            ? const Center(child: Text('Choose a photo to edit'))
+            : DistanceSwipe(
+                minimumDistance: 60,
+                onSwipe: (offset) {
+                  if (offset > 0) {
+                    camera.nextPhoto();
+                  } else {
+                    camera.previousPhoto();
+                  }
+                },
+                onTap: openFullScreen,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: ReviewComparison(
+                    before: camera.original!.path,
+                    after: camera.selected!.path,
+                    mode: splitComparison
+                        ? 'split'
+                        : compare
+                        ? 'before'
+                        : 'after',
+                  ),
+                ),
+              ),
+      ),
+      if (camera.busy) const LinearProgressIndicator(),
+      if (camera.message != null)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Semantics(
+            liveRegion: true,
+            child: Text(camera.message!, maxLines: 2),
+          ),
+        ),
+      if (reviewTool != null)
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * .32,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      {
+                        'enhance': 'Enhance',
+                        'filters': 'Filters',
+                        'beautifier': 'Beautifier',
+                        'edit': 'Edit',
+                      }[reviewTool]!,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close photo tools',
+                    onPressed: () => setState(() => reviewTool = null),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  key: ValueKey('reviewEditor_$reviewTool'),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: reviewEditor(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final tool in [
+                      'enhance',
+                      'filters',
+                      'beautifier',
+                      'edit',
+                    ])
+                      SizedBox(
+                        width: 64,
+                        child: TextButton(
+                          key: Key('reviewTool_$tool'),
+                          onPressed: camera.busy
+                              ? null
+                              : () => openReviewTool(tool),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 6,
+                            ),
+                            backgroundColor: reviewTool == tool
+                                ? cameraTeal.withValues(alpha: .18)
+                                : null,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                {
+                                  'enhance': Icons.auto_fix_high,
+                                  'filters': Icons.filter_vintage,
+                                  'beautifier': Icons.face,
+                                  'edit': Icons.crop,
+                                }[tool],
+                                size: 20,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                {
+                                  'enhance': 'Enhance',
+                                  'filters': 'Filters',
+                                  'beautifier': 'Beautifier',
+                                  'edit': 'Edit',
+                                }[tool]!,
+                                style: const TextStyle(fontSize: 11),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              key: const Key('saveReviewEdits'),
+              onPressed:
+                  camera.busy ||
+                      camera.selected == null ||
+                      (camera.original?.unsaved != true &&
+                          camera.selected?.id == camera.original?.id)
+                  ? null
+                  : () => camera.saveSelected(),
+              child: Text(
+                camera.original?.unsaved == true ? 'Retry save' : 'Save',
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
 
   Future<void> openFullScreen({String? mode}) => Navigator.of(context).push(
     MaterialPageRoute<void>(

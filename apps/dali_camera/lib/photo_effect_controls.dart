@@ -13,9 +13,11 @@ class PhotoEffectControls extends StatelessWidget {
     super.key,
     required this.camera,
     this.review = false,
+    this.allowedTreatments = const ['enhance', 'portrait', 'landscape'],
   });
   final CameraController camera;
   final bool review;
+  final List<String> allowedTreatments;
   @override
   Widget build(BuildContext context) {
     final treatment = review ? camera.reviewTreatment : camera.customBeautifier;
@@ -87,11 +89,16 @@ class PhotoEffectControls extends StatelessWidget {
           DropdownButtonFormField<String>(
             key: ValueKey('beautifierType_${review}_$treatment'),
             initialValue: treatment,
-            decoration: const InputDecoration(labelText: 'Beautifier type'),
+            decoration: InputDecoration(
+              labelText: review && treatment != 'portrait'
+                  ? 'Enhancement type'
+                  : 'Beautifier type',
+            ),
             isExpanded: true,
             items: [
               for (final entry in treatmentTitles.entries)
-                DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+                if (allowedTreatments.contains(entry.key))
+                  DropdownMenuItem(value: entry.key, child: Text(entry.value)),
             ],
             onChanged: camera.busy && !review
                 ? null

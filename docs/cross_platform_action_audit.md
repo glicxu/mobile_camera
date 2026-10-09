@@ -6,6 +6,8 @@ Status: reachable baseline software corrections implemented; final validation in
 
 ## Camera and Manual destinations (P0/P1/P6)
 
+Product override, October 8: the user requested a clean photo editor instead of the native dense review toolbar and excluded sharing from camera scope. Review now opens the photo with closed panels; Enhance/Filters/Beautifier/Edit expose one panel at a time. Compare/crop/rotate/reset are in Edit; imports and pending recovery actions are in Photo options. Save exports the selected edited version regardless of Before comparison. Share and duplicate camera-return buttons are removed. This explicit user direction supersedes the corresponding native review rows below; see the [current plan](cross_platform_remaining_port_plan.md).
+
 | Native source/action | Flutter destination and behavior | Verification |
 | --- | --- | --- |
 | `topBar`: Manual | `CameraHeader` enters Auto-exposure Manual workspace and toggles its rail; `ManualPreviewControls` sits at the right of the viewport | Widget rail alignment/exclusive editors; device check |

@@ -391,6 +391,101 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Photo review starts clean and saves edits even while comparing Before',
+    (tester) async {
+      final host = FakeHost();
+      final camera = CameraController(host: host, register: false);
+      await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+      await tester.pumpAndSettle();
+      camera.filter = 'off';
+      camera.beautifier = 'off';
+      camera.watermark = false;
+      await camera.capturePhoto();
+      await tester.pumpAndSettle();
+      expect(find.byType(ReviewModeControls), findsNothing);
+      expect(find.byType(ReviewTreatmentControls), findsNothing);
+      expect(find.text('Share'), findsNothing);
+      expect(find.text('Versions and imports'), findsNothing);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('saveReviewEdits')))
+            .onPressed,
+        isNull,
+      );
+      for (final tool in ['enhance', 'filters', 'beautifier', 'edit']) {
+        await tester.ensureVisible(find.byKey(Key('reviewTool_$tool')));
+        await tester.tap(find.byKey(Key('reviewTool_$tool')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(ValueKey('reviewEditor_$tool')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byTooltip('Close photo tools'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(ValueKey('reviewEditor_$tool')), findsNothing);
+      }
+      await tester.tap(find.byKey(const Key('reviewTool_edit')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Tighter crop'));
+      await tester.tap(find.text('Tighter crop'));
+      await tester.pumpAndSettle();
+      final editedId = camera.selected!.id;
+      expect(editedId, isNot(camera.original!.id));
+      await tester.ensureVisible(find.text('Before'));
+      await tester.tap(find.text('Before'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('saveReviewEdits')));
+      await tester.pumpAndSettle();
+      expect(host.savedIds.last, editedId);
+      await tester.tap(find.byTooltip('Close photo tools'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ReviewModeControls), findsNothing);
+      camera.dispose();
+    },
+  );
+
+  testWidgets('Photo tools remain usable with large text in landscape', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1100, 650);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final camera = CameraController(host: FakeHost(), register: false);
+    await camera.initialize();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(1100, 650),
+            textScaler: TextScaler.linear(2.5),
+          ),
+          child: CameraScreen(controller: camera, onboarding: false),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    camera.original = PhotoHandle(
+      path: 'original.jpg',
+      id: 'photo',
+      unsaved: false,
+    );
+    camera.selected = camera.original;
+    camera.reviewing = true;
+    camera.notifyListeners();
+    await tester.pumpAndSettle();
+    for (final tool in ['enhance', 'filters', 'beautifier', 'edit']) {
+      await tester.ensureVisible(find.byKey(Key('reviewTool_$tool')));
+      await tester.tap(find.byKey(Key('reviewTool_$tool')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('reviewEditor_$tool')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: tool);
+      await tester.tap(find.byTooltip('Close photo tools'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.byKey(const Key('saveReviewEdits')), findsOneWidget);
+    camera.dispose();
+  });
+
   setUp(
     () => PackageInfo.setMockInitialValues(
       appName: 'Dali Camera',

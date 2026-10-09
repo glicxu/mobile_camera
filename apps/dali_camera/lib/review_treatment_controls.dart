@@ -3,8 +3,13 @@ import 'camera_controller.dart';
 import 'photo_effect_controls.dart';
 
 class ReviewTreatmentControls extends StatelessWidget {
-  const ReviewTreatmentControls({super.key, required this.camera});
+  const ReviewTreatmentControls({
+    super.key,
+    required this.camera,
+    this.allowedTreatments = const ['enhance', 'portrait', 'landscape'],
+  });
   final CameraController camera;
+  final List<String> allowedTreatments;
   @override
   Widget build(BuildContext context) {
     final treatment = camera.reviewTreatment;
@@ -63,11 +68,12 @@ class ReviewTreatmentControls extends StatelessWidget {
                         onSelected: camera.requestReviewTreatment,
                         itemBuilder: (_) => [
                           for (final item in treatmentTitles.entries)
-                            CheckedPopupMenuItem(
-                              value: item.key,
-                              checked: item.key == treatment,
-                              child: Text(item.value),
-                            ),
+                            if (allowedTreatments.contains(item.key))
+                              CheckedPopupMenuItem(
+                                value: item.key,
+                                checked: item.key == treatment,
+                                child: Text(item.value),
+                              ),
                         ],
                         child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),

@@ -339,6 +339,11 @@ void main() {
         await tester.pump();
       }
       expect(camera.reviewingLibrary, isTrue, reason: camera.message);
+      expect(find.byType(ReviewModeControls), findsNothing);
+      expect(find.text('Share'), findsNothing);
+      await tester.ensureVisible(find.byKey(const Key('reviewTool_edit')));
+      await tester.tap(find.byKey(const Key('reviewTool_edit')));
+      await tester.pumpAndSettle();
       expect(
         camera.busy,
         isFalse,

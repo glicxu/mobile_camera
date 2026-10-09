@@ -202,12 +202,12 @@ class CaptureStyleControls extends StatelessWidget {
       if (review)
         FilledButton.tonal(
           onPressed: camera.busy ? null : camera.applyStyle,
-          child: const Text('Prepare styled copy'),
+          child: const Text('Apply filter'),
         ),
       if (review && camera.styled)
         const Padding(
           padding: EdgeInsets.all(8),
-          child: Text('Styled copy selected. Use Save selected to export it.'),
+          child: Text('Filter applied. Tap Save to keep the edited photo.'),
         ),
       const SizedBox(height: 12),
     ],

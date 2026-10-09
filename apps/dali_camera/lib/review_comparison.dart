@@ -19,6 +19,8 @@ class ReviewComparison extends StatelessWidget {
       cacheWidth: 2400,
       fit: BoxFit.contain,
       semanticLabel: label,
+      errorBuilder: (_, _, _) =>
+          const Center(child: Text('Photo preview unavailable')),
     ),
   );
   @override

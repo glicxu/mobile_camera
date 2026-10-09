@@ -610,21 +610,6 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     }
   }
 
-  Future<void> shareSelected({bool originalView = false}) async {
-    if (busy || selected == null) return;
-    busy = true;
-    notifyListeners();
-    try {
-      await host.share(originalView ? original! : selected!);
-    } catch (e) {
-      message = 'Share failed: $e';
-      notifyListeners();
-    } finally {
-      busy = false;
-      notifyListeners();
-    }
-  }
-
   Future<void> discard() async {
     if (busy || original == null) return;
     try {

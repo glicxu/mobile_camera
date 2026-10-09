@@ -7,6 +7,10 @@ Reference: native iOS app at `d53a977`. Starting Flutter source: `be9c765`.
 
 Current per-action contract: [comprehensive source/action audit](cross_platform_action_audit.md). Its destinations and state transitions supersede the historical aggregate checks below. Current software additions: lazy Photos library, native beautifier dropdown/disclosures, image labels/fullscreen, actual lens metadata and active pose swipes. Final Android tablet and Galaxy camera/rendering validation passes; the same candidate is installed on both. iOS validation is deferred by the current priority.
 
+## Clean photo editor follow-up - October 8, 2026
+
+The user requested a simpler photo view and removed sharing from camera scope. This overrides the native review toolbar parity baseline: a clean, uncropped photo is the main view, with Enhance, Filters, Beautifier and Edit tool buttons plus Save. One scrollable tool panel opens at a time beneath the photo. Comparison, tighter crop, rotate, auto reframe, horizon leveling and reset live in Edit. Import/recent/recovery actions move to Photo options. Save exports the selected edited result even while Before is displayed; an unchanged original does not need another save. Pending captures retain retry/discard paths. Share is removed from the app UI and controller. Backend rendering remains unchanged; crop currently uses the existing tighter-crop operation, not freeform handles. Validation and installed build evidence are tracked in joint testing.
+
 ## Process before saving - October 8, 2026
 
 Implemented in `0a95ca3` at the user's request, superseding the original-first automatic gallery-save order described in the historical speed checkpoint below. Android takes an owned CameraX JPEG buffer, snapshots the selected filter/beautifier/depth/signature recipe at shutter time, renders from that buffer and saves one final photo to Photos. A private original supports recovery and Before comparison; it is not automatically added to Photos. With effects off, the original buffer becomes the final photo. Processing/save failures retain recovery state and retry the frozen recipe without silently exporting an unprocessed original.
