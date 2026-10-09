@@ -936,7 +936,7 @@ class _CameraScreenState extends State<CameraScreen>
           constraints: BoxConstraints(
             maxHeight:
                 MediaQuery.sizeOf(context).height *
-                (reviewTool == 'menu' ? .46 : .32),
+                (reviewTool == 'menu' ? .54 : .32),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
