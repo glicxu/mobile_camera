@@ -1,5 +1,11 @@
 # Joint phone testing - parity candidate
 
+## Clean photo editor - October 8, 2026
+
+Source: `8d288fe`. User-directed product change supersedes the dense native review toolbar. The initial review shows a clean uncropped photo, a compact navigation/options header and Enhance/Filters/Beautifier/Edit plus Save. Tool panels are closed by default; one scrollable panel opens below the photo at a time. Edit contains Before/After/Split, tighter crop, rotation, auto reframe, horizon leveling and reset. Tighter crop uses the existing native operation; draggable crop handles are not added. Photo options retains library selection, recent photos, imports (including folder import) and conditional pending-save recovery/discard. Share is removed from the app UI/controller. Save exports the selected edited photo even while Before is shown; unchanged original views disable Save.
+
+Flutter analysis and 34 tests pass. Added full-screen review checks cover closed panels, all four tool destinations, no Share, crop-to-Save with Before selected and panel closing. A 2.5x-text landscape check covers all four panels without overflow. Galaxy camera regression passed in 48 seconds (50 with teardown), including the actual library button, clean default and comparison controls behind Edit. The normal Galaxy app was visually inspected in the clean view, Edit and Enhance; all four primary tool choices were visible and the photo remained uncropped. Both Galaxy and tablet normal apps are updated in place, with built APK SHA-256 `730da80385e2518dc30d37ea51a3eaa4616238b14607143640e4a3a0a4cff661`. Tablet runtime regression was not repeated for this UI change. Shared CI passes in [run 37863830391](https://github.com/glicxu/mobile_camera/actions/runs/37863830391); Android build and deferred iOS jobs were still running at this checkpoint.
+
 ## Automatic return after completed photo - October 8, 2026
 
 Source: `9fc9836`, superseding the completion label/button behavior below. After successful processing and saving, the finished image remains in the viewport for one second without Photo saved text or a Back to camera button, then the live camera returns automatically. Processing/saving feedback remains visible while work is active. Capture start, return to camera and controller disposal cancel the preceding timer; failures retain the recovery flow.
