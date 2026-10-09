@@ -437,6 +437,8 @@ protocol CameraHostApi {
   func capture(completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func recover() throws -> PhotoHandle?
   func save(photo: PhotoHandle, completion: @escaping (Result<Void, Error>) -> Void)
+  func replacementTarget(original: PhotoHandle) throws -> String?
+  func replacePhoto(id: String, edited: PhotoHandle, completion: @escaping (Result<Void, Error>) -> Void)
   func saveCaptured(original: PhotoHandle, processed: PhotoHandle, completion: @escaping (Result<Void, Error>) -> Void)
   func discard(photo: PhotoHandle) throws
   func share(photo: PhotoHandle, completion: @escaping (Result<Void, Error>) -> Void)
@@ -541,6 +543,39 @@ class CameraHostApiSetup {
       }
     } else {
       saveChannel.setMessageHandler(nil)
+    }
+    let replacementTargetChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.replacementTarget\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      replacementTargetChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let originalArg = args[0] as! PhotoHandle
+        do {
+          let result = try api.replacementTarget(original: originalArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      replacementTargetChannel.setMessageHandler(nil)
+    }
+    let replacePhotoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.replacePhoto\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      replacePhotoChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let idArg = args[0] as! String
+        let editedArg = args[1] as! PhotoHandle
+        api.replacePhoto(id: idArg, edited: editedArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      replacePhotoChannel.setMessageHandler(nil)
     }
     let saveCapturedChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.saveCaptured\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

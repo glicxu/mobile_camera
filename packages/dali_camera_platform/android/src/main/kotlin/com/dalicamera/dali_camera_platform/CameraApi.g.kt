@@ -373,6 +373,8 @@ interface CameraHostApi {
   fun capture(callback: (Result<PhotoHandle>) -> Unit)
   fun recover(): PhotoHandle?
   fun save(photo: PhotoHandle, callback: (Result<Unit>) -> Unit)
+  fun replacementTarget(original: PhotoHandle): String?
+  fun replacePhoto(id: String, edited: PhotoHandle, callback: (Result<Unit>) -> Unit)
   fun saveCaptured(original: PhotoHandle, processed: PhotoHandle, callback: (Result<Unit>) -> Unit)
   fun discard(photo: PhotoHandle)
   fun share(photo: PhotoHandle, callback: (Result<Unit>) -> Unit)
@@ -481,6 +483,43 @@ interface CameraHostApi {
             val args = message as List<Any?>
             val photoArg = args[0] as PhotoHandle
             api.save(photoArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(CameraApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.replacementTarget$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val originalArg = args[0] as PhotoHandle
+            val wrapped: List<Any?> = try {
+              listOf(api.replacementTarget(originalArg))
+            } catch (exception: Throwable) {
+              CameraApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.replacePhoto$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val idArg = args[0] as String
+            val editedArg = args[1] as PhotoHandle
+            api.replacePhoto(idArg, editedArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))

@@ -589,12 +589,21 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     }
   }
 
-  Future<void> saveSelected({bool originalView = false}) async {
+  Future<void> saveSelected({
+    bool originalView = false,
+    String? replaceId,
+  }) async {
     if (busy || selected == null) return;
     busy = true;
     notifyListeners();
     try {
-      if (original?.unsaved == true) {
+      if (replaceId != null) {
+        if (original?.unsaved == true) {
+          throw StateError('This photo has not been saved yet');
+        }
+        await host.replacePhoto(replaceId, selected!);
+        message = 'Photo replaced';
+      } else if (original?.unsaved == true) {
         await _saveCapturedPhoto();
       } else if (originalView || selected?.id == original?.id) {
         await _saveOriginal();
@@ -603,7 +612,12 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         message = 'Selected copy saved to Photos';
       }
     } catch (e) {
-      message = 'Save failed. Your original is retained: $e';
+      message =
+          replaceId != null && e is PlatformException && e.code == 'cancelled'
+          ? null
+          : replaceId != null
+          ? 'Could not replace photo: $e'
+          : 'Save failed. Your original is retained: $e';
     } finally {
       busy = false;
       notifyListeners();
@@ -827,7 +841,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       selected = result;
       styled = true;
       selectedTreatment = 'styled';
-      message = 'Styled copy ready. Original retained.';
+      message = null;
     } catch (e) {
       message = 'Could not style photo: $e';
     } finally {
@@ -993,7 +1007,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       selected = result;
       selectedTreatment = treatment;
       styled = false;
-      message = 'Selected version ready. Original retained.';
+      message = null;
     } catch (error) {
       message = 'Could not prepare this version: $error';
     } finally {

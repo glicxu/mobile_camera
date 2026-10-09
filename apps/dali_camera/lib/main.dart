@@ -73,6 +73,7 @@ class _CameraScreenState extends State<CameraScreen>
   String? reviewSourceId;
   String? reviewVersionId;
   String? reviewTool;
+  bool reviewSaveChooserOpen = false;
   String? reviewBeautifierChoice;
   bool initialized = false;
   bool manualToolsVisible = false;
@@ -798,6 +799,86 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
+  Future<void> saveReviewPhoto() async {
+    if (reviewSaveChooserOpen ||
+        camera.busy ||
+        camera.original == null ||
+        camera.selected == null) {
+      return;
+    }
+    if (camera.original!.unsaved) {
+      await camera.saveSelected();
+      return;
+    }
+    setState(() => reviewSaveChooserOpen = true);
+    try {
+      final source = camera.original!;
+      final edited = camera.selected!;
+      String? target;
+      try {
+        target = await camera.host.replacementTarget(source);
+      } catch (_) {
+        // A read-only or unavailable source can still be saved as a new photo.
+      }
+      if (!mounted ||
+          camera.original?.id != source.id ||
+          camera.selected?.id != edited.id ||
+          camera.busy) {
+        return;
+      }
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Save photo'),
+          scrollable: true,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ListTile(
+                key: const Key('replaceReviewPhoto'),
+                leading: const Icon(Icons.save),
+                title: const Text('Replace original'),
+                subtitle: Text(
+                  target == null
+                      ? 'Unavailable for this source'
+                      : 'Update the existing photo in Photos',
+                ),
+                enabled: target != null,
+                onTap: target == null
+                    ? null
+                    : () => Navigator.pop(ctx, 'replace'),
+              ),
+              ListTile(
+                key: const Key('saveReviewPhotoAs'),
+                leading: const Icon(Icons.add_photo_alternate),
+                title: const Text('Save as a new photo'),
+                subtitle: const Text('Keep the original unchanged'),
+                onTap: () => Navigator.pop(ctx, 'copy'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+      if (choice == null ||
+          !mounted ||
+          camera.original?.id != source.id ||
+          camera.selected?.id != edited.id ||
+          camera.busy) {
+        return;
+      }
+      await camera.saveSelected(replaceId: choice == 'replace' ? target : null);
+    } finally {
+      if (mounted) setState(() => reviewSaveChooserOpen = false);
+    }
+  }
+
   Future<void> discardReviewPhoto() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -1008,11 +1089,12 @@ class _CameraScreenState extends State<CameraScreen>
                 key: const Key('saveReviewEdits'),
                 onPressed:
                     camera.busy ||
+                        reviewSaveChooserOpen ||
                         camera.selected == null ||
                         (camera.original?.unsaved != true &&
                             camera.selected?.id == camera.original?.id)
                     ? null
-                    : () => camera.saveSelected(),
+                    : saveReviewPhoto,
                 child: Text(
                   camera.original?.unsaved == true ? 'Retry save' : 'Save',
                 ),

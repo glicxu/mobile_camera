@@ -163,12 +163,18 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     func save(photo: PhotoHandle, completion: @escaping (Result<Void, Error>) -> Void) {
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else { DispatchQueue.main.async { completion(.failure(self.failure("Photos access denied; original retained"))) }; return }
+            var savedId: String?
             PHPhotoLibrary.shared().performChanges {
-                PHAssetCreationRequest.forAsset().addResource(with: .photo, fileURL: URL(fileURLWithPath: photo.path), options: nil)
+                let request = PHAssetCreationRequest.forAsset()
+                request.addResource(with: .photo, fileURL: URL(fileURLWithPath: photo.path), options: nil)
+                savedId = request.placeholderForCreatedAsset?.localIdentifier
             } completionHandler: { success, error in
                 DispatchQueue.main.async {
                     do {
                         guard success else { throw error ?? self.failure("Photos save failed") }
+                        if let savedId, self.replacementTarget(original: photo) == nil {
+                            UserDefaults.standard.set(savedId, forKey: "photo-source-" + photo.id)
+                        }
                         if try self.recover()?.id == photo.id { try FileManager.default.removeItem(at: self.manifest) }
                         completion(.success(()))
                     } catch { completion(.failure(error)) }
@@ -184,10 +190,52 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             switch result {
             case .success:
                 do {
+                    if let id = UserDefaults.standard.string(forKey: "photo-source-" + processed.id) {
+                        UserDefaults.standard.set(id, forKey: "photo-source-" + original.id)
+                    }
                     if try self.recover()?.id == original.id { try FileManager.default.removeItem(at: self.manifest) }
                     completion(.success(()))
                 } catch { completion(.failure(error)) }
             case .failure(let error): completion(.failure(error))
+            }
+        }
+    }
+    func replacementTarget(original: PhotoHandle) -> String? {
+        guard !original.unsaved else { return nil }
+        return UserDefaults.standard.string(forKey: "photo-source-" + original.id)
+    }
+    func replacePhoto(id: String, edited: PhotoHandle, completion: @escaping (Result<Void, Error>) -> Void) {
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+            guard status == .authorized || status == .limited,
+                  let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject,
+                  asset.canPerform(.content) else {
+                DispatchQueue.main.async { completion(.failure(self.failure("Original cannot be replaced; save as a new photo"))) }; return
+            }
+            let options = PHContentEditingInputRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.canHandleAdjustmentData = { _ in false }
+            asset.requestContentEditingInput(with: options) { input, _ in
+                guard let input else {
+                    DispatchQueue.main.async { completion(.failure(self.failure("Original unavailable for editing"))) }; return
+                }
+                self.importQueue.async {
+                    do {
+                        let output = PHContentEditingOutput(contentEditingInput: input)
+                        let image = UIImage(contentsOfFile: edited.path)
+                        guard let jpeg = image?.jpegData(compressionQuality: 0.95) else { throw self.failure("Edited photo unavailable") }
+                        try jpeg.write(to: output.renderedContentURL, options: .atomic)
+                        output.adjustmentData = PHAdjustmentData(formatIdentifier: "com.dalicamera.photo-edit",
+                            formatVersion: "1", data: Data("Dali photo edit".utf8))
+                        PHPhotoLibrary.shared().performChanges {
+                            PHAssetChangeRequest(for: asset).contentEditingOutput = output
+                        } completionHandler: { success, error in
+                            DispatchQueue.main.async {
+                                if success { completion(.success(())) }
+                                else { completion(.failure(error ?? self.failure("Replacement cancelled or failed"))) }
+                            }
+                        }
+                    } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+                }
             }
         }
     }
@@ -230,7 +278,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
             completion(.failure(failure("Photo is no longer accessible"))); return
         }
-        let options = PHImageRequestOptions(); options.isNetworkAccessAllowed = true; options.version = .original; options.deliveryMode = .highQualityFormat
+        let options = PHImageRequestOptions(); options.isNetworkAccessAllowed = true; options.version = .current; options.deliveryMode = .highQualityFormat
         PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { data, _, _, info in
             guard let data, info?[PHImageCancelledKey] as? Bool != true, info?[PHImageErrorKey] == nil else {
                 DispatchQueue.main.async { completion(.failure(self.failure("Could not load library photo; check iCloud connectivity"))) }; return
@@ -241,6 +289,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                     defer { try? FileManager.default.removeItem(at: temporary) }
                     try data.write(to: temporary, options: .atomic)
                     let photo = try self.copyImportedPhoto(temporary)
+                    UserDefaults.standard.set(id, forKey: "photo-source-" + photo.id)
                     DispatchQueue.main.async { completion(.success(photo)) }
                 } catch { DispatchQueue.main.async { completion(.failure(error)) } }
             }
@@ -514,6 +563,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         }
     }
     func releasePhoto(photo: PhotoHandle) throws {
+        UserDefaults.standard.removeObject(forKey: "photo-source-" + photo.id)
         let url = URL(fileURLWithPath: photo.path).standardizedFileURL
         guard url.deletingLastPathComponent() == directory.standardizedFileURL, (url.pathExtension == "jpg" || url.lastPathComponent.hasPrefix("import-")), try recover()?.id != photo.id else { return }
         if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }

@@ -7,6 +7,7 @@ import 'package:dali_camera/camera_controller.dart';
 import 'package:dali_camera_platform/dali_camera_platform.dart';
 import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dali_camera/review_comparison.dart';
 import 'package:dali_camera/manual_preview_controls.dart';
@@ -25,6 +26,20 @@ class FakeHost extends CameraHostApi {
   Map<String, dynamic>? effectsRecipe;
   int captures = 0;
   final List<String> savedIds = [];
+  String? replaceTarget = 'library-original';
+  final List<String> replacedIds = [];
+  bool failReplace = false;
+  bool cancelReplace = false;
+  @override
+  Future<String?> replacementTarget(PhotoHandle original) async =>
+      replaceTarget;
+  @override
+  Future<void> replacePhoto(String id, PhotoHandle edited) async {
+    if (cancelReplace) throw PlatformException(code: 'cancelled');
+    if (failReplace) throw StateError('Replacement denied');
+    replacedIds.add('$id:${edited.id}');
+  }
+
   PhotoHandle? retained;
   int released = 0;
   final List<String> releasedIds = [];
@@ -435,10 +450,76 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('saveReviewEdits')));
       await tester.pumpAndSettle();
+      expect(find.text('Save photo'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('saveReviewPhotoAs')));
+      await tester.pumpAndSettle();
       expect(host.savedIds.last, editedId);
       await tester.tap(find.byTooltip('Close photo tools'));
       await tester.pumpAndSettle();
       expect(find.byType(ReviewModeControls), findsOneWidget);
+      camera.dispose();
+    },
+  );
+
+  testWidgets(
+    'Save offers replace or copy and cancellation preserves the edit',
+    (tester) async {
+      final host = FakeHost();
+      final camera = CameraController(host: host, register: false);
+      await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+      await tester.pumpAndSettle();
+      camera.filter = 'off';
+      camera.beautifier = 'off';
+      camera.watermark = false;
+      await camera.capturePhoto();
+      await camera.autoEnhanceReview();
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Selected version ready. Original retained.'),
+        findsNothing,
+      );
+      expect(camera.message, isNull);
+      final selectedId = camera.selected!.id;
+      final originalId = camera.original!.id;
+      final saves = host.savedIds.length;
+      await tester.tap(find.text('Before'));
+      await tester.tap(find.byKey(const Key('saveReviewEdits')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(host.savedIds, hasLength(saves));
+      expect(host.replacedIds, isEmpty);
+      expect(camera.selected!.id, selectedId);
+      await tester.tap(find.byKey(const Key('saveReviewEdits')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('replaceReviewPhoto')));
+      await tester.pumpAndSettle();
+      expect(host.replacedIds, ['library-original:$selectedId']);
+      expect(host.savedIds, hasLength(saves));
+      expect(camera.original!.id, originalId);
+      expect(camera.message, 'Photo replaced');
+      host.failReplace = true;
+      await camera.saveSelected(replaceId: 'library-original');
+      await tester.pumpAndSettle();
+      expect(camera.message, contains('Replacement denied'));
+      expect(camera.selected!.id, selectedId);
+      host.cancelReplace = true;
+      await camera.saveSelected(replaceId: 'library-original');
+      await tester.pumpAndSettle();
+      expect(camera.message, isNull);
+      expect(camera.selected!.id, selectedId);
+      host.replaceTarget = null;
+      await tester.tap(find.byKey(const Key('saveReviewEdits')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const Key('replaceReviewPhoto')))
+            .enabled,
+        isFalse,
+      );
+      await tester.tap(find.byKey(const Key('saveReviewPhotoAs')));
+      await tester.pumpAndSettle();
+      expect(host.savedIds.last, selectedId);
       camera.dispose();
     },
   );
@@ -490,6 +571,12 @@ void main() {
       await tester.tap(find.byTooltip('Close photo tools'));
       await tester.pumpAndSettle();
     }
+    await tester.tap(find.byKey(const Key('saveReviewEdits')));
+    await tester.pumpAndSettle();
+    expect(find.text('Save photo'), findsOneWidget);
+    expect(tester.takeException(), isNull, reason: 'large-text save choices');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
     camera.dispose();
   });
 

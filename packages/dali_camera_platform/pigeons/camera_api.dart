@@ -107,6 +107,9 @@ abstract class CameraHostApi {
   PhotoHandle? recover();
   @async
   void save(PhotoHandle photo);
+  String? replacementTarget(PhotoHandle original);
+  @async
+  void replacePhoto(String id, PhotoHandle edited);
   @async
   void saveCaptured(PhotoHandle original, PhotoHandle processed);
   void discard(PhotoHandle photo);
@@ -155,7 +158,12 @@ abstract class CameraHostApi {
   @async
   CameraSnapshot setZoom(String configurationId, double zoom);
   @async
-  CameraSnapshot meter(String configurationId, double x, double y, bool focusOnly);
+  CameraSnapshot meter(
+    String configurationId,
+    double x,
+    double y,
+    bool focusOnly,
+  );
   @async
   CameraSnapshot setManualExposure(
     String configurationId,

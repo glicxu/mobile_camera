@@ -368,7 +368,11 @@ void main() {
       await camera.variant(crop: true);
       await tester.pumpAndSettle();
       expect(camera.selected?.id, isNot(camera.original?.id));
-      await camera.saveSelected();
+      await tester.tap(find.byKey(const Key('saveReviewEdits')));
+      await tester.pumpAndSettle();
+      expect(find.text('Replace original'), findsOneWidget);
+      expect(find.text('Save as a new photo'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('saveReviewPhotoAs')));
       await tester.pumpAndSettle();
       expect(camera.message, contains('copy saved'));
       await camera.returnToCamera();

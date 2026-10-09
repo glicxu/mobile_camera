@@ -2,6 +2,7 @@ package com.dalicamera.dali_camera_platform
 
 import android.Manifest
 import android.app.Activity
+import android.app.RecoverableSecurityException
 import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.*
@@ -80,6 +81,10 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private var pendingLibrary: ((Result<PhotoLibrary>) -> Unit)? = null
     private var pickerIsFolder = false
     private var pendingSave: Pair<PhotoHandle, (Result<Unit>) -> Unit>? = null
+    private data class Replacement(val id: String, val photo: PhotoHandle, val callback: (Result<Unit>) -> Unit)
+    private var pendingReplacement: Replacement? = null
+    private val photoSources get() = context.getSharedPreferences("photo-sources", Context.MODE_PRIVATE)
+    private fun rememberSource(photoId: String, uri: String) { photoSources.edit().putString(photoId, uri).apply() }
     private var speech: SpeechRecognizer? = null
     private var listening = false
     private var customVoicePhrase = ""
@@ -146,6 +151,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         pendingBatchPicker?.invoke(Result.failure(IllegalStateException("Picker interrupted"))); pendingBatchPicker = null
         pendingSave?.second?.invoke(Result.failure(IllegalStateException("Save interrupted; original retained"))); pendingSave = null
         pendingLibrary?.invoke(Result.failure(IllegalStateException("Library interrupted"))); pendingLibrary = null
+        pendingReplacement?.callback?.invoke(Result.failure(IllegalStateException("Replacement interrupted"))); pendingReplacement = null
         binding = null; activity = null
     }
     override fun start(front: Boolean, callback: (Result<CameraSnapshot>) -> Unit) {
@@ -206,6 +212,12 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         (context.getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(this)
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray): Boolean {
+        if (requestCode == 707) {
+            val request = pendingReplacement; pendingReplacement = null
+            if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) request?.let { performReplacement(it, true) }
+            else request?.callback?.invoke(Result.failure(SecurityException("Photos storage permission denied")))
+            return true
+        }
         if (requestCode == 705) {
             val request = pendingLibrary; pendingLibrary = null
             request?.let { queryPhotoLibrary(it) }
@@ -441,6 +453,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 try {
                     if (recover()?.id == original.id) check(pendingFile.delete()) { "Saved, but recovery cleanup failed" }
                     stillProcessor.releaseCaptureBuffer(original.path)
+                    photoSources.getString(processed.id, null)?.let { rememberSource(original.id, it) }
                     callback(Result.success(Unit))
                 } catch (error: Exception) { callback(Result.failure(error)) }
             }, onFailure = { callback(Result.failure(it)) })
@@ -467,8 +480,92 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 context.contentResolver.openOutputStream(uri, "w")?.use { output -> File(photo.path).inputStream().use { it.copyTo(output) } } ?: error("Cannot write photo")
                 if (Build.VERSION.SDK_INT >= 29) context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
                 if (recover()?.id == photo.id) check(pendingFile.delete()) { "Saved, but recovery cleanup failed" }
+                if (!photoSources.contains(photo.id)) rememberSource(photo.id, uri.toString())
                 main.post { callback(Result.success(Unit)) }
             } catch (e: Exception) { inserted?.let { context.contentResolver.delete(it, null, null) }; main.post { callback(Result.failure(e)) } }
+        }
+    }
+    override fun replacementTarget(original: PhotoHandle): String? {
+        if (original.unsaved) return null
+        val id = photoSources.getString(original.id, null) ?: return null
+        val uri = Uri.parse(id)
+        if (uri.authority != MediaStore.AUTHORITY) return null
+        return try { if (context.contentResolver.getType(uri)?.startsWith("image/") == true) id else null }
+        catch (_: Exception) { null }
+    }
+    override fun replacePhoto(id: String, edited: PhotoHandle, callback: (Result<Unit>) -> Unit) {
+        val uri = Uri.parse(id)
+        if (uri.scheme != "content" || uri.authority != MediaStore.AUTHORITY ||
+            uri.path?.startsWith("/external/images/media/") != true) {
+            callback(Result.failure(IllegalArgumentException("Invalid replacement photo"))); return
+        }
+        if (pendingReplacement != null) { callback(Result.failure(IllegalStateException("Replacement busy"))); return }
+        val request = Replacement(id, edited, callback)
+        if (Build.VERSION.SDK_INT < 29 && ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            val host = activity ?: return callback(Result.failure(IllegalStateException("No activity")))
+            pendingReplacement = request
+            host.requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 707)
+            return
+        }
+        performReplacement(request, true)
+    }
+    private fun performReplacement(request: Replacement, allowConsent: Boolean) {
+        executor.execute {
+            val uri = Uri.parse(request.id)
+            val resolver = context.contentResolver
+            var backup: File? = null
+            var writing = false
+            try {
+                val source = File(request.photo.path)
+                check(source.isFile && source.length() > 0) { "Edited photo unavailable" }
+                // Opening rw checks permission without truncating the original.
+                resolver.openFileDescriptor(uri, "rw")?.use { descriptor ->
+                    val copy = File(context.cacheDir, "replace-backup-${UUID.randomUUID()}"); backup = copy
+                    resolver.openInputStream(uri)?.use { input -> copy.outputStream().use { input.copyTo(it) } }
+                        ?: error("Cannot retain replacement backup")
+                    val prior = resolver.query(uri, arrayOf(MediaStore.Images.Media.DISPLAY_NAME), null, null, null)?.use {
+                        if (it.moveToFirst()) it.getString(0) else null
+                    } ?: error("Photo no longer accessible")
+                    writing = true
+                    java.io.FileOutputStream(descriptor.fileDescriptor).use { output ->
+                        output.channel.truncate(0)
+                        source.inputStream().use { it.copyTo(output) }
+                        output.fd.sync()
+                    }
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(source.path, bounds)
+                    resolver.update(uri, ContentValues().apply {
+                        put(MediaStore.Images.Media.MIME_TYPE, request.photo.mimeType ?: "image/jpeg")
+                        put(MediaStore.Images.Media.DISPLAY_NAME, prior.substringBeforeLast('.', prior) + "." + source.extension.ifEmpty { "jpg" })
+                        put(MediaStore.Images.Media.WIDTH, bounds.outWidth)
+                        put(MediaStore.Images.Media.HEIGHT, bounds.outHeight)
+                        put(MediaStore.Images.Media.ORIENTATION, 0)
+                    }, null, null)
+                } ?: error("Cannot open original for replacement")
+                main.post { request.callback(Result.success(Unit)) }
+            } catch (error: Exception) {
+                if (writing && backup?.isFile == true) {
+                    try { resolver.openOutputStream(uri, "wt")?.use { output -> backup!!.inputStream().use { it.copyTo(output) } }
+                        ?: error("Cannot restore photo") }
+                    catch (restore: Exception) {
+                        val retained = backup; backup = null
+                        main.post { request.callback(Result.failure(IllegalStateException("Replacement failed; backup retained at ${retained?.path}", restore))) }
+                        return@execute
+                    }
+                }
+                if (!writing && allowConsent && error is SecurityException && Build.VERSION.SDK_INT >= 29) {
+                    main.post {
+                        try {
+                            val host = activity ?: error("No activity")
+                            check(pendingReplacement == null) { "Replacement busy" }
+                            val consent = if (Build.VERSION.SDK_INT >= 30) MediaStore.createWriteRequest(resolver, listOf(uri))
+                                else (error as? RecoverableSecurityException)?.userAction?.actionIntent ?: throw error
+                            pendingReplacement = request
+                            host.startIntentSenderForResult(consent.intentSender, 706, null, 0, 0, 0)
+                        } catch (failure: Exception) { pendingReplacement = null; request.callback(Result.failure(failure)) }
+                    }
+                } else main.post { request.callback(Result.failure(error)) }
+            } finally { backup?.delete() }
         }
     }
     override fun discard(photo: PhotoHandle) {
@@ -598,10 +695,19 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.path, bounds)
             check(bounds.outWidth > 0 && bounds.outHeight > 0) { "Cannot decode selected photo" }
+            if (uri.authority == MediaStore.AUTHORITY) rememberSource(file.nameWithoutExtension, uri.toString())
             return PhotoHandle(file.path, file.nameWithoutExtension, false, mime)
         } catch (error: Exception) { file.delete(); throw error }
     }
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode == 706) {
+            val request = pendingReplacement; pendingReplacement = null
+            if (request != null) {
+                if (resultCode == Activity.RESULT_OK) performReplacement(request, false)
+                else request.callback(Result.failure(FlutterError("cancelled", "Replacement cancelled")))
+            }
+            return true
+        }
         if (requestCode != 702) return false
         val single = pendingPicker; val batch = pendingBatchPicker; val folder = pickerIsFolder
         if (single == null && batch == null) return true
@@ -757,6 +863,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         }
     }
     override fun releasePhoto(photo: PhotoHandle) {
+        photoSources.edit().remove(photo.id).apply()
         val file = File(photo.path).canonicalFile
         if (file.parentFile == photoFile().parentFile?.canonicalFile && (file.extension in listOf("jpg", "jpeg", "png", "heic", "heif", "webp") || file.name.startsWith("import-")) && recover()?.id != photo.id) {
             if (file.exists()) check(file.delete()) { "Cannot release private copy" }

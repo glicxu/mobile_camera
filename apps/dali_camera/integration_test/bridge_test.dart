@@ -452,6 +452,33 @@ void main() {
         orderedEquals(largeBytes),
         reason: 'High-resolution treatment must not overwrite its source',
       );
+      if (Platform.isAndroid) {
+        bridgeStage('replace existing gallery fixture');
+        final beforeSave = (await host.listPhotoLibrary()).photos.length;
+        await host.save(largeSource);
+        final target = await host.replacementTarget(largeSource);
+        expect(target, isNotNull);
+        expect((await host.listPhotoLibrary()).photos.length, beforeSave + 1);
+        final loaded = await host.loadLibraryPhoto(target!);
+        expect(await host.replacementTarget(loaded), target);
+        await host.replacePhoto(target, largeResult);
+        expect((await host.listPhotoLibrary()).photos.length, beforeSave + 1);
+        final replacement = await host.loadLibraryPhoto(target);
+        expect(replacement.mimeType, 'image/jpeg');
+        expect(
+          await File(replacement.path).readAsBytes(),
+          orderedEquals(await File(largeResult.path).readAsBytes()),
+        );
+        expect(await largeFile.readAsBytes(), orderedEquals(largeBytes));
+        await host.save(largeResult);
+        expect((await host.listPhotoLibrary()).photos.length, beforeSave + 2);
+        await expectLater(
+          host.replacePhoto('invalid-target', largeResult),
+          throwsA(isA<PlatformException>()),
+        );
+        await host.releasePhoto(loaded);
+        await host.releasePhoto(replacement);
+      }
       await host.releasePhoto(largeResult);
       await largeFile.delete();
       bridgeStage('completed');
