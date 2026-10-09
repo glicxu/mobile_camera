@@ -320,6 +320,26 @@ void main() {
       expect(camera.reviewing, isTrue);
       expect(camera.original?.unsaved, isFalse, reason: camera.message);
       expect(find.text('Photo review'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('reviewTool_beautifier')));
+      await tester.pumpAndSettle();
+      expect(find.text('Choose a beautifier'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('reviewBeautifierChoice_null')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Landscape Polish').last);
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+      expect(camera.selectedTreatment, 'landscape', reason: camera.message);
+      await tester.tap(
+        find.byKey(const ValueKey('reviewBeautifierChoice_landscape')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('None (original)').last);
+      await tester.pumpAndSettle();
+      expect(camera.selected!.id, camera.original!.id);
+      await tester.tap(find.byTooltip('Close photo tools'));
+      await tester.pumpAndSettle();
       await camera.variant(crop: true);
       await tester.pumpAndSettle();
       expect(camera.selected?.id, isNot(camera.original?.id));

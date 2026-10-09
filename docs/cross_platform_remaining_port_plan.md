@@ -9,6 +9,8 @@ Current per-action contract: [comprehensive source/action audit](cross_platform_
 
 ## Clean photo editor follow-up - October 8, 2026
 
+Beautifier correction: opening the tool no longer forces Portrait Polish. Each new photo starts with Choose a beautifier. The dropdown offers General Enhance, Portrait Polish, Landscape Polish and None (original); a selected treatment applies to that photo and exposes its strength/options. Selecting an enabled treatment starts at level 3 if its saved strength is zero. Opening the dropdown alone does not process the photo or inherit the capture Beautifier choice. None restores the original and cancels a pending automatic treatment. The capture settings remain separate.
+
 The user requested a simpler photo view and removed sharing from camera scope. This overrides the native review toolbar parity baseline: a clean, uncropped photo is the main view, with Enhance, Filters, Beautifier and Edit tool buttons plus Save. One scrollable tool panel opens at a time beneath the photo. Comparison, tighter crop, rotate, auto reframe, horizon leveling and reset live in Edit. Import/recent/recovery actions move to Photo options. Save exports the selected edited result even while Before is displayed; an unchanged original does not need another save. Pending captures retain retry/discard paths. Share is removed from the app UI and controller. Backend rendering remains unchanged; crop currently uses the existing tighter-crop operation, not freeform handles. Validation and installed build evidence are tracked in joint testing.
 
 ## Process before saving - October 8, 2026

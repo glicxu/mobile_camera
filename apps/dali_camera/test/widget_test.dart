@@ -486,6 +486,71 @@ void main() {
     camera.dispose();
   });
 
+  testWidgets(
+    'Beautifier requires a photo-specific choice and offers Landscape polish',
+    (tester) async {
+      final host = FakeHost();
+      final camera = CameraController(host: host, register: false);
+      await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+      await tester.pumpAndSettle();
+      camera.filter = 'off';
+      camera.watermark = false;
+      camera.beautifier = 'off';
+      await camera.capturePhoto();
+      await tester.pumpAndSettle();
+      camera.beautifier = 'custom';
+      camera.customBeautifier = 'portrait';
+      camera.reviewTreatment = 'portrait';
+      camera.reviewTreatments['portrait']!['strength'] = 4;
+      await tester.tap(find.byKey(const Key('reviewTool_beautifier')));
+      await tester.pumpAndSettle();
+      expect(find.text('Choose a beautifier'), findsOneWidget);
+      expect(find.byType(ReviewTreatmentControls), findsNothing);
+      expect(host.effectsRecipe, isNull);
+      await tester.tap(
+        find.byKey(const ValueKey('reviewBeautifierChoice_null')),
+      );
+      await tester.pumpAndSettle();
+      for (final title in [
+        'General Enhance',
+        'Portrait Polish',
+        'Landscape Polish',
+        'None (original)',
+      ]) {
+        expect(find.text(title), findsOneWidget);
+      }
+      await tester.tap(find.text('Landscape Polish'));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+      expect(camera.selectedTreatment, 'landscape');
+      expect(host.effectsRecipe!['treatment'], 'landscape');
+      expect(host.effectsRecipe!['strength'], 3);
+      expect(camera.customBeautifier, 'portrait');
+      expect(camera.beautifier, 'custom');
+      expect(find.byKey(const Key('reviewTreatmentMenu')), findsNothing);
+      await tester.tap(
+        find.byKey(const ValueKey('reviewBeautifierChoice_landscape')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('None (original)').last);
+      await tester.pumpAndSettle();
+      expect(camera.selected!.id, camera.original!.id);
+      expect(find.byType(ReviewTreatmentControls), findsNothing);
+      await camera.openHistory(
+        PhotoHandle(path: 'next.jpg', id: 'next-photo', unsaved: false),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('reviewTool_beautifier')));
+      await tester.pumpAndSettle();
+      expect(find.text('Choose a beautifier'), findsOneWidget);
+      camera.requestReviewTreatment('landscape');
+      await camera.variant();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(camera.selected!.id, camera.original!.id);
+      camera.dispose();
+    },
+  );
+
   setUp(
     () => PackageInfo.setMockInitialValues(
       appName: 'Dali Camera',

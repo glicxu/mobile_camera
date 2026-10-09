@@ -7,15 +7,17 @@ class ReviewTreatmentControls extends StatelessWidget {
     super.key,
     required this.camera,
     this.allowedTreatments = const ['enhance', 'portrait', 'landscape'],
+    this.showTreatmentSelector = true,
   });
   final CameraController camera;
   final List<String> allowedTreatments;
+  final bool showTreatmentSelector;
   @override
   Widget build(BuildContext context) {
     final treatment = camera.reviewTreatment;
     final settings = camera.reviewTreatments[treatment]!;
     final strength = (settings['strength'] as num).toInt();
-    final levelName = (treatment == 'enhance'
+    final levelName = (treatment != 'portrait'
         ? ['Original', 'Natural', 'Balanced', 'Vivid', 'Dramatic', 'Max']
         : [
             'Original',
@@ -62,36 +64,42 @@ class ReviewTreatmentControls extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      PopupMenuButton<String>(
-                        key: const Key('reviewTreatmentMenu'),
-                        tooltip: 'Photo treatment',
-                        onSelected: camera.requestReviewTreatment,
-                        itemBuilder: (_) => [
-                          for (final item in treatmentTitles.entries)
-                            if (allowedTreatments.contains(item.key))
-                              CheckedPopupMenuItem(
-                                value: item.key,
-                                checked: item.key == treatment,
-                                child: Text(item.value),
-                              ),
-                        ],
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  treatmentTitles[treatment]!,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
+                      if (!showTreatmentSelector)
+                        Text(
+                          treatmentTitles[treatment]!,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        )
+                      else
+                        PopupMenuButton<String>(
+                          key: const Key('reviewTreatmentMenu'),
+                          tooltip: 'Photo treatment',
+                          onSelected: camera.requestReviewTreatment,
+                          itemBuilder: (_) => [
+                            for (final item in treatmentTitles.entries)
+                              if (allowedTreatments.contains(item.key))
+                                CheckedPopupMenuItem(
+                                  value: item.key,
+                                  checked: item.key == treatment,
+                                  child: Text(item.value),
+                                ),
+                          ],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    treatmentTitles[treatment]!,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const Icon(Icons.unfold_more, size: 16),
-                            ],
+                                const Icon(Icons.unfold_more, size: 16),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
                       Text(
                         status,
                         style: const TextStyle(

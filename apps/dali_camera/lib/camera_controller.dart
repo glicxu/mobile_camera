@@ -709,6 +709,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     double strength = 0,
   }) async {
     if (busy || original == null) return;
+    _reviewUpdate?.cancel();
+    _reviewRevision++;
     busy = true;
     notifyListeners();
     try {

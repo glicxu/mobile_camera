@@ -14,10 +14,12 @@ class PhotoEffectControls extends StatelessWidget {
     required this.camera,
     this.review = false,
     this.allowedTreatments = const ['enhance', 'portrait', 'landscape'],
+    this.showTreatmentSelector = true,
   });
   final CameraController camera;
   final bool review;
   final List<String> allowedTreatments;
+  final bool showTreatmentSelector;
   @override
   Widget build(BuildContext context) {
     final treatment = review ? camera.reviewTreatment : camera.customBeautifier;
@@ -86,33 +88,37 @@ class PhotoEffectControls extends StatelessWidget {
             ),
           ),
         if (review || camera.beautifier == 'custom') ...[
-          DropdownButtonFormField<String>(
-            key: ValueKey('beautifierType_${review}_$treatment'),
-            initialValue: treatment,
-            decoration: InputDecoration(
-              labelText: review && treatment != 'portrait'
-                  ? 'Enhancement type'
-                  : 'Beautifier type',
+          if (showTreatmentSelector)
+            DropdownButtonFormField<String>(
+              key: ValueKey('beautifierType_${review}_$treatment'),
+              initialValue: treatment,
+              decoration: InputDecoration(
+                labelText: review && treatment != 'portrait'
+                    ? 'Enhancement type'
+                    : 'Beautifier type',
+              ),
+              isExpanded: true,
+              items: [
+                for (final entry in treatmentTitles.entries)
+                  if (allowedTreatments.contains(entry.key))
+                    DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
+              ],
+              onChanged: camera.busy && !review
+                  ? null
+                  : (value) {
+                      if (value == null) return;
+                      if (review) {
+                        camera.reviewTreatment = value;
+                      } else {
+                        camera.customBeautifier = value;
+                        camera.beautifier = 'custom';
+                      }
+                      update();
+                    },
             ),
-            isExpanded: true,
-            items: [
-              for (final entry in treatmentTitles.entries)
-                if (allowedTreatments.contains(entry.key))
-                  DropdownMenuItem(value: entry.key, child: Text(entry.value)),
-            ],
-            onChanged: camera.busy && !review
-                ? null
-                : (value) {
-                    if (value == null) return;
-                    if (review) {
-                      camera.reviewTreatment = value;
-                    } else {
-                      camera.customBeautifier = value;
-                      camera.beautifier = 'custom';
-                    }
-                    update();
-                  },
-          ),
           if (treatment != 'enhance') ...[
             DropdownButtonFormField<String>(
               key: ValueKey(

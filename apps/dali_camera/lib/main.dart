@@ -73,6 +73,7 @@ class _CameraScreenState extends State<CameraScreen>
   String? reviewSourceId;
   String? reviewVersionId;
   String? reviewTool;
+  String? reviewBeautifierChoice;
   bool initialized = false;
   bool manualToolsVisible = false;
   int presentedCameraSheets = 0;
@@ -114,6 +115,7 @@ class _CameraScreenState extends State<CameraScreen>
         final version = camera.selected?.id;
         if (source != reviewSourceId) {
           reviewTool = null;
+          reviewBeautifierChoice = null;
           compare = true;
           splitComparison = false;
         } else if (version != reviewVersionId) {
@@ -578,7 +580,10 @@ class _CameraScreenState extends State<CameraScreen>
     setState(() {
       reviewTool = reviewTool == tool ? null : tool;
       if (tool == 'enhance') camera.reviewTreatment = 'enhance';
-      if (tool == 'beautifier') camera.reviewTreatment = 'portrait';
+      if (tool == 'beautifier' &&
+          camera.reviewTreatments.containsKey(reviewBeautifierChoice)) {
+        camera.reviewTreatment = reviewBeautifierChoice!;
+      }
     });
   }
 
@@ -590,10 +595,53 @@ class _CameraScreenState extends State<CameraScreen>
         initiallyExpanded: true,
       );
     }
-    if (reviewTool == 'enhance' || reviewTool == 'beautifier') {
-      final kinds = reviewTool == 'beautifier'
-          ? const ['portrait']
-          : const ['enhance', 'landscape'];
+    if (reviewTool == 'beautifier') {
+      return Column(
+        children: [
+          DropdownButtonFormField<String>(
+            key: ValueKey('reviewBeautifierChoice_$reviewBeautifierChoice'),
+            initialValue: reviewBeautifierChoice,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Beautifier'),
+            hint: const Text('Choose a beautifier'),
+            items: [
+              const DropdownMenuItem(
+                value: 'original',
+                child: Text('None (original)'),
+              ),
+              for (final item in treatmentTitles.entries)
+                DropdownMenuItem(value: item.key, child: Text(item.value)),
+            ],
+            onChanged: camera.busy
+                ? null
+                : (value) {
+                    if (value == null) return;
+                    setState(() => reviewBeautifierChoice = value);
+                    if (value == 'original') {
+                      camera.variant();
+                    } else {
+                      final settings = camera.reviewTreatments[value]!;
+                      if (settings['strength'] == 0) settings['strength'] = 3;
+                      camera.requestReviewTreatment(value);
+                    }
+                  },
+          ),
+          if (camera.reviewTreatments.containsKey(reviewBeautifierChoice)) ...[
+            ReviewTreatmentControls(
+              camera: camera,
+              showTreatmentSelector: false,
+            ),
+            PhotoEffectControls(
+              camera: camera,
+              review: true,
+              showTreatmentSelector: false,
+            ),
+          ],
+        ],
+      );
+    }
+    if (reviewTool == 'enhance') {
+      const kinds = ['enhance', 'landscape'];
       return Column(
         children: [
           ReviewTreatmentControls(camera: camera, allowedTreatments: kinds),
