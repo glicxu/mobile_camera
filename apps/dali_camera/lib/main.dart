@@ -618,13 +618,15 @@ class _CameraScreenState extends State<CameraScreen>
                   'edit': 'Crop and Edit',
                 }[tool]!,
               ),
-              subtitle: tool == 'enhance' || tool == 'filters'
-                  ? Text(
-                      tool == 'enhance'
-                          ? 'Improve tone, color and detail'
-                          : 'Apply a preset color style',
-                    )
-                  : null,
+              subtitle: Text(
+                {
+                  'auto': 'Automatically apply a balanced enhancement',
+                  'enhance': 'Adjust tone, color and detail',
+                  'filters': 'Apply a preset color style',
+                  'beautifier': 'Choose a portrait or landscape polish',
+                  'edit': 'Crop, rotate and straighten the photo',
+                }[tool]!,
+              ),
               trailing: const Icon(Icons.chevron_right),
               onTap: camera.busy
                   ? null

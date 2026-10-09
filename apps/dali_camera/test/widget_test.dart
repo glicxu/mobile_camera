@@ -574,8 +574,20 @@ void main() {
       ]) {
         expect(find.text(label), findsOneWidget);
       }
-      expect(find.text('Improve tone, color and detail'), findsOneWidget);
+      expect(find.text('Adjust tone, color and detail'), findsOneWidget);
       expect(find.text('Apply a preset color style'), findsOneWidget);
+      expect(
+        find.text('Automatically apply a balanced enhancement'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Choose a portrait or landscape polish'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Crop, rotate and straighten the photo'),
+        findsOneWidget,
+      );
       camera.customBeautifier = 'portrait';
       camera.reviewTreatments['enhance']!['strength'] = 5;
       camera.reviewTreatments['enhance']!['flags'] = {'autoTone': false};
