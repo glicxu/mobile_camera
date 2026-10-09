@@ -587,6 +587,23 @@ class _CameraScreenState extends State<CameraScreen>
     });
   }
 
+  bool get hasReviewEdits =>
+      camera.original != null &&
+      camera.selected != null &&
+      camera.selected!.id != camera.original!.id;
+
+  Widget reviewComparisonControls() => ReviewModeControls(
+    value: splitComparison
+        ? 'split'
+        : compare
+        ? 'before'
+        : 'after',
+    onChanged: (value) => setState(() {
+      compare = value == 'before';
+      splitComparison = value == 'split';
+    }),
+  );
+
   Widget reviewEditor() {
     if (reviewTool == 'menu') {
       return Column(
@@ -730,17 +747,7 @@ class _CameraScreenState extends State<CameraScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ReviewModeControls(
-          value: splitComparison
-              ? 'split'
-              : compare
-              ? 'before'
-              : 'after',
-          onChanged: (value) => setState(() {
-            compare = value == 'before';
-            splitComparison = value == 'split';
-          }),
-        ),
+        if (!hasReviewEdits) reviewComparisonControls(),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -922,6 +929,11 @@ class _CameraScreenState extends State<CameraScreen>
                 ),
               ),
       ),
+      if (hasReviewEdits)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: reviewComparisonControls(),
+        ),
       if (camera.busy) const LinearProgressIndicator(),
       if (camera.message != null)
         Padding(
@@ -936,7 +948,10 @@ class _CameraScreenState extends State<CameraScreen>
           constraints: BoxConstraints(
             maxHeight:
                 MediaQuery.sizeOf(context).height *
-                (reviewTool == 'menu' ? .54 : .32),
+                (MediaQuery.sizeOf(context).width >
+                        MediaQuery.sizeOf(context).height
+                    ? (reviewTool == 'menu' ? .35 : .25)
+                    : (reviewTool == 'menu' ? .54 : .32)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,

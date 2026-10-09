@@ -438,7 +438,7 @@ void main() {
       expect(host.savedIds.last, editedId);
       await tester.tap(find.byTooltip('Close photo tools'));
       await tester.pumpAndSettle();
-      expect(find.byType(ReviewModeControls), findsNothing);
+      expect(find.byType(ReviewModeControls), findsOneWidget);
       camera.dispose();
     },
   );
@@ -481,6 +481,15 @@ void main() {
       await tester.pumpAndSettle();
     }
     expect(find.byKey(const Key('saveReviewEdits')), findsNothing);
+    await camera.autoEnhanceReview();
+    await tester.pumpAndSettle();
+    expect(find.byType(ReviewModeControls), findsOneWidget);
+    for (final tool in ['enhance', 'filters', 'beautifier', 'edit']) {
+      await openPhotoTool(tester, tool);
+      expect(tester.takeException(), isNull, reason: 'edited $tool');
+      await tester.tap(find.byTooltip('Close photo tools'));
+      await tester.pumpAndSettle();
+    }
     camera.dispose();
   });
 
@@ -607,6 +616,22 @@ void main() {
       await camera.autoEnhanceReview();
       expect(camera.selectedTreatment, 'portrait');
       expect(camera.customBeautifier, 'portrait');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Close photo tools'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ReviewModeControls), findsOneWidget);
+      for (final mode in ['Before', 'After', 'Split']) {
+        await tester.tap(find.text(mode));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ReviewComparison>(find.byType(ReviewComparison)).mode,
+          mode.toLowerCase(),
+        );
+        expect(find.byKey(const Key('saveReviewEdits')), findsOneWidget);
+      }
+      await camera.variant();
+      await tester.pumpAndSettle();
+      expect(find.byType(ReviewModeControls), findsNothing);
       camera.dispose();
     },
   );

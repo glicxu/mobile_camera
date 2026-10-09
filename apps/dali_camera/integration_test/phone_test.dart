@@ -336,6 +336,16 @@ void main() {
         camera.autoReviewTreatment,
         reason: camera.message,
       );
+      for (final mode in ['Before', 'After', 'Split']) {
+        await tester.tap(find.text(mode));
+        await tester.pumpAndSettle();
+        expect(find.text(mode), findsOneWidget);
+      }
+      await tester.tap(find.byTooltip('Close photo tools'));
+      await tester.pumpAndSettle();
+      expect(find.text('Before'), findsOneWidget);
+      expect(find.text('After'), findsOneWidget);
+      expect(find.text('Split'), findsOneWidget);
       await openPhotoTool(tester, 'beautifier');
       expect(find.text('Choose a beautifier'), findsOneWidget);
       await tester.tap(
