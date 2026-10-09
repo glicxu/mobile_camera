@@ -1,5 +1,11 @@
 # Joint phone testing - parity candidate
 
+## Comparison immediately after enhancement - October 8, 2026
+
+Source: `6fd4ce7`. An edited photo now shows Before, After and Split directly below the photo, independent of the open tool panel. A newly rendered version initially displays After. Closing enhancement tools keeps comparison visible; resetting to the original removes the extra row. Crop and Edit uses this same row for edited photos without duplicating it. Comparison does not change the selected version that Save exports. Landscape tool panels leave additional room for comparison at large text sizes.
+
+Analysis and all 36 Flutter tests pass. Extended checks switch all three modes after Auto with tools closed, verify the ReviewComparison mode and reset behavior, keep edited-result Save semantics while Before is shown, and exercise edited panels at 2.5x text in landscape without overflow. Galaxy camera regression passed in 89 seconds (91 with teardown), including native Auto rendering, switching comparison modes and their availability after closing the panel. Normal Galaxy visual inspection confirmed After is selected on completion and Split shows the original/edited landscape after closing Auto. Both normal Android apps updated in place; built APK SHA-256 `c9e7b76ed582bc1cd3079a2e3719bc0f323c87500622f42212d0d05a51521fa7`. Tablet runtime was not repeated for this presentation change. Physical iPhone acceptance remains deferred.
+
 ## One Enhance menu with descriptions - October 8, 2026
 
 Source: `aa23a42` (menu/controller implementation `f2d769a`, descriptions `796e3ac`). The clean photo view starts with one Enhance button. Its menu offers Auto, General Enhancer, Filter, Beautifier, and Crop and Edit, each with a short description. General Enhancer adjusts tone, color and detail; Filter applies a preset color style. Auto uses valid face analysis from the reviewed photo to choose Portrait Polish for faces, otherwise General Enhance, with balanced level 3/default options; manual and capture preferences stay unchanged. Beautifier keeps its explicit per-photo dropdown. Save appears after an edit or for pending recovery. The menu has more vertical space for descriptions and remains scrollable at larger text sizes.
