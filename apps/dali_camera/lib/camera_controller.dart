@@ -1621,10 +1621,6 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       lastFrame = data;
       unawaited(updateDepthPreview());
       aspectRatio = packet.aspectRatio;
-      if (!coachingEnabled) {
-        notifyListeners();
-        return;
-      }
       var signals = packet.situationSignals;
       signals = signals.withSubjectMotion(
         subjectMotionTracker.update(signals, packet.frame.timestamp),
@@ -1642,6 +1638,10 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           landscapeInstruments.reset();
           landscapeCreativeCoach.reset();
         }
+      }
+      if (!coachingEnabled) {
+        notifyListeners();
+        return;
       }
       guidanceDetail = '';
       if (activeSituation == PhotographicSituation.landscape) {
@@ -1690,6 +1690,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         advice = engine.selectAdvice(
           guidance.prioritize(issues),
           fallback: guidance.advice,
+          minimumAdviceSeconds:
+              activeSituation == PhotographicSituation.portrait ? 3.0 : 1.5,
         );
       }
       if (activeSituation.supportsPoseGuidance) {

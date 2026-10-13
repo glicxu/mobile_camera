@@ -211,18 +211,18 @@ class _CameraScreenState extends State<CameraScreen>
                     ],
                   ),
                 ],
-                if (camera.coachingEnabled) ...[
-                  CameraSelectionRow(
-                    camera: camera,
-                    onBeautifierLongPress: () => cameraSheet(
-                      () => showBeautifierQuickSheet(context, camera),
-                    ),
+                CameraSelectionRow(
+                  camera: camera,
+                  showGuides: camera.coachingEnabled,
+                  onBeautifierLongPress: () => cameraSheet(
+                    () => showBeautifierQuickSheet(context, camera),
                   ),
+                ),
+                if (camera.coachingEnabled)
                   LiveGuidancePanel(
                     camera: camera,
                     onExample: (entry) => cameraSheet(() => details(entry)),
                   ),
-                ],
                 if (camera.message != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -315,25 +315,61 @@ class _CameraScreenState extends State<CameraScreen>
                   ),
                 ),
               ),
-              HeaderAction(
-                tooltip: 'Camera controls',
-                size: 52,
-                radius: 10,
-                onPressed: camera.busy ? null : () => cameraSheet(settings),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.camera_outlined, size: 20),
-                    Text(
-                      'Controls',
-                      textScaler: TextScaler.noScaling,
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                      ),
+              Row(
+                children: [
+                  HeaderAction(
+                    key: const Key('coachingToggle'),
+                    tooltip: camera.coachingEnabled
+                        ? 'Turn coaching off'
+                        : 'Turn coaching on',
+                    size: 52,
+                    radius: 10,
+                    selected: camera.coachingEnabled,
+                    onPressed: () =>
+                        camera.setCoachingEnabled(!camera.coachingEnabled),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          camera.coachingEnabled
+                              ? Icons.lightbulb
+                              : Icons.lightbulb_outline,
+                          size: 20,
+                        ),
+                        const Text(
+                          'Coaching',
+                          textScaler: TextScaler.noScaling,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  HeaderAction(
+                    key: const Key('cameraControlsButton'),
+                    tooltip: 'Camera controls',
+                    size: 52,
+                    radius: 10,
+                    onPressed: camera.busy ? null : () => cameraSheet(settings),
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.camera_outlined, size: 20),
+                        Text(
+                          'Controls',
+                          textScaler: TextScaler.noScaling,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -452,6 +488,9 @@ class _CameraScreenState extends State<CameraScreen>
                       camera.activeSituation.showsPersonOverlay)
                     CoachingOverlay(
                       advice: camera.advice,
+                      visualFirst:
+                          camera.activeSituation ==
+                          PhotographicSituation.portrait,
                       guidedAction: camera.canAdvanceGuidance
                           ? camera.guidance.currentAction
                           : null,
@@ -614,7 +653,7 @@ class _CameraScreenState extends State<CameraScreen>
       child: CameraHeader(
         manualVisible: manualToolsVisible,
         manualMode: camera.manualWorkspace,
-        coachingEnabled: camera.coachingEnabled,
+        situation: SituationMenuButton(camera: camera),
         onManual: camera.busy || camera.controlBusy
             ? null
             : () async {
@@ -623,7 +662,6 @@ class _CameraScreenState extends State<CameraScreen>
                   setState(() => manualToolsVisible = !manualToolsVisible);
                 }
               },
-        onCoaching: () => camera.setCoachingEnabled(!camera.coachingEnabled),
         onSettings: () => cameraSheet(
           () => showAppSettings(context, onHelp: help, onImport: choosePhotos),
         ),
@@ -661,7 +699,7 @@ class _CameraScreenState extends State<CameraScreen>
               if (camera.coachingEnabled)
                 Expanded(flex: 4, child: controls)
               else
-                SizedBox(height: 132, child: controls),
+                SizedBox(height: 190, child: controls),
             ],
           ),
         ),

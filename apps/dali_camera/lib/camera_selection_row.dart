@@ -3,56 +3,71 @@ import 'package:flutter/material.dart';
 
 import 'camera_controller.dart';
 
-/// Four compact camera shortcuts with a shared green-on / grey-off language.
+/// The compact situation selector used in the always-visible camera header.
+class SituationMenuButton extends StatelessWidget {
+  const SituationMenuButton({super.key, required this.camera});
+
+  final CameraController camera;
+
+  @override
+  Widget build(BuildContext context) {
+    final situation = camera.shootingMode.title;
+    return PopupMenuButton<PhotographicSituation>(
+      key: const Key('situationMenu'),
+      tooltip: 'Situation: $situation',
+      padding: EdgeInsets.zero,
+      enabled: !camera.busy,
+      onSelected: camera.setSituation,
+      itemBuilder: (_) => [
+        for (final mode in PhotographicSituation.values)
+          PopupMenuItem(
+            key: Key('situationOption_${mode.name}'),
+            value: mode,
+            height: 56,
+            child: Tooltip(
+              message: mode.title,
+              child: Semantics(
+                label: mode.title,
+                selected: camera.shootingMode == mode,
+                child: Center(
+                  child: _SituationIcon(
+                    icon: _situationIcon(mode),
+                    selected: camera.shootingMode == mode,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+      child: _SituationIcon(
+        icon: _situationIcon(camera.shootingMode),
+        selected: false,
+        neutral: true,
+        disabled: camera.busy,
+        dropdown: true,
+      ),
+    );
+  }
+}
+
+/// Three compact effect shortcuts with a shared green-on / grey-off language.
 class CameraSelectionRow extends StatelessWidget {
   const CameraSelectionRow({
     super.key,
     required this.camera,
     required this.onBeautifierLongPress,
+    this.showGuides = true,
   });
 
   final CameraController camera;
   final VoidCallback onBeautifierLongPress;
+  final bool showGuides;
 
   @override
   Widget build(BuildContext context) {
-    final situation = camera.shootingMode.title;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        PopupMenuButton<PhotographicSituation>(
-          key: const Key('situationMenu'),
-          tooltip: 'Situation: $situation',
-          enabled: !camera.busy,
-          onSelected: camera.setSituation,
-          itemBuilder: (_) => [
-            for (final mode in PhotographicSituation.values)
-              PopupMenuItem(
-                key: Key('situationOption_${mode.name}'),
-                value: mode,
-                height: 56,
-                child: Tooltip(
-                  message: mode.title,
-                  child: Semantics(
-                    label: mode.title,
-                    selected: camera.shootingMode == mode,
-                    child: Center(
-                      child: _StateIcon(
-                        icon: _situationIcon(mode),
-                        enabled: camera.shootingMode == mode,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-          child: _StateIcon(
-            icon: _situationIcon(camera.shootingMode),
-            enabled: true,
-            disabled: camera.busy,
-            dropdown: true,
-          ),
-        ),
         _EffectToggle(
           key: const Key('filterToggle'),
           title: 'Filters',
@@ -70,14 +85,15 @@ class CameraSelectionRow extends StatelessWidget {
           onTap: camera.toggleBeautifier,
           onLongPress: onBeautifierLongPress,
         ),
-        _EffectToggle(
-          key: const Key('guidesToggle'),
-          title: 'Guides',
-          icon: Icons.collections_bookmark_outlined,
-          enabled: camera.guidesEnabled,
-          busy: camera.busy,
-          onTap: camera.toggleGuides,
-        ),
+        if (showGuides)
+          _EffectToggle(
+            key: const Key('guidesToggle'),
+            title: 'Guides',
+            icon: Icons.collections_bookmark_outlined,
+            enabled: camera.guidesEnabled,
+            busy: camera.busy,
+            onTap: camera.toggleGuides,
+          ),
       ],
     );
   }
@@ -93,6 +109,49 @@ IconData _situationIcon(PhotographicSituation situation) => switch (situation) {
   PhotographicSituation.closeUp => Icons.center_focus_strong,
   PhotographicSituation.food => Icons.restaurant_outlined,
 };
+
+class _SituationIcon extends StatelessWidget {
+  const _SituationIcon({
+    required this.icon,
+    required this.selected,
+    this.neutral = false,
+    this.disabled = false,
+    this.dropdown = false,
+  });
+
+  final IconData icon;
+  final bool selected;
+  final bool neutral;
+  final bool disabled;
+  final bool dropdown;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = disabled
+        ? Colors.grey.shade700
+        : neutral
+        ? Colors.white
+        : selected
+        ? Colors.greenAccent.shade400
+        : Colors.grey.shade500;
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(icon, size: 22, color: color),
+          if (dropdown)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Icon(Icons.arrow_drop_down, size: 13, color: color),
+            ),
+        ],
+      ),
+    );
+  }
+}
 
 class _EffectToggle extends StatelessWidget {
   const _EffectToggle({
@@ -136,13 +195,11 @@ class _StateIcon extends StatelessWidget {
     required this.icon,
     required this.enabled,
     this.disabled = false,
-    this.dropdown = false,
   });
 
   final IconData icon;
   final bool enabled;
   final bool disabled;
-  final bool dropdown;
 
   @override
   Widget build(BuildContext context) {
@@ -160,18 +217,7 @@ class _StateIcon extends StatelessWidget {
         color: color.withValues(alpha: enabled ? .18 : .10),
         border: Border.all(color: color, width: 2),
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(icon, size: 23, color: color),
-          if (dropdown)
-            Positioned(
-              right: 4,
-              bottom: 4,
-              child: Icon(Icons.arrow_drop_down, size: 14, color: color),
-            ),
-        ],
-      ),
+      child: Icon(icon, size: 23, color: color),
     );
   }
 }

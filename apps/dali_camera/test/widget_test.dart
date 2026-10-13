@@ -860,7 +860,7 @@ void main() {
     ),
   );
 
-  testWidgets('Native header exposes Manual, coaching and App Settings', (
+  testWidgets('Header and lower controls expose primary camera actions', (
     tester,
   ) async {
     final host = FakeHost();
@@ -870,8 +870,8 @@ void main() {
     expect(find.text('Dali Cam'), findsOneWidget);
     expect(find.byTooltip('Help'), findsNothing);
     final headerKeys = [
+      'situationMenu',
       'manualControlsButton',
-      'coachingToggle',
       'appSettingsButton',
       'switchCamera',
     ];
@@ -881,6 +881,16 @@ void main() {
         greaterThan(tester.getCenter(find.byKey(Key(headerKeys[i - 1]))).dx),
       );
     }
+    expect(
+      tester.getCenter(find.byKey(const Key('coachingToggle'))).dx,
+      lessThan(
+        tester.getCenter(find.byKey(const Key('cameraControlsButton'))).dx,
+      ),
+    );
+    expect(
+      tester.getCenter(find.byKey(const Key('coachingToggle'))).dy,
+      tester.getCenter(find.byKey(const Key('cameraControlsButton'))).dy,
+    );
     await tester.tap(find.byKey(const Key('manualControlsButton')));
     await tester.pumpAndSettle();
     expect(camera.manualWorkspace, isTrue);
@@ -891,11 +901,17 @@ void main() {
     await tester.tap(find.byKey(const Key('coachingToggle')));
     await tester.pumpAndSettle();
     expect(camera.coachingEnabled, isFalse);
-    expect(find.byKey(const Key('situationMenu')), findsNothing);
+    expect(find.byKey(const Key('situationMenu')), findsOneWidget);
+    expect(find.byKey(const Key('filterToggle')), findsOneWidget);
+    expect(find.byKey(const Key('beautifierToggle')), findsOneWidget);
+    expect(find.byKey(const Key('guidesToggle')), findsNothing);
+    expect(find.byType(LiveGuidancePanel), findsNothing);
     expect(camera.canCapture, isTrue);
     await tester.tap(find.byKey(const Key('coachingToggle')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('situationMenu')), findsOneWidget);
+    expect(find.byKey(const Key('guidesToggle')), findsOneWidget);
+    expect(find.byType(LiveGuidancePanel), findsOneWidget);
     await tester.tap(find.byKey(const Key('appSettingsButton')));
     await tester.pumpAndSettle();
     expect(find.text('App Settings'), findsOneWidget);
@@ -1621,7 +1637,7 @@ void main() {
     expect(find.text('Guides'), findsNothing);
     expect(
       tester.widget<Icon>(find.byIcon(Icons.auto_mode)).color,
-      Colors.greenAccent.shade400,
+      Colors.white,
     );
     expect(
       tester.widget<Icon>(find.byIcon(Icons.filter_alt_outlined)).color,

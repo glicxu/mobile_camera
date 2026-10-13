@@ -278,6 +278,7 @@ class CoachingEngine {
     List<PhotoIssue> issues, {
     DateTime? now,
     Advice? fallback,
+    double minimumAdviceSeconds = _Thresholds.minimumAdviceSeconds,
   }) {
     now ??= DateTime.now();
     final topIssue = issues.cast<PhotoIssue?>().firstWhere(
@@ -294,7 +295,7 @@ class CoachingEngine {
     final sinceAdvice = _lastAdviceAt == null
         ? double.infinity
         : now.difference(_lastAdviceAt!).inMicroseconds / 1000000;
-    final oldEnough = sinceAdvice > _Thresholds.minimumAdviceSeconds;
+    final oldEnough = sinceAdvice > minimumAdviceSeconds;
     final repeatedTooSoon =
         _lastAdvice?.type == key &&
         sinceAdvice < _Thresholds.repeatCooldownSeconds;

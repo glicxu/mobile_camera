@@ -7,14 +7,14 @@ class CameraHeader extends StatelessWidget {
     super.key,
     required this.manualVisible,
     required this.manualMode,
-    required this.coachingEnabled,
+    required this.situation,
     required this.onManual,
-    required this.onCoaching,
     required this.onSettings,
     required this.onSwitch,
   });
-  final bool manualVisible, manualMode, coachingEnabled;
-  final VoidCallback? onManual, onCoaching, onSettings, onSwitch;
+  final bool manualVisible, manualMode;
+  final Widget situation;
+  final VoidCallback? onManual, onSettings, onSwitch;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -32,6 +32,8 @@ class CameraHeader extends StatelessWidget {
           ),
         ),
       ),
+      situation,
+      const SizedBox(width: 8),
       HeaderAction(
         key: const Key('manualControlsButton'),
         tooltip: manualVisible
@@ -75,17 +77,6 @@ class CameraHeader extends StatelessWidget {
               style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
             ),
           ],
-        ),
-      ),
-      const SizedBox(width: 8),
-      HeaderAction(
-        key: const Key('coachingToggle'),
-        tooltip: coachingEnabled ? 'Turn coaching off' : 'Turn coaching on',
-        selected: coachingEnabled,
-        onPressed: onCoaching,
-        child: Icon(
-          coachingEnabled ? Icons.lightbulb : Icons.lightbulb_outline,
-          size: 20,
         ),
       ),
       const SizedBox(width: 8),

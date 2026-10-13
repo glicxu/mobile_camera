@@ -1,7 +1,7 @@
 name: dali_camera
 description: Shared Dali camera application for Android and iOS.
 publish_to: none
-version: 1.0.0+3
+version: 1.0.0+4
 environment:
   sdk: ^3.12.2
 dependencies:

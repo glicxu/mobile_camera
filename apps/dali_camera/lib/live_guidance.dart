@@ -89,6 +89,7 @@ class _SceneCard extends StatelessWidget {
     final advice = camera.contextualGuidance?.advice ?? camera.advice;
     final detail = camera.contextualGuidance?.detail ?? camera.guidanceDetail;
     final situation = camera.activeSituation;
+    final compactPortrait = situation == PhotographicSituation.portrait;
     final color = situation == PhotographicSituation.landscape
         ? Colors.teal
         : guidanceColor(advice.tone);
@@ -144,13 +145,15 @@ class _SceneCard extends StatelessWidget {
               advice.instruction,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
-            Text(
-              detail.isNotEmpty
-                  ? detail
-                  : 'Dali is analyzing the live camera view.',
-              style: const TextStyle(fontSize: 14, color: Colors.white70),
-            ),
+            if (!compactPortrait) ...[
+              const SizedBox(height: 8),
+              Text(
+                detail.isNotEmpty
+                    ? detail
+                    : 'Dali is analyzing the live camera view.',
+                style: const TextStyle(fontSize: 14, color: Colors.white70),
+              ),
+            ],
           ],
         ),
       ),

@@ -20,11 +20,13 @@ class CoachingOverlay extends StatefulWidget {
     this.frame,
     this.guidedAction,
     this.animate = true,
+    this.visualFirst = false,
   });
   final Advice advice;
   final Map<String, dynamic>? frame;
   final GuidedAction? guidedAction;
   final bool animate;
+  final bool visualFirst;
   @override
   State<CoachingOverlay> createState() => _CoachingOverlayState();
 }
@@ -93,7 +95,12 @@ class _CoachingOverlayState extends State<CoachingOverlay>
           return Stack(
             fit: StackFit.expand,
             children: [
-              CustomPaint(painter: CoachingFramePainter(widget.frame)),
+              CustomPaint(
+                painter: CoachingFramePainter(
+                  widget.frame,
+                  showGrid: !widget.visualFirst,
+                ),
+              ),
               Positioned(
                 top: 14,
                 left: bounds.maxWidth / 2 - 16,
@@ -120,7 +127,17 @@ class _CoachingOverlayState extends State<CoachingOverlay>
                   ),
                 ),
               ),
-              if (direction != null)
+              if (widget.visualFirst)
+                Center(
+                  child: _PortraitVisualCue(
+                    key: ValueKey('portraitCue-${widget.advice.type}'),
+                    advice: widget.advice,
+                    color: color,
+                    animation: animation,
+                    guidedAction: widget.guidedAction,
+                  ),
+                )
+              else if (direction != null)
                 Positioned(
                   left: x - width / 2,
                   top: y - 66,
@@ -216,24 +233,27 @@ class _CoachingOverlayState extends State<CoachingOverlay>
 }
 
 class CoachingFramePainter extends CustomPainter {
-  CoachingFramePainter(this.frame);
+  CoachingFramePainter(this.frame, {this.showGrid = true});
   final Map<String, dynamic>? frame;
+  final bool showGrid;
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = Colors.white.withValues(alpha: .18)
       ..strokeWidth = 1;
-    for (var i = 1; i < 3; i++) {
-      canvas.drawLine(
-        Offset(size.width * i / 3, 0),
-        Offset(size.width * i / 3, size.height),
-        paint,
-      );
-      canvas.drawLine(
-        Offset(0, size.height * i / 3),
-        Offset(size.width, size.height * i / 3),
-        paint,
-      );
+    if (showGrid) {
+      for (var i = 1; i < 3; i++) {
+        canvas.drawLine(
+          Offset(size.width * i / 3, 0),
+          Offset(size.width * i / 3, size.height),
+          paint,
+        );
+        canvas.drawLine(
+          Offset(0, size.height * i / 3),
+          Offset(size.width, size.height * i / 3),
+          paint,
+        );
+      }
     }
     if (frame == null) return;
     for (final key in ['people', 'faces']) {
@@ -340,5 +360,233 @@ class CoachingFramePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(CoachingFramePainter oldDelegate) =>
-      oldDelegate.frame != frame;
+      oldDelegate.frame != frame || oldDelegate.showGrid != showGrid;
+}
+
+class _PortraitVisualCue extends StatelessWidget {
+  const _PortraitVisualCue({
+    super.key,
+    required this.advice,
+    required this.color,
+    required this.animation,
+    this.guidedAction,
+  });
+
+  final Advice advice;
+  final Color color;
+  final Animation<double> animation;
+  final GuidedAction? guidedAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final direction = advice.direction;
+    if (advice.type == 'ready') {
+      return _CueDisc(
+        key: const Key('portraitVisualReady'),
+        color: color,
+        icon: Icons.check,
+        size: 72,
+      );
+    }
+    if (advice.type == 'subject_missing') {
+      return _PortraitFrameCue(color: color);
+    }
+    if (advice.type == 'face_missing') {
+      return _CueDisc(
+        key: const Key('portraitVisualFace'),
+        color: color,
+        icon: Icons.face_retouching_natural,
+      );
+    }
+    if (advice.type == 'subject_too_close' ||
+        advice.type == 'subject_too_far' ||
+        advice.type == 'feet_cropped' ||
+        advice.type == 'scene_excluded') {
+      return _DistanceCue(
+        color: color,
+        moveCloser: advice.type == 'subject_too_far',
+      );
+    }
+    if (advice.type == 'camera_tilted' || advice.type == 'horizon_tilted') {
+      return _LevelCue(color: color, tiltLeft: direction == 'rotateLeft');
+    }
+    if (advice.type == 'subject_backlit' ||
+        advice.type == 'face_underexposed') {
+      return _CueDisc(
+        key: const Key('portraitVisualLight'),
+        color: color,
+        icon: Icons.light_mode_outlined,
+      );
+    }
+    if (advice.type == 'camera_unstable' || advice.type == 'waiting') {
+      return _CueDisc(
+        key: const Key('portraitVisualSteady'),
+        color: color,
+        icon: Icons.motion_photos_paused_outlined,
+      );
+    }
+    if (direction != null) {
+      final moves = const {'left', 'right', 'up', 'down'}.contains(direction);
+      return AnimatedBuilder(
+        animation: animation,
+        builder: (_, child) => Transform.translate(
+          offset: !moves
+              ? Offset.zero
+              : switch (direction) {
+                  'left' => Offset(-14 * animation.value, 0),
+                  'right' => Offset(14 * animation.value, 0),
+                  'up' => Offset(0, -14 * animation.value),
+                  _ => Offset(0, 14 * animation.value),
+                },
+          child: child,
+        ),
+        child: _CueDisc(
+          key: const Key('portraitVisualDirection'),
+          color: color,
+          icon: coachingDirectionIcon(direction),
+        ),
+      );
+    }
+    if (guidedAction != null) {
+      return _CueDisc(
+        key: const Key('portraitVisualGuidedAction'),
+        color: color,
+        icon: switch (guidedAction!) {
+          GuidedAction.subjectPose => Icons.accessibility_new,
+          GuidedAction.cameraHeight => Icons.height,
+          GuidedAction.cameraPitch => Icons.cameraswitch,
+          GuidedAction.photographerMove => Icons.directions_walk,
+        },
+      );
+    }
+    return _CueDisc(
+      key: const Key('portraitVisualSubject'),
+      color: color,
+      icon: advice.recipient == 'Subject'
+          ? Icons.accessibility_new
+          : Icons.center_focus_strong,
+    );
+  }
+}
+
+class _CueDisc extends StatelessWidget {
+  const _CueDisc({
+    super.key,
+    required this.color,
+    required this.icon,
+    this.size = 82,
+  });
+  final Color color;
+  final IconData icon;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .9),
+      shape: BoxShape.circle,
+      border: Border.all(color: Colors.white, width: 3),
+      boxShadow: [
+        BoxShadow(color: Colors.black.withValues(alpha: .35), blurRadius: 12),
+      ],
+    ),
+    child: Icon(icon, size: size * .58, color: Colors.white),
+  );
+}
+
+class _PortraitFrameCue extends StatelessWidget {
+  const _PortraitFrameCue({required this.color});
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('portraitVisualFrame'),
+    width: 132,
+    height: 210,
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: .08),
+      borderRadius: BorderRadius.circular(66),
+      border: Border.all(color: color, width: 4),
+      boxShadow: [
+        BoxShadow(color: color.withValues(alpha: .35), blurRadius: 14),
+      ],
+    ),
+    alignment: Alignment.center,
+    child: Icon(Icons.person_outline, size: 88, color: color),
+  );
+}
+
+class _DistanceCue extends StatelessWidget {
+  const _DistanceCue({required this.color, required this.moveCloser});
+  final Color color;
+  final bool moveCloser;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('portraitVisualDistance'),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: .46),
+      borderRadius: BorderRadius.circular(28),
+      border: Border.all(color: color, width: 3),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          moveCloser ? Icons.chevron_right : Icons.chevron_left,
+          size: 42,
+          color: color,
+        ),
+        Icon(Icons.person_outline, size: 66, color: Colors.white),
+        Icon(
+          moveCloser ? Icons.chevron_left : Icons.chevron_right,
+          size: 42,
+          color: color,
+        ),
+      ],
+    ),
+  );
+}
+
+class _LevelCue extends StatelessWidget {
+  const _LevelCue({required this.color, required this.tiltLeft});
+  final Color color;
+  final bool tiltLeft;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('portraitVisualLevel'),
+    width: 164,
+    height: 76,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: .46),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: color, width: 3),
+    ),
+    child: Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(height: 2, color: Colors.white54),
+        Transform.rotate(
+          angle: tiltLeft ? -.13 : .13,
+          child: Container(
+            height: 5,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+        ),
+        Icon(
+          tiltLeft ? Icons.rotate_left : Icons.rotate_right,
+          size: 34,
+          color: Colors.white,
+        ),
+      ],
+    ),
+  );
 }
