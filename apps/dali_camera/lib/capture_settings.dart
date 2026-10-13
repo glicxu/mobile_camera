@@ -27,6 +27,20 @@ class ShutterSettings extends StatelessWidget {
             .toList(),
       ),
       SwitchListTile(
+        key: const Key('shutterSound'),
+        title: const Text('Shutter click sound'),
+        subtitle: const Text(
+          'On by default. Sound-off follows device and regional requirements.',
+        ),
+        value: camera.shutterSound,
+        onChanged: camera.busy
+            ? null
+            : (enabled) {
+                camera.shutterSound = enabled;
+                camera.persistSettings();
+              },
+      ),
+      SwitchListTile(
         title: const Text('Voice shutter'),
         value: camera.voicePreferred,
         subtitle: Text(camera.voiceStatus),
@@ -103,37 +117,35 @@ class CaptureStyleControls extends StatelessWidget {
     key: const Key('filterControlsGroup'),
     title: const Text('Filters'),
     subtitle: const Text(
-      'Creates a separate review copy. Original stays unchanged.',
+      'Applies a color look before the captured photo is saved.',
     ),
     children: [
       const Padding(
         padding: EdgeInsets.all(12),
         child: Text(
-          'Auto chooses for the scene, Custom lets you select and fine-tune a preset, and Off applies nothing.',
+          'Choose Auto or Custom here. Use the Filters quick button on the camera screen to turn the configured filter on or off.',
         ),
       ),
       Wrap(
         spacing: 8,
         children: [
-          for (final mode in ['auto', 'custom', 'off'])
+          for (final mode in ['auto', 'custom'])
             ChoiceChip(
               label: Text(mode[0].toUpperCase() + mode.substring(1)),
-              selected: mode == 'custom'
-                  ? camera.filter != 'auto' && camera.filter != 'off'
-                  : camera.filter == mode,
+              selected: camera.filterMode == mode,
               onSelected: camera.busy
                   ? null
                   : (_) {
-                      camera.useFilterMode(mode);
+                      camera.configureFilterMode(mode);
                       camera.persistSettings();
                     },
             ),
         ],
       ),
-      if (camera.filter != 'auto' && camera.filter != 'off') ...[
+      if (camera.filterMode == 'custom') ...[
         DropdownButtonFormField<String>(
-          key: ValueKey('filterPreset-${camera.filter}'),
-          initialValue: camera.filter,
+          key: ValueKey('filterPreset-${camera.customFilter}'),
+          initialValue: camera.customFilter,
           decoration: const InputDecoration(labelText: 'Filter preset'),
           isExpanded: true,
           items: [
@@ -154,7 +166,7 @@ class CaptureStyleControls extends StatelessWidget {
               ? null
               : (name) {
                   if (name != null) {
-                    camera.filter = name;
+                    camera.setCustomFilter(name);
                     camera.persistSettings();
                   }
                 },
@@ -165,15 +177,15 @@ class CaptureStyleControls extends StatelessWidget {
             const Text(
               'Moving any slider copies the current preset into Custom, then changes that individual setting.',
             ),
-            for (final field in PhotoStyle.fields)
+            for (final field in PhotoStyle.adjustableFields)
               Column(
                 children: [
                   Text(
-                    '${field == "blueSky" ? "Blue sky" : field[0].toUpperCase() + field.substring(1)}: ${camera.style.value(field)}',
+                    '${field == "blueSky" ? "Blue sky" : field[0].toUpperCase() + field.substring(1)}: ${camera.configuredStyle.value(field)}',
                   ),
                   Slider(
                     key: Key('photoFilter$field'),
-                    value: camera.style.value(field).toDouble(),
+                    value: camera.configuredStyle.value(field).toDouble(),
                     min: ['exposure', 'warmth', 'contrast'].contains(field)
                         ? -5
                         : 0,
@@ -187,10 +199,10 @@ class CaptureStyleControls extends StatelessWidget {
                         : (value) {
                             camera.customStyle = {
                               for (final name in PhotoStyle.fields)
-                                name: camera.style.value(name),
+                                name: camera.configuredStyle.value(name),
                             };
                             camera.customStyle[field] = value.round();
-                            camera.filter = 'custom';
+                            camera.setCustomFilter('custom');
                             camera.persistSettings();
                           },
                   ),

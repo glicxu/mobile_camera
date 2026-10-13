@@ -103,7 +103,7 @@ abstract class CameraHostApi {
   CameraSnapshot start(bool front);
   void stop();
   @async
-  PhotoHandle capture();
+  PhotoHandle capture(bool shutterSound);
   PhotoHandle? recover();
   @async
   void save(PhotoHandle photo);

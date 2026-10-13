@@ -434,7 +434,7 @@ class CameraApiPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendable {
 protocol CameraHostApi {
   func start(front: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
   func stop() throws
-  func capture(completion: @escaping (Result<PhotoHandle, Error>) -> Void)
+  func capture(shutterSound: Bool, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func recover() throws -> PhotoHandle?
   func save(photo: PhotoHandle, completion: @escaping (Result<Void, Error>) -> Void)
   func replacementTarget(original: PhotoHandle) throws -> String?
@@ -501,8 +501,10 @@ class CameraHostApiSetup {
     }
     let captureChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.capture\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
-      captureChannel.setMessageHandler { _, reply in
-        api.capture { result in
+      captureChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let shutterSoundArg = args[0] as! Bool
+        api.capture(shutterSound: shutterSoundArg) { result in
           switch result {
           case .success(let res):
             reply(wrapResult(res))

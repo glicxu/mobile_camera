@@ -5,6 +5,11 @@ Branch: `codex/cross-platform-20261007`
 Flutter checkpoint: `3254fd8`
 Native iPhone reference: `d53a977`
 
+Release decision: the user approved merging the Flutter implementation into
+`main` as Dali Cam 1.0.0 (build 2). See [the release record](release_1.0.0.md).
+Open checklist items below remain post-merge rollout and packaging work; they
+must not be interpreted as completed by the merge.
+
 ## Purpose
 
 Track the remaining work required before the Flutter iPhone application can be accepted as the future Dali Camera implementation. Complete and record each item separately. Do not retire the native Swift application until this checklist is complete and a separate replacement decision is approved.
@@ -316,3 +321,4 @@ Add one entry after each completed checklist item:
 | 2026-10-12 | `3254fd8` + working tree | iPhone 13 Pro / iOS 18.0.1 | Profile native bridge suite | Pass | Recovery startup, portrait/landscape/original rendering, filter, watermark, crop, cleanup, and full-resolution treatment passed in Profile mode. |
 | 2026-10-12 | `3254fd8` + working tree | iPhone 13 Pro / iOS 18.0.1 | Profile end-to-end camera suite, initial attempts | Fail, resolved | Initial permission resets blocked startup. The first complete run then exposed stale EV snapshots because AVFoundation applies exposure bias asynchronously. The bridge now returns from Apple's completion callback. |
 | 2026-10-12 | `3254fd8` + working tree | iPhone 13 Pro / iOS 18.0.1 | Profile end-to-end camera suite | Pass | Attached to the installed Profile app to preserve Camera permission. The 41-second suite passed camera startup, controls, EV adjustment/reset, focus/exposure lock, manual shutter/ISO, timer capture, styled Photos output, review comparison, Landscape Polish selection, crop, Save as, library navigation, camera switching/stale-command rejection, and burst release. Normal `lib/main.dart` Profile build was restored and launched afterward. |
+| 2026-10-12 | Release working tree | Local macOS / iOS simulator | 1.0.0 source release gate | Pass with packaging follow-ups | Catalog/export checks, 37 shared-core tests, 44 Flutter tests, 51 native iOS tests, and the unsigned production-identity iOS Release build passed. Android store signing and the distribution-signed iOS archive remain rollout work. |

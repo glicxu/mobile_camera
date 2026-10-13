@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import AVFoundation
+import QuartzCore
 import Vision
 import CoreMotion
 import Photos
@@ -33,6 +34,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     private var generation = UUID()
     private var aspect = 0.75
     private var rotation: CGFloat = 90
+    private var zoomScale: CGFloat = 1
     private var capturing = false
     private var presenter: UIViewController? {
         UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }.first { $0.isKeyWindow }?.rootViewController
@@ -57,12 +59,15 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         return PhotoHandle(path: directory.appendingPathComponent("photo-\(id).jpg").path, id: id, unsaved: false)
     }
     private func snapshot() -> CameraSnapshot {
-        CameraSnapshot(ready: active, front: front, configurationId: configuration, aspectRatio: aspect,
+        let minimumZoom = (device?.minAvailableVideoZoomFactor ?? 1) / zoomScale
+        let maximumZoom = (device?.maxAvailableVideoZoomFactor ?? 1) / zoomScale
+        let currentZoom = (device?.videoZoomFactor ?? 1) / zoomScale
+        return CameraSnapshot(ready: active, front: front, configurationId: configuration, aspectRatio: aspect,
             minimumEV: Double(device?.minExposureTargetBias ?? 0), maximumEV: Double(device?.maxExposureTargetBias ?? 0),
             currentEV: Double(device?.exposureTargetBias ?? 0),
             supportsLock: device?.isFocusModeSupported(.locked) == true && device?.isExposureModeSupported(.locked) == true,
             locked: device?.focusMode == .locked && device?.exposureMode == .locked,
-            minimumZoom: Double(device?.minAvailableVideoZoomFactor ?? 1), maximumZoom: Double(device?.maxAvailableVideoZoomFactor ?? 1), currentZoom: Double(device?.videoZoomFactor ?? 1),
+            minimumZoom: Double(minimumZoom), maximumZoom: Double(maximumZoom), currentZoom: Double(currentZoom),
             supportsTap: device?.isFocusPointOfInterestSupported == true,
             minimumISO: device?.isExposureModeSupported(.custom) == true ? Double(device!.activeFormat.minISO) : nil,
             maximumISO: device?.isExposureModeSupported(.custom) == true ? Double(device!.activeFormat.maxISO) : nil,
@@ -87,8 +92,10 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         preview?.container.subjectRect = nil
         preview?.container.setNeedsLayout()
         let epoch = UUID(); generation = epoch
-        let orientation = presenter?.view.window?.windowScene?.interfaceOrientation ?? .portrait
-        rotation = orientation == .landscapeLeft ? 180 : orientation == .landscapeRight ? 0 : orientation == .portraitUpsideDown ? 270 : 90
+        let orientation = UIDevice.current.orientation.interfaceOrientation
+            ?? presenter?.view.window?.windowScene?.interfaceOrientation
+            ?? .portrait
+        rotation = cameraRotationAngle(for: orientation)
         queue.async {
             do {
                 guard self.generation == epoch else { throw self.failure("Session superseded") }
@@ -96,11 +103,18 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 self.session.inputs.forEach { self.session.removeInput($0) }
                 self.session.outputs.forEach { self.session.removeOutput($0) }
                 self.session.sessionPreset = .photo
-                guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: front ? .front : .back) else {
+                guard let device = self.cameraDevice(front: front) else {
                     self.session.commitConfiguration(); throw self.failure("Camera unavailable")
                 }
                 let input = try AVCaptureDeviceInput(device: device)
                 self.session.addInput(input); self.session.addOutput(self.photoOutput)
+                self.zoomScale = self.standardWideZoomScale(for: device)
+                try device.lockForConfiguration()
+                device.videoZoomFactor = self.zoomScale.clamped(
+                    device.minAvailableVideoZoomFactor,
+                    device.maxAvailableVideoZoomFactor
+                )
+                device.unlockForConfiguration()
                 let video = AVCaptureVideoDataOutput()
                 video.alwaysDiscardsLateVideoFrames = true
                 video.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
@@ -133,11 +147,17 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         }
     }
     func stop() throws { active = false; generation = UUID(); speech.stop(); preview?.container.depthLevel = 0; preview?.container.setNeedsLayout(); motion.stopDeviceMotionUpdates(); queue.async { self.session.stopRunning() } }
-    func capture(completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
+    func capture(shutterSound: Bool, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
         do {
             guard active, !capturing, try recover() == nil else { throw failure("Save or discard the retained original first") }
             capturing = true; captureCompletion = completion
-            queue.async { self.photoOutput.capturePhoto(with: AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg]), delegate: self) }
+            queue.async {
+                let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
+                if #available(iOS 18.0, *), !shutterSound, self.photoOutput.isShutterSoundSuppressionSupported {
+                    settings.isShutterSoundSuppressionEnabled = true
+                }
+                self.photoOutput.capturePhoto(with: settings, delegate: self)
+            }
         } catch { completion(.failure(error)) }
     }
     public func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
@@ -502,10 +522,26 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             do {
                 guard self.active, configurationId == self.configuration, zoom.isFinite, let device = self.device else { throw self.failure("Camera changed or invalid zoom") }
                 try device.lockForConfiguration(); defer { device.unlockForConfiguration() }
-                device.videoZoomFactor = CGFloat(zoom).clamped(device.minAvailableVideoZoomFactor, device.maxAvailableVideoZoomFactor)
+                let physicalZoom = CGFloat(zoom) * self.zoomScale
+                device.videoZoomFactor = physicalZoom.clamped(device.minAvailableVideoZoomFactor, device.maxAvailableVideoZoomFactor)
                 DispatchQueue.main.async { completion(.success(self.snapshot())) }
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
+    }
+    private func cameraDevice(front: Bool) -> AVCaptureDevice? {
+        if front {
+            return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
+        }
+        return AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(.builtInDualWideCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+    }
+    private func standardWideZoomScale(for device: AVCaptureDevice) -> CGFloat {
+        guard device.deviceType == .builtInTripleCamera || device.deviceType == .builtInDualWideCamera,
+              let wideSwitch = device.virtualDeviceSwitchOverVideoZoomFactors.first else { return 1 }
+        // On a virtual camera containing Ultra Wide, factor 1 is the full
+        // Ultra Wide field of view. The first optical switch is standard Wide.
+        return CGFloat(truncating: wideSwitch)
     }
     func meter(configurationId: String, x: Double, y: Double, focusOnly: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void) {
         guard let layer = preview?.layer, x.isFinite, y.isFinite else { completion(.failure(failure("No preview or invalid focus point"))); return }
@@ -656,14 +692,36 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     }
     fileprivate func attach(_ view: CameraView) { preview = view; view.layer.session = session }
     fileprivate func updateOrientation(_ orientation: UIInterfaceOrientation) {
-        let angle: CGFloat = orientation == .landscapeLeft ? 180 : orientation == .landscapeRight ? 0 : orientation == .portraitUpsideDown ? 270 : 90
+        let angle = cameraRotationAngle(for: orientation)
         guard active, angle != rotation else { return }
         rotation = angle; generation = UUID()
-        if let connection = preview?.layer.connection, connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
+        if let connection = preview?.layer.connection, connection.isVideoRotationAngleSupported(angle) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            connection.videoRotationAngle = angle
+            CATransaction.commit()
+        }
         queue.async {
             for output in self.session.outputs {
                 if let connection = output.connection(with: .video), connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
             }
+        }
+    }
+}
+private func cameraRotationAngle(for orientation: UIInterfaceOrientation) -> CGFloat {
+    orientation == .landscapeLeft ? 180
+        : orientation == .landscapeRight ? 0
+        : orientation == .portraitUpsideDown ? 270 : 90
+}
+private extension UIDeviceOrientation {
+    var interfaceOrientation: UIInterfaceOrientation? {
+        switch self {
+        case .portrait: return .portrait
+        case .portraitUpsideDown: return .portraitUpsideDown
+        // Device and interface landscape directions use opposite conventions.
+        case .landscapeLeft: return .landscapeRight
+        case .landscapeRight: return .landscapeLeft
+        default: return nil
         }
     }
 }
@@ -677,7 +735,10 @@ private final class PreviewContainer: UIView {
     private let depth = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
     override func layoutSubviews() {
         super.layoutSubviews()
-        if let orientation = window?.windowScene?.interfaceOrientation { orientationChanged?(orientation) }
+        if let orientation = UIDevice.current.orientation.interfaceOrientation
+            ?? window?.windowScene?.interfaceOrientation {
+            orientationChanged?(orientation)
+        }
         if depth.superview == nil { depth.isUserInteractionEnabled = false; depth.isAccessibilityElement = false; addSubview(depth) }
         depth.frame = bounds
         depth.isHidden = depthLevel == 0 || subjectRect == nil
@@ -693,9 +754,31 @@ private final class PreviewContainer: UIView {
 }
 private final class CameraView: NSObject, FlutterPlatformView {
     let container = PreviewContainer()
+    private var orientationObserver: NSObjectProtocol?
     var layer: AVCaptureVideoPreviewLayer { container.layer as! AVCaptureVideoPreviewLayer }
     func view() -> UIView { container }
     init(frame: CGRect) { super.init(); container.frame = frame; layer.videoGravity = .resizeAspect }
+    func beginOrientationUpdates() {
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        orientationObserver = NotificationCenter.default.addObserver(
+            forName: UIDevice.orientationDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self,
+                  let orientation = UIDevice.current.orientation.interfaceOrientation
+                    ?? self.container.window?.windowScene?.interfaceOrientation else { return }
+            self.container.orientationChanged?(orientation)
+        }
+        if let orientation = UIDevice.current.orientation.interfaceOrientation
+            ?? container.window?.windowScene?.interfaceOrientation {
+            container.orientationChanged?(orientation)
+        }
+    }
+    deinit {
+        if let orientationObserver { NotificationCenter.default.removeObserver(orientationObserver) }
+        UIDevice.current.endGeneratingDeviceOrientationNotifications()
+    }
 }
 private final class CameraViewFactory: NSObject, FlutterPlatformViewFactory {
     let plugin: DaliCameraPlatformPlugin
@@ -703,6 +786,7 @@ private final class CameraViewFactory: NSObject, FlutterPlatformViewFactory {
     func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
         let view = CameraView(frame: frame)
         view.container.orientationChanged = { [weak plugin] orientation in plugin?.updateOrientation(orientation) }
+        view.beginOrientationUpdates()
         plugin.attach(view); return view
     }
 }

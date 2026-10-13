@@ -1,7 +1,8 @@
 # Dali Camera Landscape Composition Packages
 
 Date: October 6, 2026
-Status: Initial four-package catalog implemented
+Last reviewed: October 12, 2026
+Status: Initial four-package catalog and live coaching redesign implemented; physical calibration pending
 
 ## Implementation snapshot
 
@@ -15,7 +16,7 @@ The initial catalog is now available in the native iOS app for testing:
 - Selecting **Natural** turns off the creative composition recipe while retaining the app's live horizon and stability guidance.
 - The active recipe card can be tapped to open the full photo, lighting explanation, and safety note.
 
-Standalone light filters, step-by-step advancement, and Auto recommendations remain documented for later implementation after the four manual packages are reviewed.
+Standalone light filters and Auto recommendations remain documented for later implementation after the four manual packages are reviewed. Landscape step-by-step coaching and the visual measured-correction system described below are the next interaction work.
 
 ## Purpose
 
@@ -49,6 +50,52 @@ Potential later packages include Coast & Ocean, Forests, Waterfalls & Rivers, De
 5. Selecting a reference photo starts short photographer coaching and keeps the shutter available.
 6. The active card displays the reference, composition instruction, recommended camera angle, and recommended light/time.
 7. **Natural** or **No composition recipe** exits creative guidance while ordinary horizon, stability, exposure, and safety coaching continues.
+
+## Live coaching interaction redesign
+
+### Problem found during physical testing
+
+The current live Landscape coach reevaluates the frame several times per second and replaces its text immediately. Small changes in horizon angle or horizon-detection confidence can therefore switch rapidly among **Level the horizon**, **Horizon looks level**, and **Build depth in the scene**. This is distracting and makes the instruction difficult to read.
+
+The selected landscape recipe is also not yet connected to a usable step-by-step experience. Its camera-position instruction can be replaced by generic live Landscape guidance as soon as another analysis frame arrives.
+
+### Design decision: measurements are visual, creativity is textual
+
+Measured camera conditions must use persistent visual instruments over the preview instead of changing coaching sentences:
+
+| Measurement | Persistent visual control | Good state | Attention state |
+| --- | --- | --- | --- |
+| Horizon balance | A compact horizontal level bar whose line follows the measured tilt | Straight, centered, and green | Visibly tilted and amber; red only for severe tilt |
+| Camera stability | A small camera or hand icon with an LED-style status dot | Solid green | Amber and gently pulsing while the phone is moving |
+| Exposure | A compact `-  •  +` meter | Indicator centered and green | Indicator moves toward `-` or `+` and becomes amber |
+
+These instruments remain visible and update continuously without replacing the creative instruction. Color must not be the only signal: line angle, pulse, icon shape, and meter position must communicate the same state for accessibility.
+
+The coaching card is reserved for creative composition:
+
+- Do not show **Level the horizon**, **Horizon looks level**, or **Hold steady** as recurring text.
+- Show only one composition instruction at a time.
+- For a selected recipe, present the recommended camera position, cue one, and cue two as explicit steps.
+- Keep the current recipe step visible until the user taps **Next**.
+- A serious measured correction may temporarily emphasize its visual instrument, but must not erase or advance the creative step.
+- After the correction clears, leave the creative instruction unchanged.
+- When no recipe is selected, keep an automatic composition suggestion visible for at least 8–10 seconds and replace it only after a substantial scene change.
+
+### Visual-state stabilization
+
+Visual instruments may respond more quickly than text, but they must not flicker:
+
+- Require a new attention condition to persist for approximately 1 second before changing state.
+- Enter the horizon-warning state at approximately 3 degrees of tilt and return to green below approximately 1.5 degrees.
+- Hold a newly reached green state for approximately 2 seconds before allowing another warning.
+- Use smoothed measurements for bar angle and exposure position rather than raw frame-by-frame values.
+- Do not pulse or animate a green state.
+
+Exact thresholds should be validated on the physical iPhone and adjusted without changing the interaction model.
+
+### Expected message reduction
+
+Ordinary Landscape mode should have one stable creative message instead of three competing live messages. Horizon, stability, and exposure feedback remains continuously available through the visual instrument strip. Selecting a recipe expands the creative sequence to three user-controlled steps, not an automatically rotating message list.
 
 ## Shared composition metadata
 
@@ -167,9 +214,11 @@ Auto should recommend a filtered montage, not silently activate a composition re
 1. **Implemented:** Add a reusable landscape-recipe model with package, angle, light/time, safety, cue, and image metadata.
 2. **Implemented:** Add the separate Landscape control, four category cards, and category-specific recipe montages.
 3. **Implemented:** Produce all 24 initial reference photographs.
-4. **Partially implemented:** Add an active composition card and full detail view. Step-by-step advancement can follow user testing.
-5. **Implemented for the test:** Keep existing live horizon and stability observations visible without blocking capture.
-6. **Deferred:** Add Auto ranking only after the manual packages are tested.
+4. **Implemented:** Add an active composition card and full detail view. Selected landscape recipe steps remain active instead of being replaced by generic frame analysis.
+5. **Implemented:** Replace changing measurement text with persistent horizon, stability, and exposure instruments, including smoothing, hysteresis, accessible non-color state cues, and a pulsing amber stability LED.
+6. **Implemented:** Add user-controlled landscape recipe steps: camera position, cue one, and cue two.
+7. **Implemented:** Reduce no-recipe coaching to one stable creative suggestion with an eight-second minimum display time, two-second scene confirmation, and substantial-scene-change thresholds. The exposure instrument currently estimates scene brightness from frame luminance and requires physical calibration.
+8. **Deferred:** Add Auto ranking only after the manual packages and redesigned coaching are tested.
 
 ## Later review questions
 
@@ -184,4 +233,6 @@ Auto should recommend a filtered montage, not silently activate a composition re
 - Start with the four proposed scene packages and six recipes per package.
 - Treat sunrise, sunset, blue hour, daytime, and overcast as reusable filters.
 - Require an angle, light/time recommendation, two photographer cues, and a safety note for every reference image.
+- Represent horizon, stability, and exposure as persistent visual instruments instead of rapidly changing text.
+- Reserve the coaching card for one stable, user-actionable composition instruction.
 - Produce **Mountains** first, validate its interaction model, and then reuse the structure for Lakes, Plains, and Plants.

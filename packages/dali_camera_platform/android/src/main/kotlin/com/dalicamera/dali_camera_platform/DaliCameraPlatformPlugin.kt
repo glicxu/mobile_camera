@@ -7,6 +7,7 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.*
 import android.hardware.*
+import android.media.MediaActionSound
 import android.net.Uri
 import android.os.*
 import android.provider.MediaStore
@@ -69,6 +70,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private var config = ""
     private var aspect = 0.75
     private var capturing = false
+    private val cameraSound = MediaActionSound().apply { load(MediaActionSound.SHUTTER_CLICK) }
     @Volatile private var focusDistance: Float? = null
     private var lockedState = false
     private var manualExposure = false
@@ -135,7 +137,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     }
     override fun onDetachedFromEngine(b: FlutterPlugin.FlutterPluginBinding) {
         stop(); CameraHostApi.setUp(b.binaryMessenger, null)
-        faceDetector.close(); poseDetector.close(); stillProcessor.close(); executor.shutdown(); depthExecutor.shutdown()
+        cameraSound.release(); faceDetector.close(); poseDetector.close(); stillProcessor.close(); executor.shutdown(); depthExecutor.shutdown()
     }
     override fun onAttachedToActivity(b: ActivityPluginBinding) {
         binding = b; activity = b.activity
@@ -404,11 +406,12 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         check(File(path).exists()) { "Recovery original missing" }
         return PhotoHandle(path, json.getString("id"), true)
     }
-    override fun capture(callback: (Result<PhotoHandle>) -> Unit) {
+    override fun capture(shutterSound: Boolean, callback: (Result<PhotoHandle>) -> Unit) {
         if (capturing || recover() != null) return callback(Result.failure(IllegalStateException("Save or discard the previous original first")))
         val capture = captureUseCase ?: return callback(Result.failure(IllegalStateException("Camera not ready")))
         capturing = true; val file = photoFile()
         val capturedFront = front
+        if (shutterSound) cameraSound.play(MediaActionSound.SHUTTER_CLICK)
         capture.takePicture(ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageCapturedCallback() {
             override fun onCaptureSuccess(image: ImageProxy) {
                 val bytes: ByteArray

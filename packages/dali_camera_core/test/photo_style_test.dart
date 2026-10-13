@@ -12,7 +12,7 @@ void main() {
       );
       for (final entry in {
         'pose': 'natural',
-        'landscape': 'blueSky',
+        'landscape': 'natural',
         'food': 'fresh',
         'action': 'vivid',
         'closeUp': 'bright',
@@ -28,7 +28,20 @@ void main() {
     'Every exported named filter has a finite transform and bounded custom controls',
     () {
       final catalog = SharedCatalog();
-      expect((catalog.data['filters'] as Map).length, 8);
+      expect(
+        (catalog.data['filters'] as Map).keys.toSet(),
+        {
+          'natural',
+          'bright',
+          'vivid',
+          'soft',
+          'golden',
+          'fresh',
+          'nightClear',
+          'blueSky',
+        },
+      );
+      expect(PhotoStyle.adjustableFields, isNot(contains('blueSky')));
       for (final name in (catalog.data['filters'] as Map).keys.cast<String>()) {
         final matrix = PhotoStyle.preset(catalog, name, 'food').matrix;
         expect(matrix.length, 20);

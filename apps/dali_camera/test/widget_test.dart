@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:dali_camera/main.dart';
 import 'package:dali_camera/camera_controller.dart';
+import 'package:dali_camera/capture_settings.dart';
 import 'package:dali_camera_platform/dali_camera_platform.dart';
 import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'package:dali_camera/review_comparison.dart';
 import 'package:dali_camera/manual_preview_controls.dart';
 import 'package:dali_camera/review_treatment_controls.dart';
 import 'package:dali_camera/live_guidance.dart';
+import 'package:dali_camera/landscape_instruments.dart';
 import 'package:dali_camera/distance_swipe.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -25,6 +27,10 @@ class FakeHost extends CameraHostApi {
   List<double>? filterParameters;
   Map<String, dynamic>? effectsRecipe;
   int captures = 0;
+  bool? lastShutterSound;
+  double zoomValue = 1;
+  final List<double> requestedZooms = [];
+  int starts = 0;
   final List<String> savedIds = [];
   String? replaceTarget = 'library-original';
   final List<String> replacedIds = [];
@@ -48,18 +54,46 @@ class FakeHost extends CameraHostApi {
   int importRequests = 0;
   bool? importedFolder;
   @override
-  Future<CameraSnapshot> start(bool front) async => CameraSnapshot(
-    ready: true,
-    front: front,
-    configurationId: 'test',
-    aspectRatio: .75,
-    minimumEV: -2,
-    maximumEV: 2,
-    currentEV: 0,
-    supportsTap: true,
-    supportsLock: false,
-    locked: false,
-  );
+  Future<CameraSnapshot> start(bool front) async {
+    starts++;
+    return CameraSnapshot(
+      ready: true,
+      front: front,
+      configurationId: 'test',
+      aspectRatio: .75,
+      minimumEV: -2,
+      maximumEV: 2,
+      currentEV: 0,
+      supportsTap: true,
+      supportsLock: false,
+      locked: false,
+      minimumZoom: .5,
+      maximumZoom: 5,
+      currentZoom: zoomValue,
+    );
+  }
+
+  @override
+  Future<CameraSnapshot> setZoom(String configurationId, double zoom) async {
+    requestedZooms.add(zoom);
+    zoomValue = zoom;
+    return CameraSnapshot(
+      ready: true,
+      front: false,
+      configurationId: configurationId,
+      aspectRatio: .75,
+      minimumEV: -2,
+      maximumEV: 2,
+      currentEV: 0,
+      supportsTap: true,
+      supportsLock: false,
+      locked: false,
+      minimumZoom: .5,
+      maximumZoom: 5,
+      currentZoom: zoomValue,
+    );
+  }
+
   @override
   Future<CameraSnapshot> setManualExposure(
     String configurationId,
@@ -95,7 +129,8 @@ class FakeHost extends CameraHostApi {
   @override
   Future<PhotoHandle?> recover() async => retained;
   @override
-  Future<PhotoHandle> capture() async {
+  Future<PhotoHandle> capture(bool shutterSound) async {
+    lastShutterSound = shutterSound;
     captures++;
     return retained = PhotoHandle(
       path: 'fixture.jpg',
@@ -208,7 +243,11 @@ class DelayedCaptureHost extends FakeHost {
   final savingStarted = Completer<void>();
   final finishSaving = Completer<void>();
   @override
-  Future<PhotoHandle> capture() => captureReply.future;
+  Future<PhotoHandle> capture(bool shutterSound) {
+    lastShutterSound = shutterSound;
+    return captureReply.future;
+  }
+
   @override
   Future<void> save(PhotoHandle photo) async {
     savingStarted.complete();
@@ -261,6 +300,94 @@ Future<void> openPhotoTool(WidgetTester tester, String tool) async {
 }
 
 void main() {
+  test(
+    'Preview aspect follows orientation without waiting for a native frame',
+    () {
+      expect(orientedPreviewAspect(.75, Orientation.portrait), .75);
+      expect(
+        orientedPreviewAspect(.75, Orientation.landscape),
+        closeTo(4 / 3, .0001),
+      );
+      expect(orientedPreviewAspect(4 / 3, Orientation.portrait), .75);
+      expect(orientedPreviewAspect(4 / 3, Orientation.landscape), 4 / 3);
+    },
+  );
+
+  testWidgets('Orientation change relayouts without restarting the camera', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final host = FakeHost();
+    final camera = CameraController(host: host, register: false);
+    await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+    await tester.pumpAndSettle();
+    final initialStarts = host.starts;
+    expect(initialStarts, 1);
+
+    tester.view.physicalSize = const Size(844, 390);
+    await tester.pumpAndSettle();
+
+    expect(host.starts, initialStarts);
+    expect(tester.takeException(), isNull);
+    camera.dispose();
+  });
+
+  testWidgets('Live preview zoom controls update the native camera zoom', (
+    tester,
+  ) async {
+    final host = FakeHost();
+    final camera = CameraController(host: host, register: false);
+    await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('zoomValue')), findsOneWidget);
+    expect(find.text('1.0×'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('zoomOut')));
+    await tester.pumpAndSettle();
+    expect(host.requestedZooms, [.5]);
+    expect(find.text('0.5×'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('zoomIn')));
+    await tester.pumpAndSettle();
+
+    expect(host.requestedZooms, [.5, 1]);
+    expect(find.text('1.0×'), findsOneWidget);
+    camera.dispose();
+  });
+
+  testWidgets('Shutter click defaults on and can be disabled', (tester) async {
+    final host = FakeHost();
+    final camera = CameraController(host: host, register: false);
+    await camera.initialize();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ShutterSettings(camera: camera)),
+      ),
+    );
+    await tester.tap(find.text('Shutter Controls'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<SwitchListTile>(find.byKey(const Key('shutterSound')))
+          .value,
+      isTrue,
+    );
+    await tester.tap(find.byKey(const Key('shutterSound')));
+    await tester.pumpAndSettle();
+    expect(camera.shutterSound, isFalse);
+
+    camera.watermark = false;
+    camera.filter = 'off';
+    camera.beautifier = 'off';
+    await camera.capturePhoto(review: false);
+    expect(host.lastShutterSound, isFalse);
+    camera.dispose();
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
     'Successful capture flashes before saving finishes without spinning shutter',
@@ -848,6 +975,8 @@ void main() {
           .onPressed,
       isNull,
     );
+    await tester.ensureVisible(find.byKey(const Key('manualShutterAuto')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('manualShutterAuto')));
     await tester.pumpAndSettle();
     expect(camera.snapshot!.manualExposure, isTrue);
@@ -855,6 +984,10 @@ void main() {
     await camera.changeLinkedEV(1);
     await tester.pumpAndSettle();
     expect(camera.snapshot!.currentISO, 200);
+    await tester.ensureVisible(
+      find.byKey(const Key('resetExposureAdjustment')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('resetExposureAdjustment')));
     await tester.pumpAndSettle();
     expect(camera.linkedEV, 0);
@@ -865,6 +998,8 @@ void main() {
           .onPressed,
       isNull,
     );
+    await tester.ensureVisible(find.byKey(const Key('manualShutterAuto')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('manualShutterAuto')));
     await tester.pumpAndSettle();
     expect(camera.focusX, .4);
@@ -1007,6 +1142,56 @@ void main() {
     },
   );
 
+  testWidgets('Landscape instruments stay visible and recipes advance by tap', (
+    tester,
+  ) async {
+    final camera = CameraController(host: FakeHost(), register: false);
+    await camera.initialize();
+    camera.setSituation(PhotographicSituation.landscape);
+    final recipe = camera.catalog.entries.firstWhere(
+      (entry) => entry.kind == 'landscape',
+    );
+    camera.choose(recipe);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AnimatedBuilder(
+            animation: camera,
+            builder: (_, _) => Column(
+              children: [
+                LandscapeInstrumentOverlay(state: camera.landscapeInstruments),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: LiveGuidancePanel(camera: camera, onExample: (_) {}),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('landscapeInstrumentOverlay')), findsOneWidget);
+    expect(find.byKey(const Key('landscapeHorizonInstrument')), findsOneWidget);
+    expect(
+      find.byKey(const Key('landscapeStabilityInstrument')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('landscapeExposureInstrument')),
+      findsOneWidget,
+    );
+    expect(find.text('Step 1 of 3'), findsOneWidget);
+    expect(find.text(camera.catalog.angleInstruction(recipe)), findsOneWidget);
+    expect(camera.canAdvanceGuidance, isTrue);
+    camera.next();
+    await tester.pump();
+    expect(find.text('Step 2 of 3'), findsOneWidget);
+    expect(find.text(recipe.cues.first), findsOneWidget);
+    camera.dispose();
+  });
+
   testWidgets(
     'Review slow swipe uses native distance and does not require a flick',
     (tester) async {
@@ -1144,21 +1329,32 @@ void main() {
     },
   );
 
-  test('Filter application modes preserve the custom preset and settings', () {
+  test('Quick effect toggles restore configured modes and custom settings', () {
     final camera = CameraController(host: FakeHost(), register: false);
     camera.filter = 'fresh';
     final values = PhotoStyle.fields.map(camera.style.value).toList();
-    camera.useFilterMode('off');
+    camera.toggleFilter();
     expect(camera.style.active, isFalse);
-    camera.useFilterMode('auto');
-    camera.useFilterMode('custom');
+    camera.toggleFilter();
     expect(camera.filter, 'fresh');
     expect(PhotoStyle.fields.map(camera.style.value).toList(), values);
     camera.customStyle['exposure'] = 3;
     camera.filter = 'custom';
-    camera.useFilterMode('off');
-    camera.useFilterMode('custom');
+    camera.toggleFilter();
+    camera.toggleFilter();
     expect(camera.style.value('exposure'), 3);
+    camera.toggleFilter();
+    camera.configureFilterMode('auto');
+    expect(camera.filterEnabled, isFalse);
+    camera.toggleFilter();
+    expect(camera.filter, 'auto');
+    camera.beautifier = 'custom';
+    camera.toggleBeautifier();
+    expect(camera.beautifierEnabled, isFalse);
+    camera.configureBeautifierMode('auto');
+    expect(camera.beautifierEnabled, isFalse);
+    camera.toggleBeautifier();
+    expect(camera.beautifier, 'auto');
     camera.dispose();
   });
   testWidgets('Comparison choices remain usable at large text', (tester) async {
@@ -1408,22 +1604,41 @@ void main() {
     final camera = CameraController(host: FakeHost(), register: false);
     await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
     await tester.pumpAndSettle();
+    camera.filter = 'off';
+    camera.beautifier = 'off';
+    camera.guidesEnabled = false;
+    camera.persistSettings();
+    await tester.pump();
     WidgetController.hitTestWarningShouldBeFatal = true;
     addTearDown(() => WidgetController.hitTestWarningShouldBeFatal = false);
-    expect(find.text('Situation'), findsOneWidget);
-    expect(find.text('Effects'), findsOneWidget);
-    expect(find.text('Posture'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('referenceMenu')));
+    expect(find.byTooltip('Situation: Auto'), findsOneWidget);
+    expect(find.byTooltip('Filters: Off'), findsOneWidget);
+    expect(find.byTooltip('Beautifier: Off'), findsOneWidget);
+    expect(find.text('Effects'), findsNothing);
+    expect(find.byTooltip('Guides: Off'), findsOneWidget);
+    expect(find.text('Filters'), findsNothing);
+    expect(find.text('Beautifier'), findsNothing);
+    expect(find.text('Guides'), findsNothing);
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.filter_alt_outlined)).color,
+      Colors.grey.shade500,
+    );
+    expect(camera.guidesEnabled, isFalse);
+    await tester.tap(find.byKey(const Key('guidesToggle')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Male / Masculine'));
+    expect(camera.guidesEnabled, isTrue);
+    expect(find.byKey(const Key('packageGuideCarousel')), findsOneWidget);
+    expect(find.text('Male / Masculine'), findsOneWidget);
+    expect(find.byKey(const Key('guideThumbnail_M1')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('guideThumbnail_M1')));
     await tester.pumpAndSettle();
-    expect(find.text('Relaxed standing'), findsOneWidget);
-    await tester.tap(find.byTooltip('Back to packages'));
+    expect(camera.guidance.entry?.id, 'M1');
+    await tester.drag(
+      find.byKey(const Key('packageGuidePages')),
+      const Offset(-300, 0),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Posture packages'), findsOneWidget);
-    await tester.tap(find.byTooltip('Close packages'));
-    await tester.pumpAndSettle();
+    expect(find.text('Female / Feminine'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('situationMenu')));
     await tester.pumpAndSettle();
@@ -1435,41 +1650,70 @@ void main() {
     await tester.tap(find.text('Food'));
     await tester.pumpAndSettle();
     expect(camera.food, isTrue);
-    await tester.tap(find.byKey(const Key('referenceMenu')));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('packageGuideCarousel')), findsOneWidget);
     expect(find.text('Hero plate'), findsOneWidget);
-    await tester.tap(find.text('Hero plate'));
+    await tester.tap(find.byKey(const Key('guideThumbnail_FD1')));
     await tester.pumpAndSettle();
     expect(camera.guidance.entry!.kind, 'food');
 
-    await tester.tap(find.byKey(const Key('effectsMenu')));
+    await tester.tap(find.byKey(const Key('guidesToggle')));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find
-          .ancestor(
-            of: find.text('Auto'),
-            matching: find.byType(CheckedPopupMenuItem<String>),
-          )
-          .first,
-    );
+    expect(camera.guidesEnabled, isFalse);
+    expect(camera.guidance.entry, isNull);
+    expect(find.byKey(const Key('packageGuideCarousel')), findsNothing);
+
+    expect(camera.filterEnabled, isFalse);
+    await tester.tap(find.byKey(const Key('filterToggle')));
     await tester.pumpAndSettle();
     expect(camera.filter, 'auto');
-    expect(find.text('Filters Auto'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('effectsMenu')));
+    expect(camera.filterEnabled, isTrue);
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.filter_alt_outlined)).color,
+      Colors.greenAccent.shade400,
+    );
+    await tester.tap(find.byKey(const Key('filterToggle')));
     await tester.pumpAndSettle();
+    expect(camera.filterEnabled, isFalse);
+
+    expect(camera.beautifierEnabled, isFalse);
+    await tester.tap(find.byKey(const Key('beautifierToggle')));
+    await tester.pumpAndSettle();
+    expect(camera.beautifier, 'auto');
+    expect(camera.beautifierEnabled, isTrue);
+
+    await tester.longPress(find.byKey(const Key('beautifierToggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('Portrait'), findsOneWidget);
+    expect(find.text('Landscape'), findsOneWidget);
+    expect(find.text('General Enhance'), findsNothing);
     await tester.tap(
-      find
-          .ancestor(
-            of: find.text('Custom'),
-            matching: find.byType(CheckedPopupMenuItem<String>),
-          )
-          .first,
+      find.byKey(const Key('beautifierQuicklandscape_Dramatic')),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Filters'), findsOneWidget);
-    expect(find.text('Filter preset'), findsOneWidget);
-    expect(find.text('Individual settings'), findsOneWidget);
+    expect(camera.beautifier, 'custom');
+    expect(camera.customBeautifier, 'landscape');
+    expect(camera.captureTreatments['landscape']!['preset'], 'Dramatic');
+    expect(camera.captureTreatments['landscape']!['strength'], 4);
+
+    await tester.longPress(find.byKey(const Key('beautifierToggle')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('beautifierQuickOff')));
+    await tester.pumpAndSettle();
+    expect(camera.beautifierEnabled, isFalse);
     expect(tester.takeException(), isNull);
+  });
+
+  test('Capture Beautifier Auto only selects people and landscapes', () {
+    final camera = CameraController(host: FakeHost(), register: false);
+    camera.beautifier = 'auto';
+    camera.setSituation(PhotographicSituation.food);
+    expect(camera.captureTreatment, 'original');
+    camera.setSituation(PhotographicSituation.portrait);
+    expect(camera.captureTreatment, 'portrait');
+    camera.setSituation(PhotographicSituation.landscape);
+    expect(camera.captureTreatment, 'landscape');
+    expect(camera.captureTreatments.containsKey('enhance'), isFalse);
+    camera.dispose();
   });
   test(
     'Failed original save blocks capture and survives a controller recreation',
@@ -1509,25 +1753,23 @@ void main() {
       'faces': [],
       'poseStatus': 'unsupported',
     });
-    for (final situation in [
-      PhotographicSituation.food,
-      PhotographicSituation.landscape,
-    ]) {
-      camera.setSituation(situation);
-      camera.choose(
-        camera.catalog.entries.firstWhere(
-          (entry) => entry.kind == situation.catalogKind,
-        ),
-      );
-      camera.analysis(frame);
-      expect(
-        camera.advice.type,
-        'situation',
-        reason: 'Recipe instructions must not replace measured scene advice',
-      );
-      expect(camera.contextualGuidance, isNotNull);
-      expect(camera.message, isNull);
-    }
+    camera.setSituation(PhotographicSituation.food);
+    camera.choose(
+      camera.catalog.entries.firstWhere((entry) => entry.kind == 'food'),
+    );
+    camera.analysis(frame);
+    expect(camera.advice.type, 'situation');
+    expect(camera.contextualGuidance, isNotNull);
+
+    camera.setSituation(PhotographicSituation.landscape);
+    camera.choose(
+      camera.catalog.entries.firstWhere((entry) => entry.kind == 'landscape'),
+    );
+    camera.analysis(frame);
+    expect(camera.advice.type, startsWith('catalog_landscape:'));
+    expect(camera.contextualGuidance, isNull);
+    expect(camera.canAdvanceGuidance, isTrue);
+    expect(camera.message, isNull);
     for (final situation in [
       PhotographicSituation.group,
       PhotographicSituation.action,

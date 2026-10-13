@@ -14,6 +14,18 @@ class PhotoStyle {
     'detail',
     'blueSky',
   ];
+
+  /// Controls exposed by the general Filters panel. Blue-sky processing is a
+  /// scene-aware Landscape Beautifier feature; the final legacy slot remains
+  /// in [fields] so native capture recipes stay wire-compatible.
+  static const adjustableFields = [
+    'exposure',
+    'warmth',
+    'color',
+    'contrast',
+    'softness',
+    'detail',
+  ];
   static const identity = <double>[
     1,
     0,
@@ -42,7 +54,7 @@ class PhotoStyle {
         ? kind == 'food'
               ? 'fresh'
               : kind == 'landscape'
-              ? 'blueSky'
+              ? 'natural'
               : kind == 'action'
               ? 'vivid'
               : kind == 'closeUp'

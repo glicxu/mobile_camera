@@ -11,5 +11,6 @@ export 'src/catalog.dart';
 export 'src/native_frame.dart';
 export 'src/photo_style.dart';
 export 'src/situations.dart';
+export 'src/landscape_coaching.dart';
 
 export 'src/pose_measurements.dart';

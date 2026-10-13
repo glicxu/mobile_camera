@@ -58,36 +58,42 @@ class PhotoEffectControls extends StatelessWidget {
       title: Text(review ? 'Photo treatment' : 'Beautifier'),
       children: [
         if (!review)
-          Wrap(
-            spacing: 8,
+          Column(
             children: [
-              for (final mode in ['auto', 'custom', 'off'])
-                ChoiceChip(
-                  label: Text(
-                    mode == 'auto'
-                        ? 'Auto'
-                        : mode == 'custom'
-                        ? 'Custom'
-                        : 'Off',
-                  ),
-                  selected: camera.beautifier == mode,
-                  onSelected: camera.busy
-                      ? null
-                      : (_) {
-                          camera.beautifier = mode;
-                          update();
-                        },
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: Text(
+                  'Choose Auto or Custom here. Use the Beautifier quick button on the camera screen to turn it on or off.',
                 ),
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final mode in ['auto', 'custom'])
+                    ChoiceChip(
+                      label: Text(mode == 'auto' ? 'Auto' : 'Custom'),
+                      selected: camera.beautifierMode == mode,
+                      onSelected: camera.busy
+                          ? null
+                          : (_) {
+                              camera.configureBeautifierMode(mode);
+                              update();
+                            },
+                    ),
+                ],
+              ),
             ],
           ),
-        if (!review && camera.beautifier == 'auto')
+        if (!review && camera.beautifierMode == 'auto')
           Padding(
             padding: const EdgeInsets.all(8),
             child: Text(
-              'Auto uses ${treatmentTitles[camera.captureTreatment]} for ${camera.activeSituation.title}.',
+              camera.configuredBeautifierTreatment == 'original'
+                  ? 'Auto uses Portrait or Landscape Beautifier when the scene calls for it. No beautifier is needed for ${camera.activeSituation.title}.'
+                  : 'Auto uses ${treatmentTitles[camera.configuredBeautifierTreatment]} for ${camera.activeSituation.title}.',
             ),
           ),
-        if (review || camera.beautifier == 'custom') ...[
+        if (review || camera.beautifierMode == 'custom') ...[
           if (showTreatmentSelector)
             DropdownButtonFormField<String>(
               key: ValueKey('beautifierType_${review}_$treatment'),
@@ -100,7 +106,8 @@ class PhotoEffectControls extends StatelessWidget {
               isExpanded: true,
               items: [
                 for (final entry in treatmentTitles.entries)
-                  if (allowedTreatments.contains(entry.key))
+                  if (allowedTreatments.contains(entry.key) &&
+                      (review || entry.key != 'enhance'))
                     DropdownMenuItem(
                       value: entry.key,
                       child: Text(entry.value),
@@ -114,7 +121,7 @@ class PhotoEffectControls extends StatelessWidget {
                         camera.reviewTreatment = value;
                       } else {
                         camera.customBeautifier = value;
-                        camera.beautifier = 'custom';
+                        camera.configureBeautifierMode('custom');
                       }
                       update();
                     },
@@ -140,8 +147,12 @@ class PhotoEffectControls extends StatelessWidget {
               ],
               onChanged: camera.busy && !review
                   ? null
-                  : (preset) {
+                  : (preset) async {
                       if (preset == null) return;
+                      if (!review) {
+                        await camera.selectBeautifierPreset(treatment, preset);
+                        return;
+                      }
                       settings['preset'] = preset;
                       if (preset != 'Custom') {
                         settings['strength'] = preset == 'Natural'

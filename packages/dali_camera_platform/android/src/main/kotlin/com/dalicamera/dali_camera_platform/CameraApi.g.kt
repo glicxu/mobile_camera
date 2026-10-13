@@ -370,7 +370,7 @@ private open class CameraApiPigeonCodec : StandardMessageCodec() {
 interface CameraHostApi {
   fun start(front: Boolean, callback: (Result<CameraSnapshot>) -> Unit)
   fun stop()
-  fun capture(callback: (Result<PhotoHandle>) -> Unit)
+  fun capture(shutterSound: Boolean, callback: (Result<PhotoHandle>) -> Unit)
   fun recover(): PhotoHandle?
   fun save(photo: PhotoHandle, callback: (Result<Unit>) -> Unit)
   fun replacementTarget(original: PhotoHandle): String?
@@ -446,8 +446,10 @@ interface CameraHostApi {
       run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.capture$separatedMessageChannelSuffix", codec)
         if (api != null) {
-          channel.setMessageHandler { _, reply ->
-            api.capture{ result: Result<PhotoHandle> ->
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val shutterSoundArg = args[0] as Boolean
+            api.capture(shutterSoundArg) { result: Result<PhotoHandle> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))

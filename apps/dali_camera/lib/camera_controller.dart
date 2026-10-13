@@ -40,6 +40,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   PhotographicSituation shootingMode = PhotographicSituation.auto;
   final situationClassifier = SituationClassifier();
   final subjectMotionTracker = SubjectMotionTracker();
+  final landscapeInstruments = LandscapeInstrumentState();
+  final landscapeCreativeCoach = LandscapeCreativeCoach();
   PhotographicSituation get activeSituation =>
       shootingMode == PhotographicSituation.auto
       ? situationClassifier.recommendation
@@ -60,6 +62,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (shootingMode == value) return;
     shootingMode = value;
     subjectMotionTracker.reset();
+    landscapeInstruments.reset();
+    landscapeCreativeCoach.reset();
     choose(null);
     if (lastFrame != null) analysis(jsonEncode(lastFrame));
   }
@@ -70,23 +74,71 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   bool bursting = false;
   int burstCount = 0;
   String longPress = 'burst';
+  bool shutterSound = true;
   String voicePhrase = '';
   String _filter = 'off';
   String customFilter = 'natural';
+  String filterMode = 'auto';
   String get filter => _filter;
+  bool get filterEnabled => filter != 'off';
   set filter(String value) {
     _filter = value;
-    if (value != 'auto' && value != 'off') customFilter = value;
+    if (value == 'auto') {
+      filterMode = 'auto';
+    } else if (value != 'off') {
+      filterMode = 'custom';
+      customFilter = value;
+    }
   }
 
   void useFilterMode(String mode) {
     filter = mode == 'custom' ? customFilter : mode;
   }
 
+  void configureFilterMode(String mode) {
+    if (mode != 'auto' && mode != 'custom') return;
+    filterMode = mode;
+    if (filterEnabled) useFilterMode(mode);
+  }
+
+  void setCustomFilter(String value) {
+    customFilter = value;
+    filterMode = 'custom';
+    if (filterEnabled) filter = value;
+  }
+
+  void toggleFilter() {
+    if (filterEnabled) {
+      filter = 'off';
+    } else {
+      useFilterMode(filterMode);
+    }
+    persistSettings();
+  }
+
   Map<String, int> customStyle = {};
   bool watermark = true;
   bool styled = false;
-  String beautifier = 'off';
+  String _beautifier = 'off';
+  String beautifierMode = 'auto';
+  String get beautifier => _beautifier;
+  bool get beautifierEnabled => beautifier != 'off';
+  set beautifier(String value) {
+    _beautifier = value;
+    if (value == 'auto' || value == 'custom') beautifierMode = value;
+  }
+
+  void configureBeautifierMode(String mode) {
+    if (mode != 'auto' && mode != 'custom') return;
+    beautifierMode = mode;
+    if (beautifierEnabled) beautifier = mode;
+  }
+
+  void toggleBeautifier() {
+    beautifier = beautifierEnabled ? 'off' : beautifierMode;
+    persistSettings();
+  }
+
   String customBeautifier = 'portrait';
   int depthLevel = 0;
   Timer? _focusIndicator;
@@ -94,7 +146,6 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   Map<String, dynamic>? photoAnalysis;
   String? analysisError;
   final Map<String, Map<String, dynamic>> captureTreatments = {
-    'enhance': {'strength': 3, 'flags': <String, bool>{}},
     'portrait': {
       'strength': 3,
       'preset': 'Polished',
@@ -114,17 +165,56 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   Timer? _reviewUpdate;
   int _reviewRevision = 0;
   PosePackageId coachingPackage = PosePackageId.neutral;
-  String get captureTreatment => beautifier == 'off'
-      ? 'original'
-      : beautifier == 'custom'
+  String get configuredBeautifierTreatment => beautifierMode == 'custom'
       ? customBeautifier
       : switch (activeSituation) {
           PhotographicSituation.portrait ||
           PhotographicSituation.group ||
           PhotographicSituation.personScene => 'portrait',
           PhotographicSituation.landscape => 'landscape',
-          _ => 'enhance',
+          _ => 'original',
         };
+  String get captureTreatment =>
+      beautifierEnabled ? configuredBeautifierTreatment : 'original';
+
+  Future<void> selectBeautifierAuto() async {
+    beautifierMode = 'auto';
+    beautifier = 'auto';
+    await persistSettings();
+  }
+
+  Future<void> selectBeautifierOff() async {
+    beautifier = 'off';
+    await persistSettings();
+  }
+
+  Future<void> selectBeautifierPreset(String treatment, String preset) async {
+    if (!['portrait', 'landscape'].contains(treatment)) return;
+    final settings = captureTreatments[treatment]!;
+    final supported = treatment == 'portrait'
+        ? const ['Natural', 'Polished', 'Glam', 'Custom']
+        : const ['Natural', 'Vivid', 'Dramatic', 'Custom'];
+    if (!supported.contains(preset)) return;
+    settings['preset'] = preset;
+    if (preset != 'Custom') {
+      settings['strength'] = preset == 'Natural'
+          ? 2
+          : (preset == 'Polished' || preset == 'Vivid')
+          ? 3
+          : 4;
+      settings['flags'] = treatment == 'portrait'
+          ? <String, bool>{
+              'eyeEnlargement': preset != 'Natural',
+              'lipPlumping': preset == 'Glam',
+            }
+          : <String, bool>{'sky': preset != 'Natural'};
+    }
+    customBeautifier = treatment;
+    beautifierMode = 'custom';
+    beautifier = 'custom';
+    await persistSettings();
+  }
+
   final List<PhotoHandle> history = [];
   final List<PhotoHandle> importedPhotos = [];
   final List<LibraryPhoto> libraryPhotos = [];
@@ -290,6 +380,13 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   PhotoStyle get style => filter == 'custom'
       ? PhotoStyle(customStyle)
       : PhotoStyle.preset(catalog, filter, activeSituation.name);
+  PhotoStyle get configuredStyle {
+    final selected = filterMode == 'auto' ? 'auto' : customFilter;
+    return selected == 'custom'
+        ? PhotoStyle(customStyle)
+        : PhotoStyle.preset(catalog, selected, activeSituation.name);
+  }
+
   bool get sequenceActive => countdown > 0 || bursting;
   bool debug = false;
   bool voice = false;
@@ -297,9 +394,18 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   String voiceStatus = 'Off';
   bool _depthUpdating = false;
   bool controlBusy = false;
+  bool _zoomRequestActive = false;
+  double? _pendingZoom;
   bool manualWorkspace = false;
   bool coachingEnabled = true;
+  bool guidesEnabled = false;
   bool controlsPresented = false;
+
+  void toggleGuides() {
+    guidesEnabled = !guidesEnabled;
+    if (!guidesEnabled) choose(null);
+    persistSettings();
+  }
 
   void setControlsPresented(bool value) {
     controlsPresented = value;
@@ -311,6 +417,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (coachingEnabled == enabled) return;
     coachingEnabled = enabled;
     engine.reset();
+    landscapeInstruments.reset();
+    landscapeCreativeCoach.reset();
     if (!enabled) {
       guidance = CatalogSession(null, catalog);
       guidanceDetail = '';
@@ -382,6 +490,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     contextualGuidance = null;
     engine.reset();
     subjectMotionTracker.reset();
+    landscapeInstruments.reset();
+    landscapeCreativeCoach.reset();
     notifyListeners();
     try {
       snapshot = await host.start(front);
@@ -447,7 +557,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
     try {
       final prior = selected;
-      original = await host.capture();
+      original = await host.capture(shutterSound);
       recordStage('camera');
       takingPhoto = false;
       capturedPhotoSequence++;
@@ -1081,9 +1191,16 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       _pendingCaptureId = pendingRecipe['id'] as String?;
       _pendingCaptureRecipe = pendingRecipe['recipe'] as String?;
       longPress = prefs.getString('longPress') ?? 'burst';
+      shutterSound = prefs.getBool('shutterSound') ?? true;
       voicePhrase = prefs.getString('voicePhrase') ?? '';
       voicePreferred = prefs.getBool('voicePreferred') ?? false;
-      final savedFilter = prefs.getString('filter') ?? 'auto';
+      guidesEnabled = prefs.getBool('guidesEnabled') ?? false;
+      final savedFilterValue = prefs.getString('filter') ?? 'auto';
+      final savedFilter = savedFilterValue == 'blueSky'
+          ? 'natural'
+          : savedFilterValue;
+      final savedFilterMode = prefs.getString('filterMode');
+      filterMode = savedFilterMode == 'custom' ? 'custom' : 'auto';
       filter =
           [
             'auto',
@@ -1093,7 +1210,13 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           ].contains(savedFilter)
           ? savedFilter
           : 'off';
-      final savedCustomFilter = prefs.getString('customFilter');
+      if (savedFilter == 'off') {
+        filterMode = savedFilterMode == 'custom' ? 'custom' : 'auto';
+      }
+      final storedCustomFilter = prefs.getString('customFilter');
+      final savedCustomFilter = storedCustomFilter == 'blueSky'
+          ? 'natural'
+          : storedCustomFilter;
       if (savedCustomFilter != null &&
           [
             'custom',
@@ -1103,9 +1226,14 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       }
       watermark = true; // Native free tier always includes the signature.
       final savedBeauty = prefs.getString('beautifier');
+      final savedBeautifierMode = prefs.getString('beautifierMode');
+      beautifierMode = savedBeautifierMode == 'custom' ? 'custom' : 'auto';
       beautifier = ['auto', 'custom', 'off'].contains(savedBeauty)
           ? savedBeauty!
           : 'off';
+      if (beautifier == 'off') {
+        beautifierMode = savedBeautifierMode == 'custom' ? 'custom' : 'auto';
+      }
       customBeautifier = prefs.getString('customBeautifier') ?? 'portrait';
       if (!captureTreatments.containsKey(customBeautifier)) {
         customBeautifier = 'portrait';
@@ -1145,6 +1273,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       customStyle = styleData.map(
         (k, v) => MapEntry(k as String, (v as num).toInt()),
       );
+      customStyle['blueSky'] = 0;
       for (final data
           in jsonDecode(prefs.getString('history') ?? '[]') as List) {
         if (File(data['path'] as String).existsSync()) {
@@ -1171,13 +1300,17 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('timerSeconds', timerSeconds);
       await prefs.setString('longPress', longPress);
+      await prefs.setBool('shutterSound', shutterSound);
       await prefs.setString('filter', filter);
+      await prefs.setString('filterMode', filterMode);
       await prefs.setString('customFilter', customFilter);
       await prefs.setString('voicePhrase', voicePhrase);
       await prefs.setBool('voicePreferred', voicePreferred);
+      await prefs.setBool('guidesEnabled', guidesEnabled);
       await prefs.setBool('watermark', watermark);
       await prefs.setString('customStyle', jsonEncode(customStyle));
       await prefs.setString('beautifier', beautifier);
+      await prefs.setString('beautifierMode', beautifierMode);
       await prefs.setString('customBeautifier', customBeautifier);
       await prefs.setString('reviewTreatment', reviewTreatment);
       await prefs.setString('coachingPackage', coachingPackage.name);
@@ -1299,8 +1432,50 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   Future<void> controls(double ev, bool locked) => _control(
     (current) => host.setControls(current.configurationId, ev, locked),
   );
-  Future<void> zoom(double value) =>
-      _control((current) => host.setZoom(current.configurationId, value));
+  Future<void> zoom(double value) async {
+    final initial = snapshot;
+    final minimum = initial?.minimumZoom;
+    final maximum = initial?.maximumZoom;
+    if (initial == null ||
+        minimum == null ||
+        maximum == null ||
+        busy ||
+        starting ||
+        reviewing ||
+        (controlBusy && !_zoomRequestActive) ||
+        !value.isFinite) {
+      return;
+    }
+    _pendingZoom = value.clamp(minimum, maximum).toDouble();
+    if (_zoomRequestActive) return;
+    _zoomRequestActive = true;
+    controlBusy = true;
+    notifyListeners();
+    try {
+      while (_pendingZoom != null) {
+        final requested = _pendingZoom!;
+        _pendingZoom = null;
+        final current = snapshot;
+        if (current == null || busy || starting || reviewing) break;
+        try {
+          final result = await host.setZoom(current.configurationId, requested);
+          if (foreground &&
+              snapshot?.configurationId == result.configurationId) {
+            snapshot = result;
+          }
+        } catch (e) {
+          message = 'Camera zoom failed: $e';
+          _pendingZoom = null;
+        }
+        notifyListeners();
+      }
+    } finally {
+      _zoomRequestActive = false;
+      controlBusy = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> meter(double x, double y) async {
     if (snapshot?.supportsTap != true || controlBusy || busy || reviewing) {
       return;
@@ -1464,23 +1639,45 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           cancelSequence();
           guidance = CatalogSession(null, catalog);
           engine.reset();
+          landscapeInstruments.reset();
+          landscapeCreativeCoach.reset();
         }
       }
       guidanceDetail = '';
-      contextualGuidance = activeSituation.supportsPoseGuidance
-          ? null
-          : situationGuidance(activeSituation, signals);
-      if (!activeSituation.showsPersonOverlay) {
+      if (activeSituation == PhotographicSituation.landscape) {
+        landscapeInstruments.update(
+          signals,
+          backgroundLuminance: packet.frame.luminance.value?.background,
+        );
+        if (guidance.entry?.kind == 'landscape') {
+          contextualGuidance = null;
+          advice = guidance.advice!;
+          guidanceDetail = guidance.complete
+              ? 'The composition sequence is complete.'
+              : 'Composition step ${guidance.index + 1} of ${guidance.cues.length}.';
+        } else {
+          contextualGuidance = landscapeCreativeCoach.update(signals);
+          guidanceDetail = contextualGuidance!.detail;
+          advice = contextualGuidance!.advice;
+        }
+      } else {
+        contextualGuidance = activeSituation.supportsPoseGuidance
+            ? null
+            : situationGuidance(activeSituation, signals);
+      }
+      if (activeSituation != PhotographicSituation.landscape &&
+          !activeSituation.showsPersonOverlay) {
         guidanceDetail = contextualGuidance!.detail;
         advice = contextualGuidance!.advice;
-      } else if (data['peopleStatus'] == 'unavailable') {
+      } else if (activeSituation != PhotographicSituation.landscape &&
+          data['peopleStatus'] == 'unavailable') {
         advice = const Advice(
           type: 'detector_unavailable',
           recipient: 'Camera',
           instruction: 'Detection unavailable. You can still take a photo.',
           tone: AdviceTone.waiting,
         );
-      } else {
+      } else if (activeSituation != PhotographicSituation.landscape) {
         final measures = packet.measurements;
         final issues = engine
             .issues(measures, includePosture: false)

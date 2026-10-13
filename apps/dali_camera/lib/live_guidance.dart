@@ -4,6 +4,7 @@ import 'package:dali_camera_core/dali_camera_core.dart';
 import 'camera_controller.dart';
 import 'coaching_overlay.dart';
 import 'distance_swipe.dart';
+import 'package_guide_carousel.dart';
 
 Color guidanceColor(AdviceTone tone) => switch (tone) {
   AdviceTone.ready => Colors.green,
@@ -23,9 +24,15 @@ class LiveGuidancePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final reference = camera.guidance.entry;
     final pose = reference?.kind == 'pose';
+    final guided = pose || reference?.kind == 'landscape';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (camera.guidesEnabled)
+          PackageGuideCarousel(
+            key: ValueKey('guideCarousel-${camera.activeSituation.name}'),
+            camera: camera,
+          ),
         if (reference != null)
           _ReferenceCard(
             camera: camera,
@@ -33,7 +40,7 @@ class LiveGuidancePanel extends StatelessWidget {
             onExample: () => onExample(reference),
           ),
         if (!pose) _SceneCard(camera: camera),
-        if (pose)
+        if (guided)
           Container(
             key: const Key('guidedControls'),
             padding: const EdgeInsets.all(8),
@@ -81,8 +88,10 @@ class _SceneCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final advice = camera.contextualGuidance?.advice ?? camera.advice;
     final detail = camera.contextualGuidance?.detail ?? camera.guidanceDetail;
-    final color = guidanceColor(advice.tone);
     final situation = camera.activeSituation;
+    final color = situation == PhotographicSituation.landscape
+        ? Colors.teal
+        : guidanceColor(advice.tone);
     final icon = advice.direction != null
         ? coachingDirectionIcon(advice.direction!)
         : switch (situation) {
@@ -126,7 +135,8 @@ class _SceneCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                _StatusLight(color: color, label: advice.statusTitle),
+                if (situation != PhotographicSituation.landscape)
+                  _StatusLight(color: color, label: advice.statusTitle),
               ],
             ),
             const SizedBox(height: 8),
@@ -254,23 +264,31 @@ class _ReferenceCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                    const SizedBox(height: 5),
-                    Text(
-                      item.cues.join(' '),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                    if (pose) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        item.cues.join(' '),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      'Recommended angle: ${camera.catalog.angleTitle(item)}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.teal,
+                      const SizedBox(height: 5),
+                      Text(
+                        'Recommended angle: ${camera.catalog.angleTitle(item)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                        ),
                       ),
-                    ),
+                    ] else ...[
+                      const SizedBox(height: 5),
+                      const Text(
+                        'Follow one composition step below. Tap for the full example, light, and safety note.',
+                        style: TextStyle(fontSize: 12, color: Colors.white70),
+                      ),
+                    ],
                     const SizedBox(height: 5),
                     Text(
                       '${pose ? "Lighting" : "Best light"}: ${camera.catalog.lightTitle(item)}',

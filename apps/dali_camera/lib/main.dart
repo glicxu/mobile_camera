@@ -18,9 +18,11 @@ import 'review_treatment_controls.dart';
 import 'camera_header.dart';
 import 'coaching_overlay.dart';
 import 'live_guidance.dart';
+import 'landscape_instruments.dart';
 import 'distance_swipe.dart';
 import 'app_settings.dart';
 import 'camera_tutorial.dart';
+import 'beautifier_quick_sheet.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +37,23 @@ bool canLevelHorizon(Map<String, dynamic>? analysis) {
   return angle is num &&
       angle.abs() > 3 &&
       (confidence == null || (confidence is num && confidence > .55));
+}
+
+double orientedPreviewAspect(double value, Orientation orientation) {
+  final ratio = value.isFinite && value > 0 ? value : .75;
+  return orientation == Orientation.landscape
+      ? (ratio < 1 ? 1 / ratio : ratio)
+      : (ratio > 1 ? 1 / ratio : ratio);
+}
+
+double zoomOutTarget(double current, double minimum, double maximum) {
+  if (minimum < 1 && current <= 1.01) return minimum;
+  return (current / 1.25).clamp(minimum, maximum).toDouble();
+}
+
+double zoomInTarget(double current, double minimum, double maximum) {
+  if (current < .99 && maximum >= 1) return 1;
+  return (current * 1.25).clamp(minimum, maximum).toDouble();
 }
 
 class DaliApp extends StatelessWidget {
@@ -78,7 +97,10 @@ class _CameraScreenState extends State<CameraScreen>
   bool initialized = false;
   bool manualToolsVisible = false;
   int presentedCameraSheets = 0;
-  Orientation? orientation;
+  final GlobalKey previewPlatformViewKey = GlobalKey(
+    debugLabel: 'camera-preview',
+  );
+  double pinchZoomStart = 1;
   @override
   void initState() {
     super.initState();
@@ -155,18 +177,16 @@ class _CameraScreenState extends State<CameraScreen>
   @override
   Widget build(BuildContext context) {
     final current = MediaQuery.orientationOf(context);
-    if (orientation != null && current != orientation && !camera.reviewing) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) camera.start();
-      });
-    }
-    orientation = current;
     return Scaffold(
       body: SafeArea(child: camera.reviewing ? review() : live(current)),
     );
   }
 
   Widget live(Orientation orientation) {
+    final zoomMinimum = camera.snapshot?.minimumZoom ?? 1;
+    final zoomMaximum = camera.snapshot?.maximumZoom ?? 1;
+    final zoomCurrent = camera.snapshot?.currentZoom ?? zoomMinimum;
+    final zoomAvailable = zoomMaximum > zoomMinimum + .01;
     final controls = Column(
       children: [
         Expanded(
@@ -194,8 +214,9 @@ class _CameraScreenState extends State<CameraScreen>
                 if (camera.coachingEnabled) ...[
                   CameraSelectionRow(
                     camera: camera,
-                    onPackages: () => cameraSheet(chooser),
-                    onEffects: () => cameraSheet(effects),
+                    onBeautifierLongPress: () => cameraSheet(
+                      () => showBeautifierQuickSheet(context, camera),
+                    ),
                   ),
                   LiveGuidancePanel(
                     camera: camera,
@@ -322,9 +343,18 @@ class _CameraScreenState extends State<CameraScreen>
     final preview = LayoutBuilder(
       builder: (context, bounds) => Center(
         child: AspectRatio(
-          aspectRatio: camera.aspectRatio,
+          aspectRatio: orientedPreviewAspect(camera.aspectRatio, orientation),
           child: LayoutBuilder(
             builder: (context, previewBounds) => GestureDetector(
+              onScaleStart: zoomAvailable
+                  ? (_) => pinchZoomStart = zoomCurrent
+                  : null,
+              onScaleUpdate: zoomAvailable
+                  ? (details) {
+                      if (details.pointerCount < 2) return;
+                      camera.zoom(pinchZoomStart * details.scale);
+                    }
+                  : null,
               onTapUp:
                   camera.capturePreviewPath == null &&
                       camera.snapshot?.supportsTap == true
@@ -339,11 +369,85 @@ class _CameraScreenState extends State<CameraScreen>
                   if (!camera.livePreviewEnabled)
                     const ColoredBox(color: Colors.black)
                   else if (Platform.isAndroid)
-                    const AndroidView(viewType: 'dali/camera')
+                    AndroidView(
+                      key: previewPlatformViewKey,
+                      viewType: 'dali/camera',
+                    )
                   else if (Platform.isIOS)
-                    const UiKitView(viewType: 'dali/camera')
+                    UiKitView(
+                      key: previewPlatformViewKey,
+                      viewType: 'dali/camera',
+                    )
                   else
                     const Center(child: Text('Use an Android or iOS phone.')),
+                  if (zoomAvailable)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 10,
+                      child: Center(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: .62),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                key: const Key('zoomOut'),
+                                tooltip: 'Zoom out',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: zoomCurrent > zoomMinimum + .01
+                                    ? () => camera.zoom(
+                                        zoomOutTarget(
+                                          zoomCurrent,
+                                          zoomMinimum,
+                                          zoomMaximum,
+                                        ),
+                                      )
+                                    : null,
+                                icon: const Icon(Icons.remove, size: 18),
+                              ),
+                              SizedBox(
+                                width: 52,
+                                child: Text(
+                                  '${zoomCurrent.toStringAsFixed(1)}×',
+                                  key: const Key('zoomValue'),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                key: const Key('zoomIn'),
+                                tooltip: 'Zoom in',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: zoomCurrent < zoomMaximum - .01
+                                    ? () => camera.zoom(
+                                        zoomInTarget(
+                                          zoomCurrent,
+                                          zoomMinimum,
+                                          zoomMaximum,
+                                        ),
+                                      )
+                                    : null,
+                                icon: const Icon(Icons.add, size: 18),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (camera.coachingEnabled && camera.landscape)
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      child: LandscapeInstrumentOverlay(
+                        state: camera.landscapeInstruments,
+                      ),
+                    ),
                   if (camera.coachingEnabled &&
                       camera.activeSituation.showsPersonOverlay)
                     CoachingOverlay(
@@ -1195,36 +1299,6 @@ class _CameraScreenState extends State<CameraScreen>
     if (result is CatalogEntry) camera.choose(result);
   }
 
-  Future<void> effects() {
-    camera.cancelSequence();
-    return showModalBottomSheet<void>(
-      context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
-      builder: (ctx) => AnimatedBuilder(
-        animation: camera,
-        builder: (ctx, _) => SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                title: const Text('Effects'),
-                trailing: IconButton(
-                  tooltip: 'Close effects',
-                  onPressed: () => Navigator.pop(ctx),
-                  icon: const Icon(Icons.close),
-                ),
-              ),
-              CaptureStyleControls(camera: camera, initiallyExpanded: true),
-              PhotoEffectControls(camera: camera),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> details(CatalogEntry item) => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -1371,7 +1445,7 @@ class _CameraScreenState extends State<CameraScreen>
       title: const Text('Take a photo with Dali'),
       content: const SingleChildScrollView(
         child: Text(
-          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Next confirms a posture step; Dali does not verify the pose.\n\nTap the shutter for one photo; hold for a paced burst. Timer and custom voice phrase are in Camera controls. Voice runs on device where your phone supports it.\n\nEffects has separate Filter and Beautifier Auto, Custom, and Off choices. Depth of focus softens the background around the detected subject or your focus point. Selected effects and the signature are applied before the final photo saves to Photos. A private original is retained for review and recovery.\n\nReview offers Original, Reframe, Level, General Enhance, Portrait Polish, and Landscape Polish when measurements are available. Before exports the original; After and Split export the selected version. Tap the photo to zoom and move the comparison split.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed processing or saves retain the private capture for retry.',
+          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Next confirms a posture step; Dali does not verify the pose.\n\nPinch the live preview or use − and + to zoom. Tap the shutter for one photo; hold for a paced burst. Click sound, timer, and custom voice phrase are in Camera controls. Voice runs on device where your phone supports it.\n\nFilters and Beautifier have separate quick on/off buttons. Open Camera controls to choose Auto or Custom and fine-tune each effect. Depth of focus softens the background around the detected subject or your focus point. Selected effects and the signature are applied before the final photo saves to Photos. A private original is retained for review and recovery.\n\nReview offers Original, Reframe, Level, General Enhance, Portrait Polish, and Landscape Polish when measurements are available. Before exports the original; After and Split export the selected version. Tap the photo to zoom and move the comparison split.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed processing or saves retain the private capture for retry.',
         ),
       ),
       actions: [
