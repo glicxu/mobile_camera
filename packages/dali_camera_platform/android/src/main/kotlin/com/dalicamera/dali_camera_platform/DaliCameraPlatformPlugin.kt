@@ -41,6 +41,9 @@ import io.flutter.plugin.common.PluginRegistry
 import io.flutter.plugin.platform.*
 import org.json.*
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Executors
 import kotlin.math.*
@@ -477,6 +480,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     if (cursor.moveToFirst()) ContentUris.withAppendedId(collection, cursor.getLong(0)) else null }
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, name); put(MediaStore.Images.Media.MIME_TYPE, photo.mimeType ?: "image/jpeg")
+                    put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
                     if (Build.VERSION.SDK_INT >= 29) { put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Dali"); put(MediaStore.Images.Media.IS_PENDING, 1) }
                 }
                 val uri = existing ?: (context.contentResolver.insert(collection, values) ?: error("Gallery insert failed")).also { inserted = it }
@@ -624,7 +628,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 val photos = mutableListOf<LibraryPhoto>()
                 context.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                     arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.DATE_ADDED), null, null,
-                    "${MediaStore.Images.Media.DATE_TAKEN} DESC, ${MediaStore.Images.Media.DATE_ADDED} DESC, ${MediaStore.Images.Media._ID} DESC")?.use { cursor ->
+                    "${MediaStore.Images.Media.DATE_ADDED} DESC, ${MediaStore.Images.Media._ID} DESC")?.use { cursor ->
                     while (cursor.moveToNext()) {
                         val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0))
                         val timestamp = cursor.getLong(2).takeIf { it > 0 } ?: (cursor.getLong(3) * 1000)
@@ -770,6 +774,19 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 }
                 val file = photoFile(); destination = file
                 file.outputStream().use { check(image.compress(Bitmap.CompressFormat.JPEG, 95, it)) }
+                val capturedAt = runCatching {
+                    ExifInterface(original.path).let { sourceExif ->
+                        sourceExif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
+                            ?: sourceExif.getAttribute(ExifInterface.TAG_DATETIME)
+                    }
+                }.getOrNull()
+                    ?: SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(Date())
+                ExifInterface(file).apply {
+                    setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, capturedAt)
+                    setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, capturedAt)
+                    setAttribute(ExifInterface.TAG_DATETIME, capturedAt)
+                    saveAttributes()
+                }
                 main.post { callback(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false, "image/jpeg"))) }
             } catch (error: Throwable) {
                 destination?.delete()

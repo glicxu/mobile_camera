@@ -183,6 +183,9 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Widget live(Orientation orientation) {
+    final latestPhoto = camera.original == null
+        ? null
+        : camera.selected ?? camera.original;
     final zoomMinimum = camera.snapshot?.minimumZoom ?? 1;
     final zoomMaximum = camera.snapshot?.maximumZoom ?? 1;
     final zoomCurrent = camera.snapshot?.currentZoom ?? zoomMinimum;
@@ -240,27 +243,34 @@ class _CameraScreenState extends State<CameraScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton(
-                tooltip: 'Open photo library',
-                icon: camera.original == null
-                    ? const Icon(Icons.photo_library_outlined, size: 26)
-                    : ClipRRect(
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (latestPhoto != null)
+                    IconButton(
+                      tooltip: 'View last photo',
+                      icon: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: Image.file(
-                          File(camera.original!.path),
+                          File(latestPhoto.path),
                           width: 52,
                           height: 52,
                           cacheWidth: 160,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, error, stack) => const Icon(
-                            Icons.photo_library_outlined,
-                            size: 26,
-                          ),
+                          errorBuilder: (_, error, stack) =>
+                              const Icon(Icons.photo_outlined, size: 26),
                         ),
                       ),
-                onPressed: camera.busy
-                    ? null
-                    : () => cameraSheet(openPhotoLibrary),
+                      onPressed: camera.busy ? null : camera.openLatest,
+                    ),
+                  IconButton(
+                    tooltip: 'Open photo library',
+                    icon: const Icon(Icons.photo_library_outlined, size: 26),
+                    onPressed: camera.busy
+                        ? null
+                        : () => cameraSheet(openPhotoLibrary),
+                  ),
+                ],
               ),
               Semantics(
                 label: camera.takingPhoto

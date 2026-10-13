@@ -1958,6 +1958,49 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets(
+    'Capture thumbnail opens its photo, not the newest library item',
+    (tester) async {
+      final host = FakeHost()
+        ..libraryResult = PhotoLibrary(
+          status: 'authorized',
+          photos: [LibraryPhoto(id: 'other', title: 'Other photo')],
+        );
+      final camera = CameraController(host: host, register: false);
+      await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+      await tester.pumpAndSettle();
+      camera.watermark = false;
+      camera.filter = 'fresh';
+      final capture = camera.capturePhoto(review: false);
+      await tester.pump();
+      await capture;
+      await tester.pumpAndSettle();
+
+      final thumbnail = tester.widget<Image>(
+        find.descendant(
+          of: find.byTooltip('View last photo'),
+          matching: find.byType(Image),
+        ),
+      );
+      expect(
+        ((thumbnail.image as ResizeImage).imageProvider as FileImage).file.path,
+        'effects.jpg',
+      );
+      await tester.tap(find.byTooltip('View last photo'));
+      await tester.pumpAndSettle();
+      expect(camera.reviewing, isTrue);
+      expect(camera.original!.id, 'original-1');
+      expect(camera.selected!.id, 'original-1-final');
+      expect(host.loadedLibraryIds, isEmpty);
+
+      await camera.returnToCamera();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Open photo library'));
+      await tester.pumpAndSettle();
+      expect(camera.original!.id, 'copy-other');
+      camera.dispose();
+    },
+  );
+  testWidgets(
     'Shutter, Help and settings remain reachable at large text sizes',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
