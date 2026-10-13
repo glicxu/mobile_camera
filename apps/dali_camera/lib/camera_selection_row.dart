@@ -28,19 +28,27 @@ class CameraSelectionRow extends StatelessWidget {
           itemBuilder: (_) => [
             for (final mode in PhotographicSituation.values)
               PopupMenuItem(
+                key: Key('situationOption_${mode.name}'),
                 value: mode,
-                child: Row(
-                  children: [
-                    Expanded(child: Text(mode.title)),
-                    if (camera.shootingMode == mode)
-                      const Icon(Icons.check, size: 18),
-                  ],
+                height: 56,
+                child: Tooltip(
+                  message: mode.title,
+                  child: Semantics(
+                    label: mode.title,
+                    selected: camera.shootingMode == mode,
+                    child: Center(
+                      child: _StateIcon(
+                        icon: _situationIcon(mode),
+                        enabled: camera.shootingMode == mode,
+                      ),
+                    ),
+                  ),
                 ),
               ),
           ],
           child: _StateIcon(
-            icon: Icons.camera_alt_outlined,
-            enabled: camera.shootingMode != PhotographicSituation.auto,
+            icon: _situationIcon(camera.shootingMode),
+            enabled: true,
             disabled: camera.busy,
             dropdown: true,
           ),
@@ -74,6 +82,17 @@ class CameraSelectionRow extends StatelessWidget {
     );
   }
 }
+
+IconData _situationIcon(PhotographicSituation situation) => switch (situation) {
+  PhotographicSituation.auto => Icons.auto_mode,
+  PhotographicSituation.portrait => Icons.person_outline,
+  PhotographicSituation.group => Icons.groups_outlined,
+  PhotographicSituation.personScene => Icons.person_pin_circle_outlined,
+  PhotographicSituation.landscape => Icons.landscape_outlined,
+  PhotographicSituation.action => Icons.directions_run,
+  PhotographicSituation.closeUp => Icons.center_focus_strong,
+  PhotographicSituation.food => Icons.restaurant_outlined,
+};
 
 class _EffectToggle extends StatelessWidget {
   const _EffectToggle({

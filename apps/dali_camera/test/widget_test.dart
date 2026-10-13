@@ -1620,6 +1620,10 @@ void main() {
     expect(find.text('Beautifier'), findsNothing);
     expect(find.text('Guides'), findsNothing);
     expect(
+      tester.widget<Icon>(find.byIcon(Icons.auto_mode)).color,
+      Colors.greenAccent.shade400,
+    );
+    expect(
       tester.widget<Icon>(find.byIcon(Icons.filter_alt_outlined)).color,
       Colors.grey.shade500,
     );
@@ -1642,12 +1646,47 @@ void main() {
 
     await tester.tap(find.byKey(const Key('situationMenu')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Group'));
+    expect(find.text('Group'), findsNothing);
+    expect(
+      tester
+          .widget<Icon>(
+            find.descendant(
+              of: find.byKey(const Key('situationOption_auto')),
+              matching: find.byIcon(Icons.auto_mode),
+            ),
+          )
+          .color,
+      Colors.greenAccent.shade400,
+    );
+    expect(
+      tester
+          .widget<Icon>(
+            find.descendant(
+              of: find.byKey(const Key('situationOption_group')),
+              matching: find.byIcon(Icons.groups_outlined),
+            ),
+          )
+          .color,
+      Colors.grey.shade500,
+    );
+    await tester.tap(find.byKey(const Key('situationOption_group')));
     await tester.pumpAndSettle();
     expect(camera.activeSituation, PhotographicSituation.group);
+    expect(find.byIcon(Icons.groups_outlined), findsOneWidget);
     await tester.tap(find.byKey(const Key('situationMenu')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Food'));
+    expect(
+      tester
+          .widget<Icon>(
+            find.descendant(
+              of: find.byKey(const Key('situationOption_group')),
+              matching: find.byIcon(Icons.groups_outlined),
+            ),
+          )
+          .color,
+      Colors.greenAccent.shade400,
+    );
+    await tester.tap(find.byKey(const Key('situationOption_food')));
     await tester.pumpAndSettle();
     expect(camera.food, isTrue);
     expect(find.byKey(const Key('packageGuideCarousel')), findsOneWidget);
