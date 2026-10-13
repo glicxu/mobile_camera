@@ -38,6 +38,9 @@ identity and icon so development builds can coexist with production installs.
 - All 51 native iOS tests pass.
 - Unsigned iOS Release device build passes and reports `Dali Cam`,
   `com.dalifin.camera`, version `1.0.0`, build `2`.
+- The Release target is also development-signed with the production bundle ID,
+  installed on the attached iPhone 13 Pro, and launched successfully. The
+  separate `Dali Cam Test` Profile app remains installed.
 - The preceding Profile candidate passed the physical iPhone camera and native
   bridge suites recorded in
   [Flutter iPhone Port — Remaining Work Checklist](cross_platform_iphone_remaining_work.md).
@@ -45,8 +48,8 @@ identity and icon so development builds can coexist with production installs.
 ## Packaging follow-ups
 
 - Create and export the distribution-signed iOS archive in App Store Connect.
-  The local release verification intentionally did not replace the production
-  app installed on the attached iPhone.
+  The device build uses the registered development profile and is not an App
+  Store distribution archive.
 - Configure the protected Android release keystore in CI. The current Gradle
   release target uses debug signing for development, and this Mac does not have
   an Android SDK, so no Android store artifact was produced at this checkpoint.
