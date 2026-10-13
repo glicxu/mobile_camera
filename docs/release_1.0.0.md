@@ -53,8 +53,13 @@ identity and icon so development builds can coexist with production installs.
 - Complete App Store listing metadata, select build `5`, and submit the release
   for App Review when the product listing is ready. Uploading the valid build
   does not submit or publish the app.
-- Configure the protected Android release keystore in CI. The current Gradle
-  release target uses debug signing for development, and this Mac does not have
-  an Android SDK, so no Android store artifact was produced at this checkpoint.
+- Android Play bundles require the Dali Camera upload keystore. Set
+  `DALI_ANDROID_UPLOAD_KEYSTORE`, `DALI_ANDROID_UPLOAD_STORE_PASSWORD`,
+  `DALI_ANDROID_UPLOAD_KEY_ALIAS`, and `DALI_ANDROID_UPLOAD_KEY_PASSWORD` in the
+  build environment, then run `flutter build appbundle --release` from
+  `apps/dali_camera`. Release builds fail when these values are absent; the
+  debug keystore must not be used for Play uploads. Keep the keystore and
+  passwords outside Git. Confirm the Play Console package and next available
+  version code before uploading the bundle to the intended track.
 - Keep the native source and rollback instructions until the production rollout
   and data-migration behavior are accepted.

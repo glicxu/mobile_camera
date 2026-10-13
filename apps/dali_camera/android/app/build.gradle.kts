@@ -4,6 +4,28 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val releaseRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+val uploadKeystorePath = System.getenv("DALI_ANDROID_UPLOAD_KEYSTORE")
+val uploadStorePassword = System.getenv("DALI_ANDROID_UPLOAD_STORE_PASSWORD")
+val uploadKeyAlias = System.getenv("DALI_ANDROID_UPLOAD_KEY_ALIAS")
+val uploadKeyPassword = System.getenv("DALI_ANDROID_UPLOAD_KEY_PASSWORD")
+
+if (releaseRequested) {
+    check(
+        listOf(uploadKeystorePath, uploadStorePassword, uploadKeyAlias, uploadKeyPassword)
+            .all { !it.isNullOrBlank() }
+    ) {
+        "Android Release requires DALI_ANDROID_UPLOAD_KEYSTORE, " +
+            "DALI_ANDROID_UPLOAD_STORE_PASSWORD, DALI_ANDROID_UPLOAD_KEY_ALIAS, " +
+            "and DALI_ANDROID_UPLOAD_KEY_PASSWORD."
+    }
+    check(file(uploadKeystorePath!!).isFile) {
+        "Android upload keystore file does not exist."
+    }
+}
+
 android {
     namespace = "com.dalicamera.dali_camera"
     compileSdk = flutter.compileSdkVersion
@@ -26,11 +48,20 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (releaseRequested) {
+            create("upload") {
+                storeFile = file(uploadKeystorePath!!)
+                storePassword = uploadStorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("upload")
         }
     }
 }

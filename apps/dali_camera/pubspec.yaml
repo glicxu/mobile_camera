@@ -13,10 +13,12 @@ dependencies:
     path: ../../packages/dali_camera_platform
   shared_preferences: ^2.5.6
   package_info_plus: ^10.2.2
+  # Flutter generates Android plugin registration for integration_test in
+  # release builds, so its native plugin must be on the release classpath.
+  integration_test:
+    sdk: flutter
 dev_dependencies:
   flutter_test:
-    sdk: flutter
-  integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
 flutter:
