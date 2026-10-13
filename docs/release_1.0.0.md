@@ -59,7 +59,9 @@ identity and icon so development builds can coexist with production installs.
   build environment, then run `flutter build appbundle --release` from
   `apps/dali_camera`. Release builds fail when these values are absent; the
   debug keystore must not be used for Play uploads. Keep the keystore and
-  passwords outside Git. Confirm the Play Console package and next available
-  version code before uploading the bundle to the intended track.
+  passwords outside Git. Release bundles use `com.dalifin.camera`; Android
+  debug builds retain `com.dalicamera.dali_camera`. Confirm that the Play
+  listing exists under the production package and choose an unused version
+  code before uploading the bundle to the intended track.
 - Keep the native source and rollback instructions until the production rollout
   and data-migration behavior are accepted.
