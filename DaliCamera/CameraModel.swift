@@ -475,6 +475,7 @@ final class CameraModel: NSObject, ObservableObject {
                 case .manual:
                     device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
                 case .shutterPriority:
+                    #if DALI_IOS27_EXPOSURE
                     if #available(iOS 27.0, *), format.supportsExposureModeCustom(
                         lensAperture: AVCaptureDevice.autoLensAperture,
                         duration: duration,
@@ -487,7 +488,11 @@ final class CameraModel: NSObject, ObservableObject {
                             completionHandler: nil
                         )
                     }
+                    #else
+                    break
+                    #endif
                 case .aperturePriority:
+                    #if DALI_IOS27_EXPOSURE
                     if #available(iOS 27.0, *) {
                         let aperture = Float(min(
                             Double(format.maxLensAperture),
@@ -506,6 +511,9 @@ final class CameraModel: NSObject, ObservableObject {
                             )
                         }
                     }
+                    #else
+                    break
+                    #endif
                 }
                 device.unlockForConfiguration()
                 let snapshot = Self.cameraControlSnapshot(for: device)
@@ -860,6 +868,7 @@ final class CameraModel: NSObject, ObservableObject {
         var supportsAperturePriority = false
         var minimumAperture: Double?
         var maximumAperture: Double?
+        #if DALI_IOS27_EXPOSURE
         if #available(iOS 27.0, *) {
             let format = device.activeFormat
             supportsShutterPriority = format.supportsExposureModeCustom(
@@ -875,6 +884,7 @@ final class CameraModel: NSObject, ObservableObject {
             minimumAperture = Double(format.minLensAperture)
             maximumAperture = Double(format.maxLensAperture)
         }
+        #endif
         let lensName: String
         switch device.deviceType {
         case .builtInUltraWideCamera: lensName = "Ultra Wide"

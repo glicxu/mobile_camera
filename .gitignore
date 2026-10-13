@@ -5,4 +5,9 @@ build/
 .expo/
 .env
 .dart_tool/
+.kotlin/
 *.xcresult/
+packages/dali_camera_platform/example/
+
+__pycache__/
+*.pyc

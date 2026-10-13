@@ -13,6 +13,31 @@ class Advice {
   final String instruction;
   final AdviceTone tone;
 
+  String get statusTitle => switch (tone) {
+    AdviceTone.waiting => 'Checking',
+    AdviceTone.ready => 'Looks good',
+    AdviceTone.warning || AdviceTone.danger => 'Needs attention',
+  };
+  String? get direction {
+    final text = instruction.toLowerCase();
+    if (text.contains('move') && text.contains('left')) return 'left';
+    if (text.contains('move') && text.contains('right')) return 'right';
+    if (text.contains('raise') || text.contains('move up')) return 'up';
+    if (text.contains('lower') || text.contains('move down')) return 'down';
+    if (text.contains('step closer') || text.contains('move closer')) {
+      return 'closer';
+    }
+    if (text.contains('step back') ||
+        text.contains('farther back') ||
+        text.contains('move back') ||
+        type == 'feet_cropped') {
+      return 'farther';
+    }
+    if (text.contains('tilt left')) return 'rotateLeft';
+    if (text.contains('tilt right')) return 'rotateRight';
+    return null;
+  }
+
   @override
   bool operator ==(Object other) =>
       other is Advice &&
@@ -181,6 +206,25 @@ class FaceAnalysis {
 }
 
 class PoseAnalysis {
+  factory PoseAnalysis.fromJson(Map<String, Object?> json) => PoseAnalysis(
+    confidence: (json['confidence'] as num).toDouble(),
+    visibleKeypointCount: json['visibleKeypointCount'] as int,
+    armVisibilityScore: (json['armVisibilityScore'] as num).toDouble(),
+    shoulderLineAngleDegrees: (json['shoulderLineAngleDegrees'] as num?)
+        ?.toDouble(),
+    shoulderHeightAsymmetry: (json['shoulderHeightAsymmetry'] as num?)
+        ?.toDouble(),
+    torsoAngleDegrees: (json['torsoAngleDegrees'] as num?)?.toDouble(),
+    wristToFaceDistance: (json['wristToFaceDistance'] as num?)?.toDouble(),
+    stanceWidth: (json['stanceWidth'] as num?)?.toDouble(),
+    headToTorsoRatio: (json['headToTorsoRatio'] as num?)?.toDouble(),
+    shouldersHighScore: (json['shouldersHighScore'] as num?)?.toDouble(),
+    bodySquarenessScore: (json['bodySquarenessScore'] as num?)?.toDouble(),
+    bodyProfileScore: (json['bodyProfileScore'] as num?)?.toDouble(),
+    armsFlatAgainstBodyScore: (json['armsFlatAgainstBodyScore'] as num?)
+        ?.toDouble(),
+    minWristEdgeDistance: (json['minWristEdgeDistance'] as num?)?.toDouble(),
+  );
   const PoseAnalysis({
     required this.confidence,
     required this.visibleKeypointCount,
@@ -212,6 +256,22 @@ class PoseAnalysis {
   final double? bodyProfileScore;
   final double? armsFlatAgainstBodyScore;
   final double? minWristEdgeDistance;
+  Map<String, Object?> toJson() => {
+    'confidence': confidence,
+    'visibleKeypointCount': visibleKeypointCount,
+    'shoulderLineAngleDegrees': shoulderLineAngleDegrees,
+    'shoulderHeightAsymmetry': shoulderHeightAsymmetry,
+    'torsoAngleDegrees': torsoAngleDegrees,
+    'wristToFaceDistance': wristToFaceDistance,
+    'armVisibilityScore': armVisibilityScore,
+    'stanceWidth': stanceWidth,
+    'headToTorsoRatio': headToTorsoRatio,
+    'shouldersHighScore': shouldersHighScore,
+    'bodySquarenessScore': bodySquarenessScore,
+    'bodyProfileScore': bodyProfileScore,
+    'armsFlatAgainstBodyScore': armsFlatAgainstBodyScore,
+    'minWristEdgeDistance': minWristEdgeDistance,
+  };
 }
 
 enum PosePackageId { neutral, feminine, masculine, professional, groupPortrait }
