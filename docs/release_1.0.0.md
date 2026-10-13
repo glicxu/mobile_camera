@@ -1,10 +1,10 @@
 # Dali Cam 1.0.0 release
 
-Date: October 12, 2026
+Date: October 13, 2026
 
-Build: 2
+Build: 5
 
-Release source: `codex/cross-platform-20261007`
+Release source: `main`
 
 ## Release decision
 
@@ -34,15 +34,15 @@ identity and icon so development builds can coexist with production installs.
 
 - Shared catalog and native-processing export checks pass.
 - Dart analysis passes; all 37 shared-core tests pass.
-- Flutter analysis passes; all 44 app tests pass.
+- Flutter analysis passes; all 45 app tests pass.
 - All 51 native iOS tests pass.
-- Unsigned iOS Release device build passes and reports `Dali Cam`,
-  `com.dalifin.camera`, version `1.0.0`, build `2`.
+- The App Store archive reports `Dali Cam`, `com.dalifin.camera`, version
+  `1.0.0`, build `5`.
 - The Release target is also development-signed with the production bundle ID,
   installed on the attached iPhone 13 Pro, and launched successfully. The
   separate `Dali Cam Test` Profile app remains installed.
-- The App Store archive was exported and uploaded to App Store Connect on
-  October 12, 2026. Apple finished ingesting build `2` with processing state
+- The current App Store archive was exported and uploaded to App Store Connect
+  on October 13, 2026. Apple finished ingesting build `5` with processing state
   `VALID` for App Store Connect app `6822162016`.
 - The preceding Profile candidate passed the physical iPhone camera and native
   bridge suites recorded in
@@ -50,7 +50,7 @@ identity and icon so development builds can coexist with production installs.
 
 ## Packaging follow-ups
 
-- Complete App Store listing metadata, select build `2`, and submit the release
+- Complete App Store listing metadata, select build `5`, and submit the release
   for App Review when the product listing is ready. Uploading the valid build
   does not submit or publish the app.
 - Configure the protected Android release keystore in CI. The current Gradle
