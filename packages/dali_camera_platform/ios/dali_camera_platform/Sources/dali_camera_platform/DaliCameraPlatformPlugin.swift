@@ -433,10 +433,15 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             do {
                 guard self.active, configurationId == self.configuration, let device = self.device, device.exposureMode != .custom else { throw self.failure("Camera changed or manual exposure active; refresh controls") }
                 try device.lockForConfiguration(); defer { device.unlockForConfiguration() }
-                device.setExposureTargetBias(Float(ev).clamped(device.minExposureTargetBias, device.maxExposureTargetBias), completionHandler: nil)
                 if device.isFocusModeSupported(locked ? .locked : .continuousAutoFocus) { device.focusMode = locked ? .locked : .continuousAutoFocus }
                 if device.isExposureModeSupported(locked ? .locked : .continuousAutoExposure) { device.exposureMode = locked ? .locked : .continuousAutoExposure }
-                DispatchQueue.main.async { completion(.success(self.snapshot())) }
+                let target = Float(ev).clamped(device.minExposureTargetBias, device.maxExposureTargetBias)
+                device.setExposureTargetBias(target) { _ in
+                    DispatchQueue.main.async {
+                        if self.active && configurationId == self.configuration { completion(.success(self.snapshot())) }
+                        else { completion(.failure(self.failure("Camera changed"))) }
+                    }
+                }
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
     }
@@ -537,8 +542,12 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                     if resetFocus && device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
                     if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
                     if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) { device.whiteBalanceMode = .continuousAutoWhiteBalance }
-                    device.setExposureTargetBias(0, completionHandler: nil)
-                    DispatchQueue.main.async { completion(.success(self.snapshot())) }
+                    device.setExposureTargetBias(0) { _ in
+                        DispatchQueue.main.async {
+                            if self.active && configurationId == self.configuration { completion(.success(self.snapshot())) }
+                            else { completion(.failure(self.failure("Camera changed"))) }
+                        }
+                    }
                 }
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }

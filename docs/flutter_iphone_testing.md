@@ -6,17 +6,17 @@ For the current selection-row, situation and filter comparison, follow the [Mac/
 
 ## Install on a physical iPhone
 
-On a Mac with Xcode 16.4 and Flutter 3.44.8:
+The current physical checkpoint uses Xcode 27.0 and Flutter 3.47.2. Build in Profile mode for device evaluation:
 
 ```sh
 git clone --branch codex/cross-platform-20261007 https://github.com/glicxu/mobile_camera.git mobile-camera-flutter
 cd mobile-camera-flutter/apps/dali_camera
 flutter pub get
-flutter build ios --debug --no-codesign
+flutter build ios --profile --no-codesign
 open ios/Runner.xcworkspace
 ```
 
-Select the Runner scheme and your connected iPhone. Set your development team under Signing & Capabilities, enable Developer Mode if prompted, and Run. The development bundle ID is `com.dalicamera.daliCamera`; change it locally if your team needs a unique ID. CI's unsigned app validates compilation and cannot be installed directly.
+Select the Runner scheme, Profile configuration, and your connected iPhone. Set your development team under Signing & Capabilities, enable Developer Mode if prompted, and Run. The cross-platform test build uses the display name `Dali Cam Test`, a cyan `TEST` icon, and the separate bundle ID `com.dalicamera.daliCamera`, so it can remain installed beside the native main-line app (`com.dalifin.camera`). CI's unsigned app validates compilation and cannot be installed directly.
 
 Build the reference from the root `DaliCamera.xcodeproj` with its DaliCamera scheme. When installing the native app on Alayna?s iPhone, follow the dedicated manual-signing instructions in [AGENTS.md](../AGENTS.md); that profile is for the native bundle ID and cannot sign the separate Flutter bundle. Both apps can coexist. Do not uninstall either app while it contains an unsaved original.
 

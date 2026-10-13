@@ -262,10 +262,23 @@ void main() {
       final galleryBeforeCapture = (await camera.host.listPhotoLibrary()).photos
           .map((photo) => photo.id)
           .toSet();
+      for (var i = 0; i < 40 && !camera.canCapture; i++) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      expect(
+        camera.canCapture,
+        isTrue,
+        reason:
+            'Capture readiness after closing reference sheets: foreground=${camera.foreground}; busy=${camera.busy}; controlBusy=${camera.controlBusy}; starting=${camera.starting}; reviewing=${camera.reviewing}; controlsPresented=${camera.controlsPresented}; ready=${camera.snapshot?.ready}; unsaved=${camera.original?.unsaved}',
+      );
       camera.timerSeconds = 3;
       await camera.requestShutter();
       expect(camera.reviewing, isFalse);
-      expect(camera.capturedPhotoSequence, priorCaptureSequence + 1);
+      expect(
+        camera.capturedPhotoSequence,
+        priorCaptureSequence + 1,
+        reason: camera.message,
+      );
       expect(camera.takingPhoto, isFalse);
       await tester.pumpAndSettle();
       expect(find.byType(CircularProgressIndicator), findsNothing);
