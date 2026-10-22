@@ -434,7 +434,9 @@ class CameraApiPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendable {
 protocol CameraHostApi {
   func start(front: Bool, completion: @escaping (Result<CameraSnapshot, Error>) -> Void)
   func stop() throws
-  func capture(shutterSound: Bool, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
+  func configurePhotoLocation(enabled: Bool, requestPermission: Bool) throws -> String
+  func capture(shutterSound: Bool, debugMetadata: String?, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
+  func photoMetadata(identifier: String, libraryAsset: Bool, completion: @escaping (Result<String, Error>) -> Void)
   func recover() throws -> PhotoHandle?
   func save(photo: PhotoHandle, completion: @escaping (Result<Void, Error>) -> Void)
   func replacementTarget(original: PhotoHandle) throws -> String?
@@ -504,12 +506,29 @@ class CameraHostApiSetup {
     } else {
       stopChannel.setMessageHandler(nil)
     }
+    let configurePhotoLocationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.configurePhotoLocation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      configurePhotoLocationChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let enabledArg = args[0] as! Bool
+        let requestPermissionArg = args[1] as! Bool
+        do {
+          let result = try api.configurePhotoLocation(enabled: enabledArg, requestPermission: requestPermissionArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      configurePhotoLocationChannel.setMessageHandler(nil)
+    }
     let captureChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.capture\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       captureChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
         let shutterSoundArg = args[0] as! Bool
-        api.capture(shutterSound: shutterSoundArg) { result in
+        let debugMetadataArg: String? = nilOrValue(args[1])
+        api.capture(shutterSound: shutterSoundArg, debugMetadata: debugMetadataArg) { result in
           switch result {
           case .success(let res):
             reply(wrapResult(res))
@@ -520,6 +539,24 @@ class CameraHostApiSetup {
       }
     } else {
       captureChannel.setMessageHandler(nil)
+    }
+    let photoMetadataChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.photoMetadata\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      photoMetadataChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let identifierArg = args[0] as! String
+        let libraryAssetArg = args[1] as! Bool
+        api.photoMetadata(identifier: identifierArg, libraryAsset: libraryAssetArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      photoMetadataChannel.setMessageHandler(nil)
     }
     let recoverChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.recover\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

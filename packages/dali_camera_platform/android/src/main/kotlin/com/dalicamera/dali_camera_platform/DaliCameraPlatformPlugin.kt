@@ -67,6 +67,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private var analysisUseCase: ImageAnalysis? = null
     private var previewUseCase: Preview? = null
     private var orientationListener: OrientationEventListener? = null
+    private lateinit var photoLocation: PhotoLocation
     private var displayRotation = 0
     private var layoutChannel: MethodChannel? = null
     private var front = false
@@ -118,6 +119,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
 
     override fun onAttachedToEngine(b: FlutterPlugin.FlutterPluginBinding) {
         context = b.applicationContext; events = CameraEvents(b.binaryMessenger)
+        photoLocation = PhotoLocation(context)
         CameraHostApi.setUp(b.binaryMessenger, this)
         layoutChannel = MethodChannel(b.binaryMessenger, "dali/capture_layout").apply {
             setMethodCallHandler { call, result ->
@@ -215,6 +217,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     if (front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA,
                     preview, captureUseCase, analysis)
                 active = true; config = UUID.randomUUID().toString()
+                photoLocation.setActive(true)
                 orientationListener?.enable()
                 val sensors = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
                 val gravityAvailable = sensors.getDefaultSensor(Sensor.TYPE_GRAVITY)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) } ?: false
@@ -224,7 +227,9 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             } catch (e: Exception) { active = false; callback(Result.failure(e)) }
         }, ContextCompat.getMainExecutor(context))
     }
+    override fun configurePhotoLocation(enabled: Boolean, requestPermission: Boolean): String = photoLocation.configure(enabled, requestPermission, activity)
     override fun stop() {
+        photoLocation.setActive(false)
         generation++; active = false; provider?.unbindAll(); camera = null; captureUseCase = null
         analysisUseCase = null; previewUseCase = null; orientationListener?.disable()
         speechEpoch++; listening = false; speech?.destroy(); speech = null
@@ -233,6 +238,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         (context.getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(this)
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray): Boolean {
+        if (requestCode == PhotoLocation.PERMISSION_REQUEST) { photoLocation.refresh(); return true }
         if (requestCode == 710) {
             val request = pendingLegacyDelete; pendingLegacyDelete = null
             if (request != null) {
@@ -433,11 +439,13 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         check(File(path).exists()) { "Recovery original missing" }
         return PhotoHandle(path, json.getString("id"), true)
     }
-    override fun capture(shutterSound: Boolean, callback: (Result<PhotoHandle>) -> Unit) {
+    override fun capture(shutterSound: Boolean, debugMetadata: String?, callback: (Result<PhotoHandle>) -> Unit) {
         if (capturing || recover() != null) return callback(Result.failure(IllegalStateException("Save or discard the previous original first")))
         val capture = captureUseCase ?: return callback(Result.failure(IllegalStateException("Camera not ready")))
         capturing = true; val file = photoFile()
         val capturedFront = front
+        val capturedLocation = photoLocation.current()
+        val capturedAt = Date()
         if (shutterSound) cameraSound.play(MediaActionSound.SHUTTER_CLICK)
         capture.takePicture(ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageCapturedCallback() {
             override fun onCaptureSuccess(image: ImageProxy) {
@@ -460,7 +468,12 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                             270 -> if (capturedFront) 7 else 8
                             else -> if (capturedFront) 2 else 1
                         }
-                        ExifInterface(file).apply { setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString()); saveAttributes() }
+                        ExifInterface(file).apply {
+                            setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+                            capturedLocation?.let { setGpsInfo(it) }
+                            saveAttributes()
+                        }
+                        PhotoMetadata.capture(file, capturedAt, debugMetadata, PhotoMetadata.software(context))
                         stillProcessor.retainCaptureBuffer(file.path, bytes)
                         val photo = PhotoHandle(file.absolutePath, file.nameWithoutExtension, true)
                         retain(photo)
@@ -504,7 +517,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     if (cursor.moveToFirst()) ContentUris.withAppendedId(collection, cursor.getLong(0)) else null }
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, name); put(MediaStore.Images.Media.MIME_TYPE, photo.mimeType ?: "image/jpeg")
-                    put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
+                    put(MediaStore.Images.Media.DATE_TAKEN, PhotoMetadata.capturedMillis(File(photo.path)) ?: System.currentTimeMillis())
                     if (Build.VERSION.SDK_INT >= 29) { put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Dali"); put(MediaStore.Images.Media.IS_PENDING, 1) }
                 }
                 val uri = existing ?: (context.contentResolver.insert(collection, values) ?: error("Gallery insert failed")).also { inserted = it }
@@ -722,6 +735,17 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             } catch (e: Exception) { file?.delete(); main.post { callback(Result.failure(e)) } }
         }
     }
+    override fun photoMetadata(identifier: String, libraryAsset: Boolean, callback: (Result<String>) -> Unit) {
+        executor.execute {
+            try {
+                val info = if (libraryAsset) {
+                    context.contentResolver.openInputStream(Uri.parse(identifier))?.use { PhotoMetadata.read(ExifInterface(it)) }
+                        ?: error("Photo metadata unavailable")
+                } else PhotoMetadata.read(ExifInterface(identifier))
+                main.post { callback(Result.success(info.toString())) }
+            } catch (error: Exception) { main.post { callback(Result.failure(error)) } }
+        }
+    }
     override fun photoInfo(id: String, callback: (Result<String>) -> Unit) {
         executor.execute {
             try {
@@ -912,19 +936,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 }
                 val file = photoFile(); destination = file
                 file.outputStream().use { check(image.compress(Bitmap.CompressFormat.JPEG, 95, it)) }
-                val capturedAt = runCatching {
-                    ExifInterface(original.path).let { sourceExif ->
-                        sourceExif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
-                            ?: sourceExif.getAttribute(ExifInterface.TAG_DATETIME)
-                    }
-                }.getOrNull()
-                    ?: SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(Date())
-                ExifInterface(file).apply {
-                    setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, capturedAt)
-                    setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, capturedAt)
-                    setAttribute(ExifInterface.TAG_DATETIME, capturedAt)
-                    saveAttributes()
-                }
+                PhotoMetadata.copy(original.path, file, PhotoMetadata.software(context), JSONObject(recipe).optBoolean("capturePipeline", false))
                 main.post { callback(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false, "image/jpeg"))) }
             } catch (error: Throwable) {
                 destination?.delete()
@@ -948,6 +960,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     Canvas(processed).drawBitmap(output, 0f, 0f, paint); replace(processed)
                 }
                 val file = photoFile(); destination = file; file.outputStream().use { check(output.compress(Bitmap.CompressFormat.JPEG, 95, it)) }
+                PhotoMetadata.copy(original.path, file, PhotoMetadata.software(context))
                 main.post { callback(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false))) }
             } catch (e: Throwable) { destination?.delete(); main.post { callback(Result.failure(if (e is OutOfMemoryError) IllegalStateException("Not enough memory to process this photo. Original retained.") else e)) } }
             finally { bitmap?.recycle() }
@@ -1066,6 +1079,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     mark.recycle()
                 }
                 val file = photoFile(); file.outputStream().use { check(output.compress(Bitmap.CompressFormat.JPEG, 95, it)) }
+                PhotoMetadata.copy(original.path, file, PhotoMetadata.software(context))
                 if (upright !== source) upright.recycle(); source.recycle(); output.recycle()
                 main.post { callback(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false))) }
             } catch (e: Exception) { main.post { callback(Result.failure(e)) } }

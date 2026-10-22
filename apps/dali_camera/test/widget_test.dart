@@ -19,6 +19,29 @@ import 'package:dali_camera/distance_swipe.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 class FakeHost extends CameraHostApi {
+  String? capturedDebug;
+  int metadataRequests = 0;
+  @override
+  Future<String> photoMetadata(String identifier, bool libraryAsset) async {
+    metadataRequests++;
+    return jsonEncode({
+      'make': 'Test camera',
+      'iso': 100,
+      'debug': capturedDebug,
+    });
+  }
+
+  final List<(bool, bool)> locationRequests = [];
+  String locationStatus = 'ready';
+  @override
+  Future<String> configurePhotoLocation(
+    bool enabled,
+    bool requestPermission,
+  ) async {
+    locationRequests.add((enabled, requestPermission));
+    return enabled ? locationStatus : 'off';
+  }
+
   bool failSave = false;
   bool? lastFocusOnly;
   bool? lastResetFocus;
@@ -129,8 +152,9 @@ class FakeHost extends CameraHostApi {
   @override
   Future<PhotoHandle?> recover() async => retained;
   @override
-  Future<PhotoHandle> capture(bool shutterSound) async {
+  Future<PhotoHandle> capture(bool shutterSound, String? debugMetadata) async {
     lastShutterSound = shutterSound;
+    capturedDebug = debugMetadata;
     captures++;
     return retained = PhotoHandle(
       path: 'fixture.jpg',
@@ -273,8 +297,9 @@ class DelayedCaptureHost extends FakeHost {
   final savingStarted = Completer<void>();
   final finishSaving = Completer<void>();
   @override
-  Future<PhotoHandle> capture(bool shutterSound) {
+  Future<PhotoHandle> capture(bool shutterSound, String? debugMetadata) {
     lastShutterSound = shutterSound;
+    capturedDebug = debugMetadata;
     return captureReply.future;
   }
 
@@ -965,6 +990,8 @@ void main() {
       0,
       reason: 'A settings sheet must block voice capture',
     );
+    await tester.ensureVisible(find.text('Quick camera tutorial'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Quick camera tutorial'));
     await tester.pumpAndSettle();
     expect(find.text('Choose your shot'), findsOneWidget);

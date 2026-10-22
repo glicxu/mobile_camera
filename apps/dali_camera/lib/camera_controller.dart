@@ -118,6 +118,127 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   Map<String, int> customStyle = {};
   bool watermark = true;
+  bool saveCaptureDebug = true;
+  bool guidanceOverlayVisible = false;
+  bool guidanceDetailsVisible = false;
+
+  Future<void> setSaveCaptureDebug(bool enabled) async {
+    if (busy) return;
+    saveCaptureDebug = enabled;
+    await persistSettings();
+  }
+
+  String? _captureDebugMetadata() {
+    if (!saveCaptureDebug) return null;
+    final currentAdvice = contextualGuidance?.advice ?? advice;
+    final visible =
+        coachingEnabled &&
+        guidanceOverlayVisible &&
+        countdown == 0 &&
+        !bursting;
+    return jsonEncode({
+      'schema': 'dali.capture-debug.v1',
+      'shutterRequestedAtUtc': DateTime.now().toUtc().toIso8601String(),
+      'shootingMode': shootingMode.name,
+      'resolvedSituation': activeSituation.name,
+      'frontCamera': front,
+      'zoom': snapshot?.currentZoom,
+      'coachingEnabled': coachingEnabled,
+      'guidanceVisible': visible,
+      'guidanceDetailsVisible': visible && guidanceDetailsVisible,
+      'instructionShown': visible ? currentAdvice.instruction : null,
+      'computedInstruction': coachingEnabled ? currentAdvice.instruction : null,
+      'instructionType': coachingEnabled ? currentAdvice.type : null,
+      'recipient': coachingEnabled ? currentAdvice.recipient : null,
+      'tone': coachingEnabled ? currentAdvice.tone.name : null,
+      'detail': coachingEnabled
+          ? contextualGuidance?.detail ?? guidanceDetail
+          : null,
+      if (guidance.entry != null)
+        'guide': {
+          'id': guidance.entry!.id,
+          'title': guidance.entry!.title,
+          'package': guidance.entry!.package,
+          'step': guidance.index + 1,
+          'complete': guidance.complete,
+          'cue': guidance.complete ? null : guidance.cues[guidance.index],
+        },
+      'filterSelection': filter,
+      'filterMode': filterMode,
+      'beautifierSelection': beautifier,
+      'beautifierMode': beautifierMode,
+      'beautifierPreset': captureTreatments[captureTreatment]?['preset'],
+      'captureRecipe': jsonDecode(_pendingCaptureRecipe!),
+      // The renderer sets this only after the capture's processing succeeds.
+      'captureEffectsApplied': false,
+    });
+  }
+
+  Future<Map<String, dynamic>> readReviewMetadata() async {
+    final photo = selected ?? original;
+    if (photo == null) return {};
+    final asset = reviewAssetId;
+    final useLibrary = asset != null && !_reviewFullResolution && !styled;
+    final json = await host
+        .photoMetadata(useLibrary ? asset : photo.path, useLibrary)
+        .timeout(const Duration(seconds: 30));
+    return Map<String, dynamic>.from(jsonDecode(json) as Map);
+  }
+
+  bool photoLocationEnabled = true;
+  bool photoLocationUpdating = false;
+  bool _locationPermissionRequested = false;
+  String photoLocationStatus = 'waiting';
+
+  String get photoLocationDescription => !photoLocationEnabled
+      ? 'New photos will not include location.'
+      : switch (photoLocationStatus) {
+          'permissionDenied' =>
+            'Location permission is needed. Photos still work without it.',
+          'servicesDisabled' =>
+            'Device location services are off. Photos will save without location.',
+          'ready' =>
+            'Adds your capture location to new photos, including shared copies.',
+          'approximate' =>
+            'Adds the approximate location allowed by your device.',
+          'unavailable' =>
+            'Location is unavailable. Photos will save without it.',
+          _ =>
+            'Adds location when a recent fix is available. Photos do not wait for GPS.',
+        };
+
+  Future<void> setPhotoLocationEnabled(bool enabled) async {
+    if (photoLocationUpdating || busy) return;
+    photoLocationEnabled = enabled;
+    await refreshPhotoLocation(requestPermission: enabled);
+    await persistSettings();
+  }
+
+  Future<void> refreshPhotoLocation({bool requestPermission = false}) async {
+    if (photoLocationUpdating) return;
+    photoLocationUpdating = true;
+    notifyListeners();
+    try {
+      final request = photoLocationEnabled && requestPermission;
+      if (request) {
+        _locationPermissionRequested = true;
+        if (livePreviewEnabled) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('photoLocationPermissionRequested', true);
+        }
+      }
+      photoLocationStatus = await host.configurePhotoLocation(
+        photoLocationEnabled,
+        request,
+      );
+    } catch (_) {
+      photoLocationStatus = 'unavailable';
+    } finally {
+      photoLocationUpdating = false;
+      notifyListeners();
+    }
+  }
+
   bool styled = false;
   String _beautifier = 'off';
   String beautifierMode = 'auto';
@@ -691,6 +812,11 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       focusX = null;
       focusY = null;
       aspectRatio = snapshot!.aspectRatio;
+      if (foreground && !reviewing) {
+        await refreshPhotoLocation(
+          requestPermission: !_locationPermissionRequested,
+        );
+      }
       if (voicePreferred && foreground && !reviewing) await _resumeVoice();
       if (!foreground || reviewing) {
         await host.stop();
@@ -749,7 +875,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
     try {
       final prior = selected;
-      original = await host.capture(shutterSound);
+      original = await host.capture(shutterSound, _captureDebugMetadata());
       recordStage('camera');
       takingPhoto = false;
       capturedPhotoSequence++;
@@ -861,6 +987,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         );
         request['watermarkPath'] = file.path;
       }
+      request['capturePipeline'] = true;
       final result = await host.renderEffects(source, jsonEncode(request));
       selected = PhotoHandle(
         path: result.path,
@@ -1492,6 +1619,10 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   Future<void> _loadPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      saveCaptureDebug = prefs.getBool('saveCaptureDebug') ?? true;
+      photoLocationEnabled = prefs.getBool('photoLocationEnabled') ?? true;
+      _locationPermissionRequested =
+          prefs.getBool('photoLocationPermissionRequested') ?? false;
       timerSeconds = [0, 3, 5, 10].contains(prefs.getInt('timerSeconds'))
           ? prefs.getInt('timerSeconds')!
           : 0;
@@ -1620,6 +1751,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       await prefs.setInt('timerSeconds', timerSeconds);
       await prefs.setString('longPress', longPress);
       await prefs.setBool('shutterSound', shutterSound);
+      await prefs.setBool('photoLocationEnabled', photoLocationEnabled);
+      await prefs.setBool('saveCaptureDebug', saveCaptureDebug);
       await prefs.setString('filter', filter);
       await prefs.setString('filterMode', filterMode);
       await prefs.setString('customFilter', customFilter);

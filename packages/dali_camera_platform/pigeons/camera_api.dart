@@ -102,8 +102,11 @@ abstract class CameraHostApi {
   @async
   CameraSnapshot start(bool front);
   void stop();
+  String configurePhotoLocation(bool enabled, bool requestPermission);
   @async
-  PhotoHandle capture(bool shutterSound);
+  PhotoHandle capture(bool shutterSound, String? debugMetadata);
+  @async
+  String photoMetadata(String identifier, bool libraryAsset);
   PhotoHandle? recover();
   @async
   void save(PhotoHandle photo);

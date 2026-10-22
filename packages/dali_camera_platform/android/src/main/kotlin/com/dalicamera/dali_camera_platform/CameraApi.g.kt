@@ -370,7 +370,9 @@ private open class CameraApiPigeonCodec : StandardMessageCodec() {
 interface CameraHostApi {
   fun start(front: Boolean, callback: (Result<CameraSnapshot>) -> Unit)
   fun stop()
-  fun capture(shutterSound: Boolean, callback: (Result<PhotoHandle>) -> Unit)
+  fun configurePhotoLocation(enabled: Boolean, requestPermission: Boolean): String
+  fun capture(shutterSound: Boolean, debugMetadata: String?, callback: (Result<PhotoHandle>) -> Unit)
+  fun photoMetadata(identifier: String, libraryAsset: Boolean, callback: (Result<String>) -> Unit)
   fun recover(): PhotoHandle?
   fun save(photo: PhotoHandle, callback: (Result<Unit>) -> Unit)
   fun replacementTarget(original: PhotoHandle): String?
@@ -449,12 +451,52 @@ interface CameraHostApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.configurePhotoLocation$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val enabledArg = args[0] as Boolean
+            val requestPermissionArg = args[1] as Boolean
+            val wrapped: List<Any?> = try {
+              listOf(api.configurePhotoLocation(enabledArg, requestPermissionArg))
+            } catch (exception: Throwable) {
+              CameraApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.capture$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
             val shutterSoundArg = args[0] as Boolean
-            api.capture(shutterSoundArg) { result: Result<PhotoHandle> ->
+            val debugMetadataArg = args[1] as String?
+            api.capture(shutterSoundArg, debugMetadataArg) { result: Result<PhotoHandle> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.photoMetadata$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val identifierArg = args[0] as String
+            val libraryAssetArg = args[1] as Boolean
+            api.photoMetadata(identifierArg, libraryAssetArg) { result: Result<String> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))

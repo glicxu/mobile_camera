@@ -1,3 +1,4 @@
+import 'photo_metadata_sheet.dart';
 import 'capture_layout.dart';
 import 'capture_feedback.dart';
 import 'capture_result_preview.dart';
@@ -98,8 +99,6 @@ class _CameraScreenState extends State<CameraScreen>
   String? reviewBeautifierChoice;
   bool initialized = false;
   bool manualToolsVisible = false;
-  bool guidanceVisible = false;
-  bool guidanceDetails = false;
   int displayTurns = 0;
   int orientationRequest = 0;
   static const layoutChannel = MethodChannel('dali/capture_layout');
@@ -330,16 +329,18 @@ class _CameraScreenState extends State<CameraScreen>
                   children: [
                     HeaderAction(
                       key: const Key('coachingToggle'),
-                      tooltip: guidanceVisible
+                      tooltip: camera.guidanceOverlayVisible
                           ? 'Close guidance'
                           : 'Open guidance',
                       size: 52,
                       radius: 10,
-                      selected: guidanceVisible,
+                      selected: camera.guidanceOverlayVisible,
                       onPressed: () => setState(() {
-                        guidanceVisible = !guidanceVisible;
-                        guidanceDetails = false;
-                        if (guidanceVisible && !camera.coachingEnabled) {
+                        camera.guidanceOverlayVisible =
+                            !camera.guidanceOverlayVisible;
+                        camera.guidanceDetailsVisible = false;
+                        if (camera.guidanceOverlayVisible &&
+                            !camera.coachingEnabled) {
                           camera.setCoachingEnabled(true);
                         }
                       }),
@@ -347,7 +348,7 @@ class _CameraScreenState extends State<CameraScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            guidanceVisible
+                            camera.guidanceOverlayVisible
                                 ? Icons.lightbulb
                                 : Icons.lightbulb_outline,
                             size: 20,
@@ -501,7 +502,7 @@ class _CameraScreenState extends State<CameraScreen>
                             ),
                           ),
                         ),
-                      if (guidanceVisible &&
+                      if (camera.guidanceOverlayVisible &&
                           camera.coachingEnabled &&
                           camera.landscape)
                         Positioned(
@@ -511,8 +512,8 @@ class _CameraScreenState extends State<CameraScreen>
                             state: camera.landscapeInstruments,
                           ),
                         ),
-                      if (guidanceVisible &&
-                          guidanceDetails &&
+                      if (camera.guidanceOverlayVisible &&
+                          camera.guidanceDetailsVisible &&
                           camera.coachingEnabled &&
                           camera.activeSituation.showsPersonOverlay)
                         CoachingOverlay(
@@ -673,7 +674,7 @@ class _CameraScreenState extends State<CameraScreen>
                     ],
                   ),
                 ),
-                if (guidanceVisible &&
+                if (camera.guidanceOverlayVisible &&
                     camera.countdown == 0 &&
                     !camera.bursting)
                   Positioned(
@@ -704,7 +705,8 @@ class _CameraScreenState extends State<CameraScreen>
                                     IconButton(
                                       tooltip: 'Close guidance',
                                       onPressed: () => setState(
-                                        () => guidanceVisible = false,
+                                        () => camera.guidanceOverlayVisible =
+                                            false,
                                       ),
                                       icon: const Icon(Icons.close),
                                     ),
@@ -726,15 +728,16 @@ class _CameraScreenState extends State<CameraScreen>
                                 ),
                                 TextButton(
                                   onPressed: () => setState(
-                                    () => guidanceDetails = !guidanceDetails,
+                                    () => camera.guidanceDetailsVisible =
+                                        !camera.guidanceDetailsVisible,
                                   ),
                                   child: Text(
-                                    guidanceDetails
+                                    camera.guidanceDetailsVisible
                                         ? 'Hide examples and details'
                                         : 'Examples and details',
                                   ),
                                 ),
-                                if (guidanceDetails)
+                                if (camera.guidanceDetailsVisible)
                                   LiveGuidancePanel(
                                     camera: camera,
                                     onExample: (entry) =>
@@ -804,7 +807,12 @@ class _CameraScreenState extends State<CameraScreen>
                 }
               },
         onSettings: () => cameraSheet(
-          () => showAppSettings(context, onHelp: help, onImport: choosePhotos),
+          () => showAppSettings(
+            context,
+            camera: camera,
+            onHelp: help,
+            onImport: choosePhotos,
+          ),
         ),
         onSwitch: camera.starting || camera.busy ? null : camera.switchLens,
       ),
@@ -826,7 +834,7 @@ class _CameraScreenState extends State<CameraScreen>
               height: 54,
               child: CameraSelectionRow(
                 camera: camera,
-                showGuides: guidanceVisible,
+                showGuides: camera.guidanceOverlayVisible,
                 onBeautifierLongPress: () => cameraSheet(
                   () => showBeautifierQuickSheet(context, camera),
                 ),
@@ -1238,44 +1246,17 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> showPhotoInfo() async {
-    await camera.refreshReviewInfo();
-    if (!mounted) return;
-    final info = camera.reviewInfo;
+    final title = camera.reviewTitle;
+    final basic = camera.reviewInfo == null
+        ? null
+        : Map<String, dynamic>.from(camera.reviewInfo!);
+    final metadata = camera.readReviewMetadata();
     await showModalBottomSheet<void>(
       context: context,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                camera.reviewTitle,
-                style: Theme.of(ctx).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 12),
-              if (info != null) ...[
-                Text('${info['width']} × ${info['height']} pixels'),
-                if (info['date'] is num && info['date'] > 0)
-                  Text(
-                    DateTime.fromMillisecondsSinceEpoch(
-                      (info['date'] as num).toInt(),
-                    ).toLocal().toString().split('.').first,
-                  ),
-                if (info['bytes'] is num)
-                  Text(
-                    '${((info['bytes'] as num) / 1048576).toStringAsFixed(1)} MB',
-                  ),
-              ] else
-                const Text('Library metadata is unavailable for this photo.'),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Done'),
-              ),
-            ],
-          ),
-        ),
-      ),
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (_) =>
+          PhotoMetadataSheet(title: title, basic: basic, metadata: metadata),
     );
   }
 

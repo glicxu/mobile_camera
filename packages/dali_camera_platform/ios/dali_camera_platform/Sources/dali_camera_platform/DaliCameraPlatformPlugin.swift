@@ -4,6 +4,7 @@ import AVFoundation
 import QuartzCore
 import Vision
 import CoreMotion
+import CoreLocation
 import Photos
 import PhotosUI
 import CoreImage
@@ -15,6 +16,10 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     private let queue = DispatchQueue(label: "dali.camera")
     private let photoOutput = AVCapturePhotoOutput()
     private let motion = CMMotionManager()
+    private let photoLocation = PhotoLocation()
+    private var capturedLocation: CLLocation?
+    private var capturedAt = Date()
+    private var captureDebug: String?
     private let ci = CIContext()
     private let stillProcessor = StillPhotoProcessor()
     private let speech = SpeechShutterService()
@@ -140,6 +145,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 self.configuration = UUID().uuidString; self.session.startRunning(); self.active = true
                 DispatchQueue.main.async {
                     guard self.generation == epoch else { return }
+                    self.photoLocation.setActive(true)
                     self.preview?.layer.session = self.session; self.preview?.layer.videoGravity = .resizeAspect
                     if let connection = self.preview?.layer.connection {
                         if connection.isVideoRotationAngleSupported(self.rotation) { connection.videoRotationAngle = self.rotation }
@@ -157,10 +163,15 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             } catch { self.active = false; DispatchQueue.main.async { completion(.failure(error)) } }
         }
     }
-    func stop() throws { active = false; generation = UUID(); speech.stop(); preview?.container.depthLevel = 0; preview?.container.setNeedsLayout(); motion.stopDeviceMotionUpdates(); queue.async { self.session.stopRunning() } }
-    func capture(shutterSound: Bool, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
+    func configurePhotoLocation(enabled: Bool, requestPermission: Bool) throws -> String {
+        photoLocation.configure(enabled: enabled, requestPermission: requestPermission)
+    }
+    func stop() throws { photoLocation.setActive(false); active = false; generation = UUID(); speech.stop(); preview?.container.depthLevel = 0; preview?.container.setNeedsLayout(); motion.stopDeviceMotionUpdates(); queue.async { self.session.stopRunning() } }
+    func capture(shutterSound: Bool, debugMetadata: String?, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
         do {
             guard active, !capturing, try recover() == nil else { throw failure("Save or discard the retained original first") }
+            capturedLocation = photoLocation.current()
+            capturedAt = Date(); captureDebug = debugMetadata
             capturing = true; captureCompletion = completion
             queue.async {
                 let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
@@ -174,11 +185,16 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     public func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         DispatchQueue.main.async {
             self.capturing = false; let completion = self.captureCompletion; self.captureCompletion = nil
+            let location = self.capturedLocation; self.capturedLocation = nil
+            let debug = self.captureDebug; self.captureDebug = nil
+            let capturedAt = self.capturedAt
             do {
                 if let error { throw error }
                 guard let bytes = photo.fileDataRepresentation() else { throw self.failure("No photo data") }
                 var handle = try self.newPhoto(); handle.unsaved = true
                 try bytes.write(to: URL(fileURLWithPath: handle.path), options: .atomic)
+                if let location { try PhotoLocation.tag(location, path: handle.path) }
+                try PhotoMetadata.capture(path: handle.path, at: capturedAt, debug: debug)
                 do { try JSONSerialization.data(withJSONObject: ["path": handle.path, "id": handle.id]).write(to: self.manifest, options: .atomic) }
                 catch { self.events.error(code: "recovery", message: "Original captured but relaunch recovery unavailable: \(error.localizedDescription)") { _ in } }
                 completion?(.success(handle))
@@ -197,6 +213,8 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             var savedId: String?
             PHPhotoLibrary.shared().performChanges {
                 let request = PHAssetCreationRequest.forAsset()
+                request.location = PhotoLocation.location(path: photo.path)
+                request.creationDate = PhotoMetadata.capturedDate(path: photo.path)
                 request.addResource(with: .photo, fileURL: URL(fileURLWithPath: photo.path), options: nil)
                 savedId = request.placeholderForCreatedAsset?.localIdentifier
             } completionHandler: { success, error in
@@ -255,6 +273,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                         let image = UIImage(contentsOfFile: edited.path)
                         guard let jpeg = image?.jpegData(compressionQuality: 0.95) else { throw self.failure("Edited photo unavailable") }
                         try jpeg.write(to: output.renderedContentURL, options: .atomic)
+                        try PhotoMetadata.copy(from: edited.path, to: output.renderedContentURL.path)
                         output.adjustmentData = PHAdjustmentData(formatIdentifier: "com.dalicamera.photo-edit",
                             formatVersion: "1", data: Data("Dali photo edit".utf8))
                         PHPhotoLibrary.shared().performChanges {
@@ -357,6 +376,36 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                     DispatchQueue.main.async { completion(.success(photo)) }
                 } catch { DispatchQueue.main.async { completion(.failure(error)) } }
             }
+        }
+    }
+    func photoMetadata(identifier: String, libraryAsset: Bool, completion: @escaping (Result<String, Error>) -> Void) {
+        let finish: (Data) -> Void = { data in
+            self.importQueue.async {
+                do {
+                    let info = PhotoMetadata.read(try PhotoMetadata.properties(data: data))
+                    let json = try JSONSerialization.data(withJSONObject: info)
+                    DispatchQueue.main.async { completion(.success(String(decoding: json, as: UTF8.self))) }
+                } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+            }
+        }
+        if !libraryAsset {
+            importQueue.async {
+                do { finish(try Data(contentsOf: URL(fileURLWithPath: identifier))) }
+                catch { DispatchQueue.main.async { completion(.failure(error)) } }
+            }
+            return
+        }
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil).firstObject else {
+            completion(.failure(failure("Photo unavailable"))); return
+        }
+        // Full metadata is fetched only after the user explicitly opens Info.
+        let options = PHImageRequestOptions()
+        options.isNetworkAccessAllowed = true; options.version = .current
+        PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { data, _, _, info in
+            guard let data, info?[PHImageCancelledKey] as? Bool != true, info?[PHImageErrorKey] == nil else {
+                DispatchQueue.main.async { completion(.failure(self.failure("Photo metadata unavailable; check iCloud connectivity"))) }; return
+            }
+            finish(data)
         }
     }
     func photoInfo(id: String, completion: @escaping (Result<String, Error>) -> Void) {
@@ -500,6 +549,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                     guard let data = image.jpegData(compressionQuality: 0.95) else { throw self.failure("Cannot render effects") }
                     let handle = try self.newPhoto()
                     try data.write(to: URL(fileURLWithPath: handle.path), options: .atomic)
+                    try PhotoMetadata.copy(from: original.path, to: handle.path, captureEffectsApplied: request?["capturePipeline"] as? Bool == true)
                     return handle
                 }
                 DispatchQueue.main.async { completion(.success(result)) }
@@ -515,6 +565,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 if strength > 0 { image = image.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 1 + strength * 0.12]) }
                 guard let output = self.ci.createCGImage(image, from: image.extent), let data = UIImage(cgImage: output).jpegData(compressionQuality: 0.95) else { throw self.failure("Cannot render photo") }
                 let handle = try self.newPhoto(); try data.write(to: URL(fileURLWithPath: handle.path), options: .atomic)
+                try PhotoMetadata.copy(from: original.path, to: handle.path)
                 DispatchQueue.main.async { completion(.success(handle)) }
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
@@ -562,6 +613,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 }
                 guard let output = self.ci.createCGImage(image, from: extent), let data = UIImage(cgImage: output).jpegData(compressionQuality: 0.95) else { throw self.failure("Cannot render style") }
                 let handle = try self.newPhoto(); try data.write(to: URL(fileURLWithPath: handle.path), options: .atomic)
+                try PhotoMetadata.copy(from: original.path, to: handle.path)
                 DispatchQueue.main.async { completion(.success(handle)) }
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
@@ -584,6 +636,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 }
                 guard let output = self.ci.createCGImage(image, from: extent), let data = UIImage(cgImage: output).jpegData(compressionQuality: 0.95) else { throw self.failure("Cannot render style") }
                 let handle = try self.newPhoto(); try data.write(to: URL(fileURLWithPath: handle.path), options: .atomic)
+                try PhotoMetadata.copy(from: original.path, to: handle.path)
                 DispatchQueue.main.async { completion(.success(handle)) }
             } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }

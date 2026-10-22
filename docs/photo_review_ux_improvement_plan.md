@@ -219,3 +219,55 @@ Checked items have widget-test or Samsung UI evidence. They do not imply iPhone 
 - Widget regression tests cover the shutter's transformed position in both landscape directions, unchanged preview bounds when guidance toggles, no camera restart on rotation, unchanged filter/beauty/zoom settings, and overlay taps not reaching focus metering. Existing capture and review tests remain part of the validation suite.
 - Moved the preview watermark above the zoom controls to prevent their overlap. This changes only the preview decoration, not the saved watermark rendering.
 - Next: point the Samsung at a visible scene and physically rotate it both ways. Check that framing and focus stay aligned, pinch zoom works, the Guide overlay feels unobtrusive, and a saved photo has the intended orientation. Repeat on iPhone after restoring Mac access.
+
+## Optional photo location
+
+Added: October 21, 2026
+
+Status: Implemented. Android build, automated checks, and synthetic GPS metadata tests on Samsung passed. Real-location permission/fix acceptance and iPhone compilation/device testing remain pending.
+
+### Behavior
+
+- **App Settings > Photos > Save photo location** defaults to on. Turning it off persists across launches and stops location collection for future captures.
+- Location access uses foreground permission only. The first eligible camera session requests permission once; denial does not prevent taking photos or cause repeated automatic prompts. Settings provides a link to device permissions, and deliberately re-enabling the setting can request permission again where the OS permits it.
+- Capture snapshots a recent available location at shutter time. It does not wait for GPS, use a stale fix older than two minutes, or substitute the device's later position during editing or saving. Without permission, enabled device location services, and a recent fix, the photo saves without GPS.
+- Approximate location is respected when that is all the user permits. Location updates stop when the camera pauses or the option is disabled; no background location permission is requested.
+- The private capture original receives GPS metadata, which is preserved through effects, crop/rotation, filters, styles, save/retry, and sharing the saved file. iOS also sets the Photos asset's location from the file metadata and preserves GPS in replacement edits.
+- This setting applies to new captures. It neither adds location to old photos nor removes existing metadata from previously captured/imported photos. Tagged shared copies retain the photo's location.
+
+### Validation
+
+- [x] Default-on preference, one-time automatic permission request, explicit re-enable, and persistent off state have automated coverage.
+- [x] Denied permission leaves capture available; settings exposes the toggle, status text, and permission help.
+- [x] All 54 Flutter tests pass; static analysis and Android debug build pass.
+- [x] A native integration test passed on the Samsung using a generated JPEG with invented coordinates. GPS survived effects, crop/rotation, filter, and style rendering. A source without GPS remained untagged after processing. Only temporary fixture files were created and removed; no gallery assets or location permissions were changed by this test.
+- [x] Restored and installed the normal app with a data-preserving update. Confirmed that Android presents the location permission prompt, including Precise/Approximate and While using the app choices. Left that choice for the user.
+- [ ] Allow foreground location on the phone, obtain a current fix, capture a photo, and confirm the saved photo's map/location in Gallery. Repeat with the option off, permission denied, approximate permission, and device location services off.
+- [ ] Compile and run the same metadata test on iPhone, then verify its location prompt, Photos map entry, replacement edits, and pause/resume behavior.
+
+Implementation: `app_settings.dart`, `camera_controller.dart`, the Pigeon camera API, and native `PhotoLocation.kt` / `PhotoLocation.swift`. Regression tests: `test/photo_location_test.dart` and `integration_test/photo_location_test.dart`.
+
+## Capture metadata and debug review
+
+Added: October 21, 2026
+
+Status: Implemented; 57 Flutter tests, static analysis, and native metadata integration on Samsung pass. iOS compilation and device acceptance remain pending.
+
+- Preserve original capture timestamp, timezone and subseconds, camera/lens identity, exposure, ISO, aperture, focal length, white balance, flash, and other supported photographic fields through rendering. Availability depends on the source camera. Missing fields are not invented for imported photos.
+- Record Dali Camera version/build as processing software; refresh dimensions and orientation after crop/rotation. Preserve original capture time when saving to the system library. Do not copy device serial numbers, opaque MakerNotes, or obsolete thumbnails/geometry into rendered copies.
+- **Settings > Photos > Save capture debug information** defaults to on for this testing round and persists when disabled. New capture debug is stored in EXIF UserComment and travels with shared copies.
+- Freeze the debug record at shutter time: instruction actually displayed, separately identified computed-but-hidden guidance, selected guide/step, shooting situation, lens direction and zoom, selected filter/mode, effective filter adjustments, beautifier treatment/preset/strength/options, depth, and watermark settings.
+- Distinguish the original capture recipe from whether capture processing was successfully applied to that image version. Later edits preserve the original capture record; the UI explicitly states that later edits may change appearance.
+- **Photo review > Info** displays photographic metadata and readable capture debug details, with expandable JSON and a copy button. Full metadata loads only when Info is requested; ordinary review remains passive. Cloud metadata reads show a dismissible loading state.
+- Existing photos without capture debug cannot recover past instructions or settings.
+
+### Validation
+
+- [x] Shutter-time snapshot remains unchanged when guidance and beautifier settings subsequently change; the effective render request matches the snapshot.
+- [x] Hidden guidance is not labeled as shown; default-on debug can be persistently disabled.
+- [x] Metadata is requested only on Info, without entering editing; existing settings and capture/review regressions pass (57 tests total).
+- [x] Android debug build and Flutter static analysis pass.
+- [x] Samsung native integration: preserved dates, camera/exposure, synthetic GPS, Unicode debug, software, and correct dimensions across effects, crop/rotation, filters, and styles; untagged sources stayed without GPS/debug/date. Fixed Android EXIF Unicode decoding and escaped JSON writing after the device test exposed text loss. Temporary test files were removed; gallery data and location permissions were unchanged.
+- [x] Rebuilt, restored, and launched the normal app on Samsung using a data-preserving update after the integration test.
+- [ ] Capture a real subject with guidance and a filter/beautifier, then check Info and a shared copy. Repeat with debug recording off.
+- [ ] Build and repeat on iPhone when Mac access is available.
