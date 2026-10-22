@@ -47,6 +47,17 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             plugin.events.voiceShutter { _ in }
         }
         CameraHostApiSetup.setUp(binaryMessenger: registrar.messenger(), api: plugin)
+        let layoutChannel = FlutterMethodChannel(name: "dali/capture_layout", binaryMessenger: registrar.messenger())
+        layoutChannel.setMethodCallHandler { [weak plugin] call, result in
+            guard call.method == "displayQuarterTurns" else { result(FlutterMethodNotImplemented); return }
+            let orientation = plugin?.presenter?.view.window?.windowScene?.interfaceOrientation ?? .portrait
+            switch orientation {
+            case .landscapeRight: result(1)
+            case .portraitUpsideDown: result(2)
+            case .landscapeLeft: result(3)
+            default: result(0)
+            }
+        }
         plugin.speech.onState = { [weak plugin] listening, status in plugin?.events.voiceState(listening: listening, status: status) { _ in } }
         registrar.register(CameraViewFactory(plugin: plugin), withId: "dali/camera")
     }

@@ -1,16 +1,16 @@
-# Dali Camera photo review UX improvement plan
+# Dali Camera photo review and capture UX improvement plan
 
 Date: October 21, 2026
 
-Status: Implemented and tested on Android; iPhone and extended acceptance pending
+Status: Photo review implemented and tested on Android; iPhone and extended acceptance pending. Capture layout implemented; Android UI validation completed, hands-on scene testing and iPhone validation pending.
 
-Scope: Photo review in the Flutter app on iPhone and Android
+Scope: Photo review and capture layout in the Flutter app on iPhone and Android
 
 Tapping the last-photo thumbnail should immediately open a lightweight viewer of that photo. The user should be able to inspect, browse, share, favorite, or delete it without entering an editing workflow. Filters, Beautifier, and Enhance become available after the user chooses Edit.
 
 This round prioritizes passive review, fast opening, a larger image, and familiar action buttons. A compact thumbnail strip follows as a secondary enhancement.
 
-## Implementation status
+## Photo review implementation status
 
 - Implemented: passive viewing without automatic photo analysis or effect rendering; saved capture appearance retained separately from recovery originals.
 - Implemented: full-width image area, compact review actions, explicit Edit entry, save/discard handling, in-place pinch/double-tap zoom, and non-wrapping navigation.
@@ -135,3 +135,87 @@ Validate on physical iPhone and Android devices with local and cloud-backed phot
 1. Bring the configured Mac online, compile the Flutter iOS target, and test on the intended iPhone. Follow the Flutter signing instructions; the dedicated Alayna profile in AGENTS.md is for the separate native bundle.
 2. Check cloud-only images, denied/limited access, physical pinch gestures, and larger libraries over an extended session. Measure first visible image time and memory before making performance claims.
 3. During the first Samsung launch, the ML Kit acceleration benchmark child process crashed with a JNI `NoSuchFieldError`, triggering Samsung's cache suggestion. The main camera and photo viewer subsequently operated, and no cache or app data was cleared. This startup observation remains a separate follow-up; it was not established as a regression from this UX change.
+
+## Next round: stable capture layout and on-demand guidance
+
+Added: October 21, 2026
+
+Status: Implemented locally. Android UI validation and automated checks completed. Hands-on scene testing and iPhone validation remain pending.
+
+Implementation progress:
+
+- Replaced separate portrait/landscape layouts with one handset-anchored layout. A native display-orientation query distinguishes both landscape directions; control icons rotate independently of their positions.
+- Guidance starts closed. Guide opens a compact overlay, with examples and details available on request. Overlay visibility does not reserve layout space or change photo effects.
+- Retained compact Filters and Beautifier shortcuts and the existing Controls/Manual entry points. Updated the tutorial for the new guidance flow.
+- Added regression coverage for physical shutter anchors, unchanged viewport bounds, effect settings, camera restart avoidance, overlay versus focus taps, and a 320-by-568 logical-pixel screen with 200% text scaling.
+
+The capture screen should retain familiar control locations when the phone rotates. Guidance should appear only when requested, as an overlay inside the viewport, without taking permanent space away from the scene. The review implementation and acceptance results above do not establish completion of this capture work.
+
+### Comparison and current baseline
+
+The current `live()` layout in `main.dart` splits the available area below the header approximately 5:4 between preview and controls when coaching is enabled in portrait. With coaching disabled, the controls use a fixed 190 logical pixels. Landscape switches to a separate side panel using up to 44% of the screen width, capped at 360 logical pixels, with additional outer padding. These layout changes explain the substantial shift in preview size and control placement.
+
+Apple documents expandable camera controls, while Samsung describes quick controls and smaller mode pop-ups that preserve preview visibility. Exact arrangements vary by device and software version. Stable positions relative to the handset are the proposed Dali interaction target, rather than a claim that every stock camera uses identical behavior.
+
+| Area | Regular-camera reference or design goal | Proposed Dali change |
+| --- | --- | --- |
+| Rotation | Familiar controls relative to the handset | Anchor shutter, last-photo thumbnail, and camera switch to the same physical locations; rotate icons and labels for readability. |
+| Viewport | The scene remains the main focus | Replace the large guidance area and wide landscape sidebar with compact essential controls. |
+| Guidance | Small indicators and assistance revealed when needed | Show a dismissible overlay inside the existing viewport, without resizing it. |
+| Secondary controls | Expandable controls keep the default screen simple | Place filters, beauty, and manual adjustments behind compact buttons. |
+| Framing | Operating controls preserves predictable composition | Opening guidance or settings must not change preview size, crop, or zoom. |
+
+References: [Apple camera basics and controls](https://support.apple.com/en-gb/guide/iphone/iph263472f78/26/ios/26) and [Samsung camera interface changes](https://doc.samsungmobile.com/SM-S901B/021674220226/ben-bd.html).
+
+### Prioritized recommendations
+
+| Priority | Improvement | Expected behavior |
+| --- | --- | --- |
+| P0 | Stabilize controls during rotation | Keep the shutter at the same physical end of the handset in both landscape directions. Preserve the selected lens, zoom, focus, and settings; rotate labels and icons without rebuilding the screen into a different arrangement. |
+| P0 | Restore viewport space | Use the full available width in portrait with compact top and bottom controls. Preserve the selected capture aspect ratio; do not stretch or silently crop the scene to fill the display. |
+| P0 | Make guidance an on-demand overlay | Start with guidance closed. A clearly labeled Guide button opens a translucent card over the viewport; tapping it again or using Close dismisses it. Opening and closing must leave the preview bounds unchanged. |
+| P1 | Simplify guidance content | Show one actionable instruction, such as "Move slightly left," with a directional cue. Expand pose examples and detailed explanations only when requested. Keep the central subject and shutter clear. |
+| P1 | Consolidate secondary controls | Reveal filters, beauty, and manual controls through compact entry points without permanently reserving a large panel. |
+| P0 | Keep guidance independent of photo effects | Opening or closing guidance must not change filters, beauty settings, or the resulting photo. Never include guidance graphics in saved images. |
+| P0 | Validate on physical devices | Check both landscape directions, guidance visibility, focus, zoom, capture, and saved-image orientation on Android and iPhone. |
+
+### Proposed capture experience
+
+1. Camera opens with a large viewport, essential controls, and guidance closed.
+2. Rotating the handset preserves the controls' physical anchors and current camera settings. Icons and labels orient for readability.
+3. Tapping Guide displays a compact instruction overlay without moving or resizing the scene.
+4. The user can expand a pose example or explanation when needed, then close it to restore an unobstructed view.
+5. Focus and zoom remain available outside the overlay. Interacting with the overlay must not accidentally focus or zoom the scene beneath it.
+6. Capture remains immediately accessible. The saved image reflects the chosen capture settings and orientation, without any guidance graphics.
+
+### Capture implementation starting points
+
+- [Capture layout](../apps/dali_camera/lib/main.dart): `live()`, portrait/landscape layout branches, header, shutter controls, and guidance entry point.
+- [Guidance cards](../apps/dali_camera/lib/live_guidance.dart): adapt `LiveGuidancePanel` and its scene/reference content for compact, dismissible presentation.
+- [Viewport guidance](../apps/dali_camera/lib/coaching_overlay.dart): coordinate existing cues with the requested guidance visibility and avoid duplicate instructions.
+- [Camera state](../apps/dali_camera/lib/camera_controller.dart): keep overlay visibility separate from effect settings and preserve capture state through rotation.
+- Native preview and orientation handling: verify alignment of the displayed scene, focus coordinates, and saved-image orientation in both landscape directions.
+
+### Capture acceptance criteria
+
+Checked items have widget-test or Samsung UI evidence. They do not imply iPhone acceptance or a visible-scene capture check.
+
+- [ ] Shutter, last-photo thumbnail, and camera switch retain their physical anchors in portrait and both landscape directions.
+- [ ] Rotation preserves selected lens, zoom, focus, and capture settings without a disruptive preview restart.
+- [x] The default screen has no persistent guidance panel consuming viewport space.
+- [x] Guide opens and closes an overlay without changing preview bounds, crop, aspect ratio, or zoom.
+- [ ] The preview uses available space while preserving the selected capture framing without stretching or silent cropping.
+- [x] Guidance shows one primary instruction; examples and detailed explanations expand only on request.
+- [x] Essential controls remain accessible with guidance open in the tested Samsung layout and small-screen widget tests with 200% text scaling. iPhone safe-area acceptance remains pending.
+- [x] Overlay interactions do not trigger focus underneath; unobstructed preview areas retain tap-to-focus. Physical pinch validation remains pending.
+- [ ] Opening or closing guidance leaves filter and beauty settings unchanged, and saved photos contain no guidance graphics.
+- [ ] Android and iPhone device checks confirm correct preview, focus coordinates, and saved-image orientation in portrait and both landscape directions.
+
+### Capture validation and next hands-on checks
+
+- Automated validation: all 52 Flutter tests passed; Flutter analysis and whitespace checks passed. Android debug builds succeeded; iOS compilation has not been run in this round.
+- Samsung SM-G975U, Android 12: installed through a data-preserving update. Checked portrait and both forced landscape directions, upright control labels, the shutter staying at the same handset end, and opening/closing the guidance overlay. Restored the device's original rotation settings (automatic rotation off, portrait).
+- The current live view was dark during remote testing. This verifies layout, not subject framing, focus accuracy, or saved-image orientation. No existing photos were changed during these capture-layout checks.
+- Widget regression tests cover the shutter's transformed position in both landscape directions, unchanged preview bounds when guidance toggles, no camera restart on rotation, unchanged filter/beauty/zoom settings, and overlay taps not reaching focus metering. Existing capture and review tests remain part of the validation suite.
+- Moved the preview watermark above the zoom controls to prevent their overlap. This changes only the preview decoration, not the saved watermark rendering.
+- Next: point the Samsung at a visible scene and physically rotate it both ways. Check that framing and focus stay aligned, pinch zoom works, the Guide overlay feels unobtrusive, and a saved photo has the intended orientation. Repeat on iPhone after restoring Mac access.

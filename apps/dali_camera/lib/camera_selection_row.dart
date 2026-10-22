@@ -2,6 +2,7 @@ import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:flutter/material.dart';
 
 import 'camera_controller.dart';
+import 'capture_layout.dart';
 
 /// The compact situation selector used in the always-visible camera header.
 class SituationMenuButton extends StatelessWidget {
@@ -39,12 +40,14 @@ class SituationMenuButton extends StatelessWidget {
             ),
           ),
       ],
-      child: _SituationIcon(
-        icon: _situationIcon(camera.shootingMode),
-        selected: false,
-        neutral: true,
-        disabled: camera.busy,
-        dropdown: true,
+      child: UprightCaptureControl(
+        child: _SituationIcon(
+          icon: _situationIcon(camera.shootingMode),
+          selected: false,
+          neutral: true,
+          disabled: camera.busy,
+          dropdown: true,
+        ),
       ),
     );
   }
@@ -184,7 +187,9 @@ class _EffectToggle extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         onTap: busy ? null : onTap,
         onLongPress: busy ? null : onLongPress,
-        child: _StateIcon(icon: icon, enabled: enabled, disabled: busy),
+        child: UprightCaptureControl(
+          child: _StateIcon(icon: icon, enabled: enabled, disabled: busy),
+        ),
       ),
     ),
   );

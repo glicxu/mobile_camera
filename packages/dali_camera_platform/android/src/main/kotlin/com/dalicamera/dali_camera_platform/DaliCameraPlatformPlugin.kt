@@ -38,6 +38,7 @@ import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.*
 import io.flutter.plugin.common.PluginRegistry
+import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.*
 import org.json.*
 import java.io.File
@@ -67,6 +68,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private var previewUseCase: Preview? = null
     private var orientationListener: OrientationEventListener? = null
     private var displayRotation = 0
+    private var layoutChannel: MethodChannel? = null
     private var front = false
     private var active = false
     private var generation = 0L
@@ -117,6 +119,13 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     override fun onAttachedToEngine(b: FlutterPlugin.FlutterPluginBinding) {
         context = b.applicationContext; events = CameraEvents(b.binaryMessenger)
         CameraHostApi.setUp(b.binaryMessenger, this)
+        layoutChannel = MethodChannel(b.binaryMessenger, "dali/capture_layout").apply {
+            setMethodCallHandler { call, result ->
+                if (call.method == "displayQuarterTurns") {
+                    result.success(activity?.window?.decorView?.display?.rotation ?: 0)
+                } else result.notImplemented()
+            }
+        }
         orientationListener = object : OrientationEventListener(context) {
             override fun onOrientationChanged(orientation: Int) {
                 val current = previewView?.display?.rotation ?: return
@@ -143,6 +152,7 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         })
     }
     override fun onDetachedFromEngine(b: FlutterPlugin.FlutterPluginBinding) {
+        layoutChannel?.setMethodCallHandler(null); layoutChannel = null
         stop(); CameraHostApi.setUp(b.binaryMessenger, null)
         cameraSound.release(); faceDetector.close(); poseDetector.close(); stillProcessor.close(); executor.shutdown(); depthExecutor.shutdown()
     }

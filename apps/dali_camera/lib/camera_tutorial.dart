@@ -12,13 +12,13 @@ const tutorialSteps = [
   ),
   (
     'Choose a posture package',
-    'Turn Guides on to show packages in the bottom coaching card. Swipe between packages and tap a thumbnail to start its guidance. Auto follows the scene Dali detects.',
+    'Tap Guide, open Examples and details, then turn Guides on to browse packages in the overlay. Swipe between packages and tap a thumbnail to start its guidance. Auto follows the scene Dali detects.',
     Icons.accessibility_new,
     ['11 posture packages', 'Tap a photo to select the pose'],
   ),
   (
     'Choose a landscape package',
-    'Choose Landscape and turn Guides on. Swipe to a scene package and tap a composition. Use Next for its three steps while the level, stability, and exposure instruments remain visible.',
+    'Choose Landscape, tap Guide, and open Examples and details. Turn Guides on to browse compositions. Swipe to a scene package and tap a composition. Use Next for its three steps while the level, stability, and exposure instruments remain visible.',
     Icons.landscape,
     ['4 landscape packages', '24 three-step compositions'],
   ),

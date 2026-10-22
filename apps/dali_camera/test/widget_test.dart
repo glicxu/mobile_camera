@@ -895,6 +895,10 @@ void main() {
   testWidgets('Header and lower controls expose primary camera actions', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final host = FakeHost();
     final camera = CameraController(host: host, register: false);
     await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
@@ -930,20 +934,24 @@ void main() {
     await tester.tap(find.byKey(const Key('manualControlsButton')));
     await tester.pumpAndSettle();
     expect(find.byType(ManualPreviewControls), findsNothing);
+    expect(find.byKey(const Key('captureGuidanceOverlay')), findsNothing);
     await tester.tap(find.byKey(const Key('coachingToggle')));
     await tester.pumpAndSettle();
-    expect(camera.coachingEnabled, isFalse);
+    expect(camera.coachingEnabled, isTrue);
     expect(find.byKey(const Key('situationMenu')), findsOneWidget);
     expect(find.byKey(const Key('filterToggle')), findsOneWidget);
     expect(find.byKey(const Key('beautifierToggle')), findsOneWidget);
-    expect(find.byKey(const Key('guidesToggle')), findsNothing);
+    expect(find.byKey(const Key('guidesToggle')), findsOneWidget);
+    expect(find.byKey(const Key('captureGuidanceOverlay')), findsOneWidget);
     expect(find.byType(LiveGuidancePanel), findsNothing);
     expect(camera.canCapture, isTrue);
+    await tester.tap(find.text('Examples and details'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LiveGuidancePanel), findsOneWidget);
     await tester.tap(find.byKey(const Key('coachingToggle')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('situationMenu')), findsOneWidget);
-    expect(find.byKey(const Key('guidesToggle')), findsOneWidget);
-    expect(find.byType(LiveGuidancePanel), findsOneWidget);
+    expect(find.byKey(const Key('captureGuidanceOverlay')), findsNothing);
+    expect(find.byKey(const Key('guidesToggle')), findsNothing);
     await tester.tap(find.byKey(const Key('appSettingsButton')));
     await tester.pumpAndSettle();
     expect(find.text('App Settings'), findsOneWidget);
@@ -1653,6 +1661,8 @@ void main() {
     expect(find.byTooltip('Filters: Off'), findsOneWidget);
     expect(find.byTooltip('Beautifier: Off'), findsOneWidget);
     expect(find.text('Effects'), findsNothing);
+    await tester.tap(find.byKey(const Key('coachingToggle')));
+    await tester.pumpAndSettle();
     expect(find.byTooltip('Guides: Off'), findsOneWidget);
     expect(find.text('Filters'), findsNothing);
     expect(find.text('Beautifier'), findsNothing);
@@ -1669,9 +1679,13 @@ void main() {
     await tester.tap(find.byKey(const Key('guidesToggle')));
     await tester.pumpAndSettle();
     expect(camera.guidesEnabled, isTrue);
+    await tester.tap(find.text('Examples and details'));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('packageGuideCarousel')), findsOneWidget);
     expect(find.text('Male / Masculine'), findsOneWidget);
     expect(find.byKey(const Key('guideThumbnail_M1')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('guideThumbnail_M1')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('guideThumbnail_M1')));
     await tester.pumpAndSettle();
     expect(camera.guidance.entry?.id, 'M1');

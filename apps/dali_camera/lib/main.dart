@@ -1,3 +1,4 @@
+import 'capture_layout.dart';
 import 'capture_feedback.dart';
 import 'capture_result_preview.dart';
 import 'dart:convert';
@@ -97,6 +98,33 @@ class _CameraScreenState extends State<CameraScreen>
   String? reviewBeautifierChoice;
   bool initialized = false;
   bool manualToolsVisible = false;
+  bool guidanceVisible = false;
+  bool guidanceDetails = false;
+  int displayTurns = 0;
+  int orientationRequest = 0;
+  static const layoutChannel = MethodChannel('dali/capture_layout');
+
+  Future<void> updateDisplayRotation() async {
+    final request = ++orientationRequest;
+    try {
+      final turns = await layoutChannel.invokeMethod<int>(
+        'displayQuarterTurns',
+      );
+      if (mounted && request == orientationRequest && turns != null) {
+        setState(() => displayTurns = turns % 4);
+      }
+    } on MissingPluginException {
+      // Desktop/widget tests have no handset orientation.
+    } on PlatformException {
+      // Keep the last known orientation until the next metrics update.
+    }
+  }
+
+  @override
+  void didChangeMetrics() {
+    updateDisplayRotation();
+  }
+
   int presentedCameraSheets = 0;
   final GlobalKey previewPlatformViewKey = GlobalKey(
     debugLabel: 'camera-preview',
@@ -106,6 +134,7 @@ class _CameraScreenState extends State<CameraScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    updateDisplayRotation();
     camera = widget.controller ?? CameraController();
     camera.addListener(refresh);
     WidgetsBinding.instance.addPostFrameCallback((_) => initialize());
@@ -155,6 +184,7 @@ class _CameraScreenState extends State<CameraScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      updateDisplayRotation();
       camera.foreground = true;
       if (initialized) camera.start();
     } else if (state == AppLifecycleState.paused ||
@@ -191,87 +221,52 @@ class _CameraScreenState extends State<CameraScreen>
     final zoomMaximum = camera.snapshot?.maximumZoom ?? 1;
     final zoomCurrent = camera.snapshot?.currentZoom ?? zoomMinimum;
     final zoomAvailable = zoomMaximum > zoomMinimum + .01;
+    final turns = orientation == Orientation.landscape
+        ? (displayTurns.isOdd ? displayTurns : 1)
+        : (displayTurns == 2 ? 2 : 0);
     final controls = Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (camera.cameraError != null) ...[
-                  Text(camera.cameraError!),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      FilledButton(
-                        onPressed: camera.start,
-                        child: const Text('Retry camera'),
-                      ),
-                      TextButton(
-                        onPressed: camera.host.openSettings,
-                        child: const Text('Open Settings'),
-                      ),
-                    ],
-                  ),
-                ],
-                CameraSelectionRow(
-                  camera: camera,
-                  showGuides: camera.coachingEnabled,
-                  onBeautifierLongPress: () => cameraSheet(
-                    () => showBeautifierQuickSheet(context, camera),
-                  ),
-                ),
-                if (camera.coachingEnabled)
-                  LiveGuidancePanel(
-                    camera: camera,
-                    onExample: (entry) => cameraSheet(() => details(entry)),
-                  ),
-                if (camera.message != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Semantics(
-                      liveRegion: true,
-                      child: Text(camera.message!),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (latestPhoto != null)
-                    IconButton(
-                      tooltip: 'View last photo',
-                      icon: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.file(
-                          File(latestPhoto.path),
-                          width: 52,
-                          height: 52,
-                          cacheWidth: 160,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, error, stack) =>
-                              const Icon(Icons.photo_outlined, size: 26),
+              SizedBox(
+                width: 112,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (latestPhoto != null)
+                      IconButton(
+                        tooltip: 'View last photo',
+                        icon: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: UprightCaptureControl(
+                            child: Image.file(
+                              File(latestPhoto.path),
+                              width: 44,
+                              height: 44,
+                              cacheWidth: 160,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, error, stack) =>
+                                  const Icon(Icons.photo_outlined, size: 26),
+                            ),
+                          ),
                         ),
+                        onPressed: camera.busy ? null : camera.openLatest,
                       ),
-                      onPressed: camera.busy ? null : camera.openLatest,
+                    IconButton(
+                      tooltip: 'Open photo library',
+                      icon: const UprightCaptureControl(
+                        child: Icon(Icons.photo_library_outlined, size: 26),
+                      ),
+                      onPressed: camera.busy
+                          ? null
+                          : () => cameraSheet(openPhotoLibrary),
                     ),
-                  IconButton(
-                    tooltip: 'Open photo library',
-                    icon: const Icon(Icons.photo_library_outlined, size: 26),
-                    onPressed: camera.busy
-                        ? null
-                        : () => cameraSheet(openPhotoLibrary),
-                  ),
-                ],
+                  ],
+                ),
               ),
               Semantics(
                 label: camera.takingPhoto
@@ -311,11 +306,13 @@ class _CameraScreenState extends State<CameraScreen>
                           ),
                           child: Center(
                             child: camera.timerSeconds > 0
-                                ? Text(
-                                    '${camera.timerSeconds}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
+                                ? UprightCaptureControl(
+                                    child: Text(
+                                      '${camera.timerSeconds}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   )
                                 : null,
@@ -326,61 +323,72 @@ class _CameraScreenState extends State<CameraScreen>
                   ),
                 ),
               ),
-              Row(
-                children: [
-                  HeaderAction(
-                    key: const Key('coachingToggle'),
-                    tooltip: camera.coachingEnabled
-                        ? 'Turn coaching off'
-                        : 'Turn coaching on',
-                    size: 52,
-                    radius: 10,
-                    selected: camera.coachingEnabled,
-                    onPressed: () =>
-                        camera.setCoachingEnabled(!camera.coachingEnabled),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          camera.coachingEnabled
-                              ? Icons.lightbulb
-                              : Icons.lightbulb_outline,
-                          size: 20,
-                        ),
-                        const Text(
-                          'Coaching',
-                          textScaler: TextScaler.noScaling,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
+              SizedBox(
+                width: 112,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    HeaderAction(
+                      key: const Key('coachingToggle'),
+                      tooltip: guidanceVisible
+                          ? 'Close guidance'
+                          : 'Open guidance',
+                      size: 52,
+                      radius: 10,
+                      selected: guidanceVisible,
+                      onPressed: () => setState(() {
+                        guidanceVisible = !guidanceVisible;
+                        guidanceDetails = false;
+                        if (guidanceVisible && !camera.coachingEnabled) {
+                          camera.setCoachingEnabled(true);
+                        }
+                      }),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            guidanceVisible
+                                ? Icons.lightbulb
+                                : Icons.lightbulb_outline,
+                            size: 20,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  HeaderAction(
-                    key: const Key('cameraControlsButton'),
-                    tooltip: 'Camera controls',
-                    size: 52,
-                    radius: 10,
-                    onPressed: camera.busy ? null : () => cameraSheet(settings),
-                    child: const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.camera_outlined, size: 20),
-                        Text(
-                          'Controls',
-                          textScaler: TextScaler.noScaling,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
+                          const Text(
+                            'Guide',
+                            textScaler: TextScaler.noScaling,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    HeaderAction(
+                      key: const Key('cameraControlsButton'),
+                      tooltip: 'Camera controls',
+                      size: 52,
+                      radius: 10,
+                      onPressed: camera.busy
+                          ? null
+                          : () => cameraSheet(settings),
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.camera_outlined, size: 20),
+                          Text(
+                            'Controls',
+                            textScaler: TextScaler.noScaling,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -390,270 +398,392 @@ class _CameraScreenState extends State<CameraScreen>
     final preview = LayoutBuilder(
       builder: (context, bounds) => Center(
         child: AspectRatio(
+          key: const Key('captureViewport'),
           aspectRatio: orientedPreviewAspect(camera.aspectRatio, orientation),
           child: LayoutBuilder(
-            builder: (context, previewBounds) => GestureDetector(
-              onScaleStart: zoomAvailable
-                  ? (_) => pinchZoomStart = zoomCurrent
-                  : null,
-              onScaleUpdate: zoomAvailable
-                  ? (details) {
-                      if (details.pointerCount < 2) return;
-                      camera.zoom(pinchZoomStart * details.scale);
-                    }
-                  : null,
-              onTapUp:
-                  camera.capturePreviewPath == null &&
-                      camera.snapshot?.supportsTap == true
-                  ? (details) => camera.meter(
-                      details.localPosition.dx / previewBounds.maxWidth,
-                      details.localPosition.dy / previewBounds.maxHeight,
-                    )
-                  : null,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (!camera.livePreviewEnabled)
-                    const ColoredBox(color: Colors.black)
-                  else if (Platform.isAndroid)
-                    AndroidView(
-                      key: previewPlatformViewKey,
-                      viewType: 'dali/camera',
-                    )
-                  else if (Platform.isIOS)
-                    UiKitView(
-                      key: previewPlatformViewKey,
-                      viewType: 'dali/camera',
-                    )
-                  else
-                    const Center(child: Text('Use an Android or iOS phone.')),
-                  if (zoomAvailable)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 10,
-                      child: Center(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: .62),
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                key: const Key('zoomOut'),
-                                tooltip: 'Zoom out',
-                                visualDensity: VisualDensity.compact,
-                                onPressed: zoomCurrent > zoomMinimum + .01
-                                    ? () => camera.zoom(
-                                        zoomOutTarget(
-                                          zoomCurrent,
-                                          zoomMinimum,
-                                          zoomMaximum,
-                                        ),
-                                      )
-                                    : null,
-                                icon: const Icon(Icons.remove, size: 18),
+            builder: (context, previewBounds) => Stack(
+              fit: StackFit.expand,
+              children: [
+                GestureDetector(
+                  onScaleStart: zoomAvailable
+                      ? (_) => pinchZoomStart = zoomCurrent
+                      : null,
+                  onScaleUpdate: zoomAvailable
+                      ? (details) {
+                          if (details.pointerCount < 2) return;
+                          camera.zoom(pinchZoomStart * details.scale);
+                        }
+                      : null,
+                  onTapUp:
+                      camera.capturePreviewPath == null &&
+                          camera.snapshot?.supportsTap == true
+                      ? (details) => camera.meter(
+                          details.localPosition.dx / previewBounds.maxWidth,
+                          details.localPosition.dy / previewBounds.maxHeight,
+                        )
+                      : null,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (!camera.livePreviewEnabled)
+                        const ColoredBox(color: Colors.black)
+                      else if (Platform.isAndroid)
+                        AndroidView(
+                          key: previewPlatformViewKey,
+                          viewType: 'dali/camera',
+                        )
+                      else if (Platform.isIOS)
+                        UiKitView(
+                          key: previewPlatformViewKey,
+                          viewType: 'dali/camera',
+                        )
+                      else
+                        const Center(
+                          child: Text('Use an Android or iOS phone.'),
+                        ),
+                      if (zoomAvailable)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 10,
+                          child: Center(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: .62),
+                                borderRadius: BorderRadius.circular(24),
                               ),
-                              SizedBox(
-                                width: 52,
-                                child: Text(
-                                  '${zoomCurrent.toStringAsFixed(1)}×',
-                                  key: const Key('zoomValue'),
-                                  textAlign: TextAlign.center,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    key: const Key('zoomOut'),
+                                    tooltip: 'Zoom out',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: zoomCurrent > zoomMinimum + .01
+                                        ? () => camera.zoom(
+                                            zoomOutTarget(
+                                              zoomCurrent,
+                                              zoomMinimum,
+                                              zoomMaximum,
+                                            ),
+                                          )
+                                        : null,
+                                    icon: const Icon(Icons.remove, size: 18),
+                                  ),
+                                  SizedBox(
+                                    width: 52,
+                                    child: Text(
+                                      '${zoomCurrent.toStringAsFixed(1)}×',
+                                      key: const Key('zoomValue'),
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    key: const Key('zoomIn'),
+                                    tooltip: 'Zoom in',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: zoomCurrent < zoomMaximum - .01
+                                        ? () => camera.zoom(
+                                            zoomInTarget(
+                                              zoomCurrent,
+                                              zoomMinimum,
+                                              zoomMaximum,
+                                            ),
+                                          )
+                                        : null,
+                                    icon: const Icon(Icons.add, size: 18),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (guidanceVisible &&
+                          camera.coachingEnabled &&
+                          camera.landscape)
+                        Positioned(
+                          left: 10,
+                          top: 10,
+                          child: LandscapeInstrumentOverlay(
+                            state: camera.landscapeInstruments,
+                          ),
+                        ),
+                      if (guidanceVisible &&
+                          guidanceDetails &&
+                          camera.coachingEnabled &&
+                          camera.activeSituation.showsPersonOverlay)
+                        CoachingOverlay(
+                          advice: camera.advice,
+                          visualFirst:
+                              camera.activeSituation ==
+                              PhotographicSituation.portrait,
+                          guidedAction: camera.canAdvanceGuidance
+                              ? camera.guidance.currentAction
+                              : null,
+                          animate: camera.livePreviewEnabled,
+                          frame: camera.debug ? camera.lastFrame : null,
+                        ),
+                      if (camera.watermark)
+                        Positioned(
+                          right: 14,
+                          bottom: 64,
+                          child: IgnorePointer(
+                            child: Opacity(
+                              opacity: .86,
+                              child: Image.asset(
+                                'assets/branding/dali-cam-watermark.png',
+                                width: 110,
+                                semanticLabel: 'Dali Cam watermark preview',
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (camera.countdown > 0)
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: .72),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.timer, size: 32),
+                                Text(
+                                  '${camera.countdown}',
+                                  textScaler: TextScaler.noScaling,
                                   style: const TextStyle(
+                                    fontSize: 88,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                              ),
-                              IconButton(
-                                key: const Key('zoomIn'),
-                                tooltip: 'Zoom in',
-                                visualDensity: VisualDensity.compact,
-                                onPressed: zoomCurrent < zoomMaximum - .01
-                                    ? () => camera.zoom(
-                                        zoomInTarget(
-                                          zoomCurrent,
-                                          zoomMinimum,
-                                          zoomMaximum,
+                                TextButton(
+                                  onPressed: camera.cancelSequence,
+                                  child: const Text('Cancel timer'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (camera.bursting)
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 22,
+                              vertical: 14,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withValues(alpha: .82),
+                              borderRadius: BorderRadius.circular(40),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('BURST'),
+                                Text(
+                                  '${camera.burstCount}',
+                                  style: const TextStyle(
+                                    fontSize: 42,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (camera.focusX != null && camera.focusY != null)
+                        Positioned(
+                          left: camera.focusX! * previewBounds.maxWidth - 36,
+                          top: camera.focusY! * previewBounds.maxHeight - 36,
+                          child: IgnorePointer(
+                            child: SizedBox(
+                              width: 72,
+                              height: 72,
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: cameraTeal,
+                                          width: 3,
                                         ),
-                                      )
-                                    : null,
-                                icon: const Icon(Icons.add, size: 18),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (camera.coachingEnabled && camera.landscape)
-                    Positioned(
-                      left: 10,
-                      top: 10,
-                      child: LandscapeInstrumentOverlay(
-                        state: camera.landscapeInstruments,
-                      ),
-                    ),
-                  if (camera.coachingEnabled &&
-                      camera.activeSituation.showsPersonOverlay)
-                    CoachingOverlay(
-                      advice: camera.advice,
-                      visualFirst:
-                          camera.activeSituation ==
-                          PhotographicSituation.portrait,
-                      guidedAction: camera.canAdvanceGuidance
-                          ? camera.guidance.currentAction
-                          : null,
-                      animate: camera.livePreviewEnabled,
-                      frame: camera.debug ? camera.lastFrame : null,
-                    ),
-                  if (camera.watermark)
-                    Positioned(
-                      right: 14,
-                      bottom: 14,
-                      child: IgnorePointer(
-                        child: Opacity(
-                          opacity: .86,
-                          child: Image.asset(
-                            'assets/branding/dali-cam-watermark.png',
-                            width: 150,
-                            semanticLabel: 'Dali Cam watermark preview',
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (camera.countdown > 0)
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: .72),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.timer, size: 32),
-                            Text(
-                              '${camera.countdown}',
-                              textScaler: TextScaler.noScaling,
-                              style: const TextStyle(
-                                fontSize: 88,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: camera.cancelSequence,
-                              child: const Text('Cancel timer'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  if (camera.bursting)
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 22,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: .82),
-                          borderRadius: BorderRadius.circular(40),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('BURST'),
-                            Text(
-                              '${camera.burstCount}',
-                              style: const TextStyle(
-                                fontSize: 42,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  if (camera.focusX != null && camera.focusY != null)
-                    Positioned(
-                      left: camera.focusX! * previewBounds.maxWidth - 36,
-                      top: camera.focusY! * previewBounds.maxHeight - 36,
-                      child: IgnorePointer(
-                        child: SizedBox(
-                          width: 72,
-                          height: 72,
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: cameraTeal,
-                                      width: 3,
+                                        borderRadius: BorderRadius.circular(7),
+                                      ),
                                     ),
-                                    borderRadius: BorderRadius.circular(7),
                                   ),
-                                ),
+                                  if (!camera.manualWorkspace)
+                                    const Align(
+                                      alignment: Alignment.bottomRight,
+                                      child: Icon(
+                                        Icons.wb_sunny,
+                                        size: 20,
+                                        color: Colors.yellow,
+                                      ),
+                                    ),
+                                ],
                               ),
-                              if (!camera.manualWorkspace)
-                                const Align(
-                                  alignment: Alignment.bottomRight,
-                                  child: Icon(
-                                    Icons.wb_sunny,
-                                    size: 20,
-                                    color: Colors.yellow,
-                                  ),
-                                ),
-                            ],
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  if (camera.snapshot?.locked == true ||
-                      camera.snapshot?.manualExposure == true)
-                    Positioned(
-                      top: 10,
-                      right: 10,
-                      child: IgnorePointer(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 6,
+                      if (camera.snapshot?.locked == true ||
+                          camera.snapshot?.manualExposure == true)
+                        Positioned(
+                          top: 10,
+                          right: 10,
+                          child: IgnorePointer(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: .68),
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              child: Text(
+                                camera.snapshot?.manualExposure == true
+                                    ? 'M'
+                                    : 'AF-L  AE-L',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: .68),
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          child: Text(
-                            camera.snapshot?.manualExposure == true
-                                ? 'M'
-                                : 'AF-L  AE-L',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                        ),
+                      if (camera.manualWorkspace &&
+                          manualToolsVisible &&
+                          camera.countdown == 0 &&
+                          !camera.bursting)
+                        ManualPreviewControls(camera: camera),
+                      if (camera.capturePreviewPath != null && !camera.bursting)
+                        CaptureResultPreview(
+                          key: const Key('captureResultPreview'),
+                          path: camera.capturePreviewPath!,
+                          status: camera.capturePreviewStatus,
+                          complete: !camera.busy,
+                        ),
+                      CaptureFeedback(sequence: camera.capturedPhotoSequence),
+                    ],
+                  ),
+                ),
+                if (guidanceVisible &&
+                    camera.countdown == 0 &&
+                    !camera.bursting)
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 66,
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: 360,
+                          maxHeight: previewBounds.maxHeight * .48,
+                        ),
+                        child: Material(
+                          key: const Key('captureGuidanceOverlay'),
+                          color: Colors.black.withValues(alpha: .82),
+                          borderRadius: BorderRadius.circular(16),
+                          clipBehavior: Clip.antiAlias,
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Expanded(child: Text('Guidance')),
+                                    IconButton(
+                                      tooltip: 'Close guidance',
+                                      onPressed: () => setState(
+                                        () => guidanceVisible = false,
+                                      ),
+                                      icon: const Icon(Icons.close),
+                                    ),
+                                  ],
+                                ),
+                                Semantics(
+                                  liveRegion: true,
+                                  child: Text(
+                                    camera
+                                            .contextualGuidance
+                                            ?.advice
+                                            .instruction ??
+                                        camera.advice.instruction,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => setState(
+                                    () => guidanceDetails = !guidanceDetails,
+                                  ),
+                                  child: Text(
+                                    guidanceDetails
+                                        ? 'Hide examples and details'
+                                        : 'Examples and details',
+                                  ),
+                                ),
+                                if (guidanceDetails)
+                                  LiveGuidancePanel(
+                                    camera: camera,
+                                    onExample: (entry) =>
+                                        cameraSheet(() => details(entry)),
+                                  ),
+                              ],
                             ),
                           ),
                         ),
                       ),
                     ),
-                  if (camera.manualWorkspace &&
-                      manualToolsVisible &&
-                      camera.countdown == 0 &&
-                      !camera.bursting)
-                    ManualPreviewControls(camera: camera),
-                  if (camera.capturePreviewPath != null && !camera.bursting)
-                    CaptureResultPreview(
-                      key: const Key('captureResultPreview'),
-                      path: camera.capturePreviewPath!,
-                      status: camera.capturePreviewStatus,
-                      complete: !camera.busy,
+                  ),
+                if (camera.cameraError != null || camera.message != null)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    right: 8,
+                    child: Material(
+                      color: Colors.black87,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                camera.cameraError ?? camera.message!,
+                              ),
+                            ),
+                            if (camera.cameraError != null)
+                              Wrap(
+                                children: [
+                                  TextButton(
+                                    onPressed: camera.start,
+                                    child: const Text('Retry camera'),
+                                  ),
+                                  TextButton(
+                                    onPressed: camera.host.openSettings,
+                                    child: const Text('Open Settings'),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                  CaptureFeedback(sequence: camera.capturedPhotoSequence),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -679,42 +809,33 @@ class _CameraScreenState extends State<CameraScreen>
         onSwitch: camera.starting || camera.busy ? null : camera.switchLens,
       ),
     );
-    if (orientation == Orientation.landscape) {
-      return Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
+    return CaptureRotation(
+      turns: turns,
+      child: RotatedBox(
+        quarterTurns: -turns,
+        child: Column(
           children: [
-            Expanded(child: preview),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: (MediaQuery.sizeOf(context).width * .44).clamp(0, 360),
-              child: Column(
-                children: [
-                  header,
-                  const SizedBox(height: 8),
-                  Expanded(child: controls),
-                ],
+            header,
+            Expanded(
+              child: RotatedBox(
+                quarterTurns: turns,
+                child: CaptureRotation(turns: 0, child: preview),
               ),
             ),
+            SizedBox(
+              height: 54,
+              child: CameraSelectionRow(
+                camera: camera,
+                showGuides: guidanceVisible,
+                onBeautifierLongPress: () => cameraSheet(
+                  () => showBeautifierQuickSheet(context, camera),
+                ),
+              ),
+            ),
+            controls,
           ],
         ),
-      );
-    }
-    return Column(
-      children: [
-        header,
-        Expanded(
-          child: Column(
-            children: [
-              Expanded(flex: 5, child: preview),
-              if (camera.coachingEnabled)
-                Expanded(flex: 4, child: controls)
-              else
-                SizedBox(height: 190, child: controls),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 

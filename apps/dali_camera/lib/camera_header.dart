@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'capture_layout.dart';
 
 const cameraTeal = Color(0xff30b0ac);
 
@@ -19,18 +20,20 @@ class CameraHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      const Expanded(
-        child: Text(
-          'Dali Cam',
-          key: Key('cameraBrandName'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: cameraTeal,
-          ),
-        ),
+      Expanded(
+        child: CaptureRotation.of(context).isOdd
+            ? const SizedBox()
+            : const Text(
+                'Dali Cam',
+                key: Key('cameraBrandName'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: cameraTeal,
+                ),
+              ),
       ),
       situation,
       const SizedBox(width: 8),
@@ -142,7 +145,7 @@ class HeaderAction extends StatelessWidget {
                 ),
                 child: DefaultTextStyle(
                   style: TextStyle(color: color),
-                  child: Center(child: child),
+                  child: Center(child: UprightCaptureControl(child: child)),
                 ),
               ),
             ),
