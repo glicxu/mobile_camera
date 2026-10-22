@@ -14,12 +14,12 @@ import 'reference_chooser.dart';
 import 'reference_details.dart';
 import 'photo_effect_controls.dart';
 import 'review_comparison.dart';
+import 'review_filmstrip.dart';
 import 'review_treatment_controls.dart';
 import 'camera_header.dart';
 import 'coaching_overlay.dart';
 import 'live_guidance.dart';
 import 'landscape_instruments.dart';
-import 'distance_swipe.dart';
 import 'app_settings.dart';
 import 'camera_tutorial.dart';
 import 'beautifier_quick_sheet.dart';
@@ -93,6 +93,7 @@ class _CameraScreenState extends State<CameraScreen>
   String? reviewVersionId;
   String? reviewTool;
   bool reviewSaveChooserOpen = false;
+  bool showReviewThumbnails = false;
   String? reviewBeautifierChoice;
   bool initialized = false;
   bool manualToolsVisible = false;
@@ -728,8 +729,12 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  void openReviewTool(String tool) {
-    if (camera.busy) return;
+  Future<void> openReviewTool(String tool) async {
+    if (camera.busy || camera.reviewLoading) return;
+    if (tool != 'menu') {
+      if (!await camera.prepareReviewEdit(analyze: tool == 'edit')) return;
+      if (!mounted || !camera.reviewing) return;
+    }
     setState(() {
       reviewTool = reviewTool == tool ? null : tool;
       if (tool == 'enhance') camera.reviewTreatment = 'enhance';
@@ -800,8 +805,8 @@ class _CameraScreenState extends State<CameraScreen>
               trailing: const Icon(Icons.chevron_right),
               onTap: camera.busy
                   ? null
-                  : () {
-                      openReviewTool(tool);
+                  : () async {
+                      await openReviewTool(tool);
                       if (tool == 'auto') camera.autoEnhanceReview();
                     },
             ),
@@ -1026,6 +1031,11 @@ class _CameraScreenState extends State<CameraScreen>
         return;
       }
       await camera.saveSelected(replaceId: choice == 'replace' ? target : null);
+      if (camera.message == 'Photo replaced' ||
+          camera.message == 'Selected copy saved to Photos') {
+        await camera.commitReviewEdits();
+        if (mounted) setState(() => reviewTool = null);
+      }
     } finally {
       if (mounted) setState(() => reviewSaveChooserOpen = false);
     }
@@ -1054,207 +1064,370 @@ class _CameraScreenState extends State<CameraScreen>
     if (confirm == true) await camera.discard();
   }
 
-  Widget review() => Column(
-    children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
-          children: [
-            IconButton(
-              tooltip: 'Back to camera',
-              onPressed: camera.busy ? null : camera.returnToCamera,
-              icon: const Icon(Icons.camera_alt_outlined),
-            ),
-            IconButton(
-              tooltip: 'Previous photo',
-              onPressed: camera.canPreviousPhoto ? camera.previousPhoto : null,
-              icon: const Icon(Icons.chevron_left),
-            ),
-            Expanded(
-              child: Column(
-                children: [
-                  const Text('Photo review'),
-                  if (camera.reviewIndex >= 0)
-                    Text(
-                      '${camera.reviewIndex + 1} of ${camera.reviewCount}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.white60,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: 'Next photo',
-              onPressed: camera.canNextPhoto ? camera.nextPhoto : null,
-              icon: const Icon(Icons.chevron_right),
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Photo options',
-              enabled: !camera.busy,
-              onSelected: (value) {
-                switch (value) {
-                  case 'pick':
-                    camera.pick();
-                  case 'recent':
-                    recentPhotos();
-                  case 'import':
-                    choosePhotos();
-                  case 'settings':
-                    camera.host.openSettings();
-                  case 'discard':
-                    discardReviewPhoto();
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'pick',
-                  child: Text('Choose photos from library'),
-                ),
-                const PopupMenuItem(
-                  value: 'recent',
-                  child: Text('Recent photos'),
-                ),
-                const PopupMenuItem(
-                  value: 'import',
-                  child: Text('Import photos'),
-                ),
-                if (camera.original?.unsaved == true) ...[
-                  const PopupMenuItem(
-                    value: 'settings',
-                    child: Text('Open Settings'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'discard',
-                    child: Text('Discard unsaved photo'),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-      Expanded(
-        child: camera.original == null || camera.selected == null
-            ? const Center(child: Text('Choose a photo to edit'))
-            : DistanceSwipe(
-                minimumDistance: 60,
-                onSwipe: (offset) {
-                  if (offset > 0) {
-                    camera.nextPhoto();
-                  } else {
-                    camera.previousPhoto();
-                  }
-                },
-                onTap: openFullScreen,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: ReviewComparison(
-                    before: camera.original!.path,
-                    after: camera.selected!.path,
-                    mode: splitComparison
-                        ? 'split'
-                        : compare
-                        ? 'before'
-                        : 'after',
-                  ),
-                ),
-              ),
-      ),
-      if (hasReviewEdits)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: reviewComparisonControls(),
-        ),
-      if (camera.busy) const LinearProgressIndicator(),
-      if (camera.message != null)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Semantics(
-            liveRegion: true,
-            child: Text(camera.message!, maxLines: 2),
+  Future<bool> leaveReviewEdits() async {
+    if (!hasReviewEdits) {
+      setState(() => reviewTool = null);
+      return true;
+    }
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Keep your edits?'),
+        content: const Text('Save the edited photo or discard these changes.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Keep editing'),
           ),
-        ),
-      if (reviewTool != null)
-        ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight:
-                MediaQuery.sizeOf(context).height *
-                (MediaQuery.sizeOf(context).width >
-                        MediaQuery.sizeOf(context).height
-                    ? (reviewTool == 'menu' ? .35 : .25)
-                    : (reviewTool == 'menu' ? .54 : .32)),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'discard'),
+            child: const Text('Discard edits'),
           ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'save'),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (choice == null || !mounted) return false;
+    if (choice == 'save') {
+      await saveReviewPhoto();
+      if (hasReviewEdits) return false;
+    } else {
+      await camera.variant();
+    }
+    if (mounted) setState(() => reviewTool = null);
+    return true;
+  }
+
+  Future<void> backToCamera() async {
+    if (camera.busy) return;
+    if (await leaveReviewEdits()) await camera.returnToCamera();
+  }
+
+  Future<void> browseReview(int direction) async {
+    if (camera.busy || camera.reviewLoading) return;
+    if (!await leaveReviewEdits()) return;
+    if (direction > 0) {
+      await camera.nextPhoto();
+    } else {
+      await camera.previousPhoto();
+    }
+  }
+
+  Future<void> showPhotoInfo() async {
+    await camera.refreshReviewInfo();
+    if (!mounted) return;
+    final info = camera.reviewInfo;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                children: [
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      {
-                        'menu': 'Enhance',
-                        'auto': 'Auto',
-                        'enhance': 'General Enhancer',
-                        'filters': 'Filter',
-                        'beautifier': 'Beautifier',
-                        'edit': 'Crop and Edit',
-                      }[reviewTool]!,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Close photo tools',
-                    onPressed: () => setState(() => reviewTool = null),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
+              Text(
+                camera.reviewTitle,
+                style: Theme.of(ctx).textTheme.titleMedium,
               ),
-              Flexible(
-                child: SingleChildScrollView(
-                  key: ValueKey('reviewEditor_$reviewTool'),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: reviewEditor(),
-                ),
+              const SizedBox(height: 12),
+              if (info != null) ...[
+                Text('${info['width']} × ${info['height']} pixels'),
+                if (info['date'] is num && info['date'] > 0)
+                  Text(
+                    DateTime.fromMillisecondsSinceEpoch(
+                      (info['date'] as num).toInt(),
+                    ).toLocal().toString().split('.').first,
+                  ),
+                if (info['bytes'] is num)
+                  Text(
+                    '${((info['bytes'] as num) / 1048576).toStringAsFixed(1)} MB',
+                  ),
+              ] else
+                const Text('Library metadata is unavailable for this photo.'),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Done'),
               ),
             ],
           ),
         ),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          children: [
-            FilledButton.tonalIcon(
-              key: const Key('reviewEnhanceButton'),
-              onPressed: camera.busy ? null : () => openReviewTool('menu'),
-              icon: const Icon(Icons.auto_fix_high),
-              label: const Text('Enhance'),
-            ),
-            const Spacer(),
-            const SizedBox(width: 8),
-            if (camera.original?.unsaved == true ||
-                (camera.selected != null &&
-                    camera.selected?.id != camera.original?.id))
-              FilledButton(
-                key: const Key('saveReviewEdits'),
-                onPressed:
-                    camera.busy ||
-                        reviewSaveChooserOpen ||
-                        camera.selected == null ||
-                        (camera.original?.unsaved != true &&
-                            camera.selected?.id == camera.original?.id)
-                    ? null
-                    : saveReviewPhoto,
+      ),
+    );
+  }
+
+  Future<void> deletePhoto() async {
+    if (camera.original?.unsaved == true) {
+      await discardReviewPhoto();
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete photo from library?'),
+        content: const Text(
+          'Your phone may ask you to confirm moving this photo to trash or deleting it.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await camera.deleteReviewPhoto();
+  }
+
+  Widget review() => PopScope(
+    canPop: false,
+    onPopInvokedWithResult: (didPop, result) {
+      if (!didPop) backToCamera();
+    },
+    child: Column(
+      children: [
+        SizedBox(
+          height: 52,
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Back to camera',
+                onPressed: camera.busy ? null : backToCamera,
+                icon: const Icon(Icons.arrow_back),
+              ),
+              Expanded(
                 child: Text(
-                  camera.original?.unsaved == true ? 'Retry save' : 'Save',
+                  camera.reviewTitle,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-          ],
+              PopupMenuButton<String>(
+                tooltip: 'Photo options',
+                enabled: !camera.busy && !camera.reviewLoading,
+                onSelected: (value) async {
+                  if (!await leaveReviewEdits()) return;
+                  if (value == 'thumbnails') {
+                    setState(
+                      () => showReviewThumbnails = !showReviewThumbnails,
+                    );
+                    return;
+                  }
+                  if (value == 'library') await openPhotoLibrary();
+                  if (value == 'import') await choosePhotos();
+                  if (value == 'settings') await camera.host.openSettings();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'thumbnails',
+                    child: Text('Show or hide thumbnails'),
+                  ),
+                  PopupMenuItem(
+                    value: 'library',
+                    child: Text('Open photo library'),
+                  ),
+                  PopupMenuItem(value: 'import', child: Text('Import photos')),
+                  PopupMenuItem(
+                    value: 'settings',
+                    child: Text('Photo access settings'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
-    ],
+        Expanded(
+          child: camera.original == null || camera.selected == null
+              ? Center(
+                  child: Text(
+                    camera.reviewLoading
+                        ? 'Loading photo...'
+                        : 'No accessible photos',
+                  ),
+                )
+              : ReviewPhotoViewer(
+                  key: ValueKey(camera.reviewAssetId ?? camera.original!.id),
+                  before: camera.original!.path,
+                  after: camera.selected!.path,
+                  mode: splitComparison
+                      ? 'split'
+                      : compare
+                      ? 'before'
+                      : 'after',
+                  onSwipe: browseReview,
+                  onZoom: () => camera.prepareReviewEdit(),
+                ),
+        ),
+        if (showReviewThumbnails &&
+            camera.reviewCount > 0 &&
+            reviewTool == null)
+          ReviewFilmstrip(
+            camera: camera,
+            onSelect: (index) async {
+              if (await leaveReviewEdits()) {
+                await camera.selectReviewPhoto(index);
+              }
+            },
+          ),
+        if (camera.busy || camera.reviewLoading)
+          const LinearProgressIndicator(minHeight: 2),
+        if (camera.message != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Text(
+              camera.message!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        if (camera.message?.contains('Try again') == true &&
+            !camera.reviewLoading)
+          TextButton(
+            onPressed: camera.retryReviewLoad,
+            child: const Text('Retry'),
+          ),
+        if (hasReviewEdits) reviewComparisonControls(),
+        if (reviewTool != null)
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight:
+                  MediaQuery.sizeOf(context).height *
+                  (MediaQuery.sizeOf(context).width >
+                          MediaQuery.sizeOf(context).height
+                      ? (reviewTool == 'menu' ? .35 : .25)
+                      : (reviewTool == 'menu' ? .54 : .32)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        {
+                          'menu': 'Edit photo',
+                          'auto': 'Auto',
+                          'enhance': 'General Enhancer',
+                          'filters': 'Filter',
+                          'beautifier': 'Beautifier',
+                          'edit': 'Crop and Edit',
+                        }[reviewTool]!,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close photo tools',
+                      onPressed: () => setState(() => reviewTool = null),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    key: ValueKey('reviewEditor_$reviewTool'),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: reviewEditor(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (reviewTool != null ||
+            hasReviewEdits ||
+            camera.original?.unsaved == true)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                TextButton(
+                  onPressed: camera.busy ? null : leaveReviewEdits,
+                  child: const Text('Cancel'),
+                ),
+                const Spacer(),
+                if (hasReviewEdits || camera.original?.unsaved == true)
+                  FilledButton(
+                    key: const Key('saveReviewEdits'),
+                    onPressed: camera.busy ? null : saveReviewPhoto,
+                    child: Text(
+                      camera.original?.unsaved == true ? 'Retry save' : 'Save',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        SizedBox(
+          height: 56,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton(
+                tooltip: 'Share',
+                onPressed:
+                    camera.busy ||
+                        camera.reviewLoading ||
+                        camera.original == null
+                    ? null
+                    : () => camera.shareReviewPhoto(originalView: compare),
+                icon: const Icon(Icons.ios_share),
+              ),
+              IconButton(
+                tooltip: camera.reviewInfo?['favoriteSupported'] == true
+                    ? 'Favorite'
+                    : 'Favorite unavailable for this photo',
+                onPressed:
+                    camera.busy ||
+                        camera.reviewLoading ||
+                        camera.reviewInfo?['favoriteSupported'] != true
+                    ? null
+                    : camera.toggleFavorite,
+                icon: Icon(
+                  camera.reviewInfo?['favorite'] == true
+                      ? Icons.favorite
+                      : Icons.favorite_border,
+                ),
+              ),
+              IconButton(
+                key: const Key('reviewEnhanceButton'),
+                tooltip: 'Edit',
+                onPressed:
+                    camera.busy ||
+                        camera.reviewLoading ||
+                        camera.original == null
+                    ? null
+                    : () => openReviewTool('menu'),
+                icon: const Icon(Icons.edit_outlined),
+              ),
+              IconButton(
+                tooltip: 'Info',
+                onPressed: camera.original == null ? null : showPhotoInfo,
+                icon: const Icon(Icons.info_outline),
+              ),
+              IconButton(
+                tooltip: camera.original?.unsaved == true
+                    ? 'Discard unsaved photo'
+                    : 'Delete',
+                onPressed:
+                    camera.busy ||
+                        camera.reviewLoading ||
+                        (camera.reviewAssetId == null &&
+                            camera.original?.unsaved != true)
+                    ? null
+                    : deletePhoto,
+                icon: const Icon(Icons.delete_outline),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
   );
 
   Future<void> openFullScreen({String? mode}) => Navigator.of(context).push(
@@ -1493,7 +1666,7 @@ class _CameraScreenState extends State<CameraScreen>
       title: const Text('Take a photo with Dali'),
       content: const SingleChildScrollView(
         child: Text(
-          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Next confirms a posture step; Dali does not verify the pose.\n\nPinch the live preview or use − and + to zoom. Tap the shutter for one photo; hold for a paced burst. Click sound, timer, and custom voice phrase are in Camera controls. Voice runs on device where your phone supports it.\n\nFilters and Beautifier have separate quick on/off buttons. Open Camera controls to choose Auto or Custom and fine-tune each effect. Depth of focus softens the background around the detected subject or your focus point. Selected effects and the signature are applied before the final photo saves to Photos. A private original is retained for review and recovery.\n\nReview offers Original, Reframe, Level, General Enhance, Portrait Polish, and Landscape Polish when measurements are available. Before exports the original; After and Split export the selected version. Tap the photo to zoom and move the comparison split.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed processing or saves retain the private capture for retry.',
+          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Next confirms a posture step; Dali does not verify the pose.\n\nPinch the live preview or use − and + to zoom. Tap the shutter for one photo; hold for a paced burst. Click sound, timer, and custom voice phrase are in Camera controls. Voice runs on device where your phone supports it.\n\nFilters and Beautifier have separate quick on/off buttons. Open Camera controls to choose Auto or Custom and fine-tune each effect. Depth of focus softens the background around the detected subject or your focus point. Selected effects and the signature are applied before the final photo saves to Photos. A private original is retained for review and recovery.\n\nReview opens the saved photo without processing. Use Share, Favorite, Info or Delete, or tap Edit for photo tools. Pinch or double-tap to zoom; swipe at normal zoom to browse. The photo menu can show nearby thumbnails. In Edit, Before and After compare the saved photo with your changes; Split shows them side by side. Save keeps the edited result even while viewing Before.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed processing or saves retain the private capture for retry.',
         ),
       ),
       actions: [

@@ -216,45 +216,63 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   }
 
   final List<PhotoHandle> history = [];
+  final Map<String, PhotoHandle> _savedCaptures = {};
   final List<PhotoHandle> importedPhotos = [];
   final List<LibraryPhoto> libraryPhotos = [];
   final Map<int, PhotoHandle> _libraryCache = {};
   int _libraryIndex = -1;
+  String? _historyReviewId;
   bool get reviewingLibrary => _libraryIndex >= 0;
-  String get reviewTitle =>
-      reviewingLibrary ? libraryPhotos[_libraryIndex].title : 'Photo review';
-  bool get reviewingImport =>
-      importedPhotos.any((photo) => photo.id == original?.id);
+  String get reviewTitle => reviewingLibrary
+      ? libraryPhotos[_libraryIndex].title
+      : reviewInfo?['date'] is num && (reviewInfo!['date'] as num) > 0
+      ? DateTime.fromMillisecondsSinceEpoch(
+          (reviewInfo!['date'] as num).toInt(),
+        ).toLocal().toString().split('.').first
+      : 'Photo review';
+  bool get reviewingImport => importedPhotos.any(
+    (photo) => photo.id == (_historyReviewId ?? original?.id),
+  );
   List<PhotoHandle> get reviewPhotos =>
       reviewingImport ? importedPhotos : history;
   int get reviewCount =>
       reviewingLibrary ? libraryPhotos.length : reviewPhotos.length;
   int get reviewIndex => reviewingLibrary
       ? _libraryIndex
-      : reviewPhotos.indexWhere((photo) => photo.id == original?.id);
-  bool get _wrappingReview => reviewCount > 1;
+      : reviewPhotos.indexWhere(
+          (photo) => photo.id == (_historyReviewId ?? original?.id),
+        );
+  bool reviewLoading = false;
+  int? _failedReviewIndex;
+  bool _libraryHasMore = false;
+  int _reviewLoad = 0;
+  String? reviewAssetId;
+  Map<String, dynamic>? reviewInfo;
+  bool _reviewFullResolution = true;
   bool get canPreviousPhoto =>
-      !busy &&
-      original?.unsaved != true &&
-      (reviewIndex > 0 || (_wrappingReview && reviewCount > 1));
+      !busy && !reviewLoading && original?.unsaved != true && reviewIndex > 0;
   bool get canNextPhoto =>
       !busy &&
+      !reviewLoading &&
       original?.unsaved != true &&
       reviewIndex >= 0 &&
-      (reviewIndex < reviewCount - 1 || (_wrappingReview && reviewCount > 1));
+      (reviewIndex < reviewCount - 1 || (reviewingLibrary && _libraryHasMore));
+
   Future<void> previousPhoto() async {
-    if (!canPreviousPhoto) return;
-    final index = (reviewIndex - 1) % reviewCount;
-    if (reviewingLibrary) {
-      await _openLibraryIndex(index);
-    } else {
-      await openHistory(reviewPhotos[index]);
-    }
+    if (canPreviousPhoto) await selectReviewPhoto(reviewIndex - 1);
   }
 
   Future<void> nextPhoto() async {
     if (!canNextPhoto) return;
-    final index = (reviewIndex + 1) % reviewCount;
+    if (reviewingLibrary && reviewIndex == reviewCount - 1) {
+      await _loadMoreLibrary();
+    }
+    if (!reviewing) return;
+    if (reviewIndex < reviewCount - 1) await selectReviewPhoto(reviewIndex + 1);
+  }
+
+  Future<void> selectReviewPhoto(int index) async {
+    if (busy || reviewLoading || index < 0 || index >= reviewCount) return;
     if (reviewingLibrary) {
       await _openLibraryIndex(index);
     } else {
@@ -262,107 +280,276 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     }
   }
 
-  /// Returns false only when the caller should offer the system picker.
+  String reviewThumbnailPath(int index) =>
+      (_savedCaptures[reviewPhotos[index].id] ?? reviewPhotos[index]).path;
+
+  Future<void> loadMoreReviewPhotos() async {
+    if (!busy && !reviewLoading && reviewingLibrary && _libraryHasMore) {
+      await _loadMoreLibrary();
+    }
+  }
+
+  Future<void> _loadMoreLibrary() async {
+    final token = _reviewLoad;
+    reviewLoading = true;
+    notifyListeners();
+    try {
+      final page = await host.listPhotoPage(libraryPhotos.length, 30);
+      if (token != _reviewLoad || !reviewing) return;
+      _libraryHasMore = page.photos.length == 30;
+      final ids = libraryPhotos.map((p) => p.id).toSet();
+      libraryPhotos.addAll(page.photos.where((p) => ids.add(p.id)));
+    } catch (e) {
+      if (token == _reviewLoad) {
+        message = 'Could not load more photos. Try again: $e';
+      }
+    } finally {
+      if (token == _reviewLoad) {
+        reviewLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// Opens the newest accessible asset without enumerating the whole library.
   Future<bool> openPhotoLibrary() async {
-    if (busy) return true;
+    if (busy || reviewLoading) return true;
     cancelSequence();
     if (original?.unsaved == true) {
-      message =
-          'Save or discard the retained original before opening the library.';
-      notifyListeners();
+      await openLatest();
       return true;
     }
-    busy = true;
+    final token = ++_reviewLoad;
+    reviewing = true;
+    reviewLoading = true;
+    message = null;
     notifyListeners();
-    PhotoLibrary? result;
+    await pause();
     try {
-      result = await host.listPhotoLibrary();
-    } catch (e) {
-      message = 'Could not open the photo library: $e';
-    } finally {
-      busy = false;
-    }
-    if (_disposed) return true;
-    if (result == null || result.photos.isEmpty) {
-      if (result != null) {
-        message = result.status == 'denied'
-            ? 'Photos access denied. Enable access in Settings, or select photos to import.'
-            : 'No accessible library photos. You can select photos or open a folder.';
-      }
-      if (history.isNotEmpty) {
-        await openHistory(history.first);
-        notifyListeners();
+      final page = await host.listPhotoPage(0, 1);
+      if (token != _reviewLoad || _disposed) return true;
+      if (page.photos.isEmpty) {
+        message = page.status == 'denied'
+            ? 'Allow Photos access in Settings or import a photo.'
+            : 'No accessible photos.';
         return true;
       }
-      notifyListeners();
-      return false;
-    }
-    // Stage the first copy before replacing a working review session.
-    PhotoHandle first;
-    busy = true;
-    notifyListeners();
-    try {
-      first = await host.loadLibraryPhoto(result.photos.first.id);
-    } catch (e) {
-      message = 'Could not load library photo. Previous photo retained: $e';
-      busy = false;
-      notifyListeners();
-      return reviewing;
-    }
-    if (_disposed) {
-      await _release(first);
+      final first = await host.loadPhotoPreview(page.photos.first.id, 1600);
+      if (token != _reviewLoad || _disposed) {
+        await _release(first);
+        return true;
+      }
+      await _releaseVariant();
+      await _releaseStandaloneOriginal();
+      await _clearLibraryPhotos();
+      libraryPhotos.addAll(page.photos);
+      _libraryCache[0] = first;
+      _libraryHasMore = true;
+      reviewLoading = false;
+      await _openLibraryIndex(0);
+      if (reviewing && _libraryIndex == 0) await _loadMoreLibrary();
       return true;
+    } catch (e) {
+      if (token == _reviewLoad) {
+        message = 'Could not open photos. Try again: $e';
+      }
+      return true;
+    } finally {
+      if (token == _reviewLoad) {
+        reviewLoading = false;
+        notifyListeners();
+      }
     }
-    await _releaseVariant();
-    await _clearLibraryPhotos();
-    libraryPhotos.addAll(result.photos);
-    _libraryCache[0] = first;
-    busy = false;
-    await _openLibraryIndex(0);
-    message = result.status == 'limited'
-        ? 'Showing photos you allowed. Change Photos access in Settings to see more.'
-        : null;
-    notifyListeners();
-    return true;
   }
 
   Future<void> _openLibraryIndex(int index) async {
-    if (busy ||
-        original?.unsaved == true ||
-        index < 0 ||
-        index >= libraryPhotos.length) {
-      return;
-    }
-    busy = true;
+    if (busy || index < 0 || index >= libraryPhotos.length) return;
+    final token = ++_reviewLoad;
+    reviewLoading = true;
+    message = null;
     notifyListeners();
+    final id = libraryPhotos[index].id;
     try {
       final photo =
-          _libraryCache[index] ??
-          await host.loadLibraryPhoto(libraryPhotos[index].id);
-      if (_disposed) {
-        await _release(photo);
+          _libraryCache[index] ?? await host.loadPhotoPreview(id, 1600);
+      if (_disposed || token != _reviewLoad) {
+        if (!_libraryCache.containsValue(photo)) await _release(photo);
         return;
       }
       await _releaseVariant();
-      await _clearImportedPhotos();
+      if (token != _reviewLoad) {
+        await _release(photo);
+        return;
+      }
       _libraryCache[index] = photo;
       _libraryIndex = index;
+      _failedReviewIndex = null;
       original = photo;
       selected = photo;
+      reviewAssetId = id;
+      reviewInfo = null;
+      _reviewFullResolution = false;
       styled = false;
       selectedTreatment = 'original';
+      photoAnalysis = null;
+      analysisError = null;
       reviewing = true;
-      await pause();
-      await _analyzeStill();
-      // Keep only three private copies. Listing never decodes the whole library.
+      notifyListeners();
+      unawaited(refreshReviewInfo());
       for (final old in _libraryCache.keys.toList()) {
         if (_libraryCache.length <= 3) break;
         if (old != index) await _release(_libraryCache.remove(old)!);
       }
     } catch (e) {
-      message = 'Could not load this photo. Previous photo retained: $e';
+      if (token == _reviewLoad) {
+        _failedReviewIndex = index;
+        message =
+            'Could not load photo. Previous photo retained. Try again: $e';
+      }
+    } finally {
+      if (token == _reviewLoad) {
+        reviewLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> retryReviewLoad() async {
+    if (busy || reviewLoading) return;
+    if (_failedReviewIndex != null &&
+        _failedReviewIndex! < libraryPhotos.length) {
+      await _openLibraryIndex(_failedReviewIndex!);
+    } else {
+      await openPhotoLibrary();
+    }
+  }
+
+  Future<void> refreshReviewInfo() async {
+    final id = reviewAssetId;
+    if (id == null) return;
+    try {
+      final info = jsonDecode(await host.photoInfo(id)) as Map<String, dynamic>;
+      if (reviewAssetId == id && reviewing) {
+        reviewInfo = info;
+        notifyListeners();
+      }
+    } catch (_) {
+      /* Metadata must not delay viewing. */
+    }
+  }
+
+  Future<void> toggleFavorite() async {
+    final id = reviewAssetId;
+    if (id == null || busy || reviewInfo?['favoriteSupported'] != true) return;
+    busy = true;
+    notifyListeners();
+    try {
+      await host.setPhotoFavorite(id, reviewInfo?['favorite'] != true);
+      await refreshReviewInfo();
+    } catch (e) {
+      if (e is! PlatformException || e.code != 'cancelled') {
+        message = 'Could not change favorite: $e';
+      }
     } finally {
       busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteReviewPhoto() async {
+    final id = reviewAssetId;
+    if (id == null || busy) return;
+    busy = true;
+    notifyListeners();
+    try {
+      await host.deleteLibraryPhoto(id);
+      final index = _libraryIndex;
+      final retained = history.where((p) => p.id == _historyReviewId).toList();
+      for (final photo in retained) {
+        if (await host.replacementTarget(photo) == id) {
+          history.remove(photo);
+          final saved = _savedCaptures.remove(photo.id);
+          if (saved != null && saved != photo) await _release(saved);
+          await _release(photo);
+        }
+      }
+      await _persistHistory();
+      await _releaseVariant();
+      final copies = _libraryCache.values.toList();
+      _libraryCache.clear();
+      for (final photo in copies) {
+        await _release(photo);
+      }
+      _historyReviewId = null;
+      original = null;
+      selected = null;
+      reviewAssetId = null;
+      reviewInfo = null;
+      if (index >= 0) {
+        libraryPhotos.removeAt(index);
+        _libraryIndex = -1;
+        busy = false;
+        if (libraryPhotos.isEmpty && _libraryHasMore) await _loadMoreLibrary();
+        if (libraryPhotos.isNotEmpty) {
+          await _openLibraryIndex(math.min(index, libraryPhotos.length - 1));
+        }
+      } else {
+        // Refresh the accessible library after deleting a retained capture's asset.
+        busy = false;
+        await openPhotoLibrary();
+      }
+      if (original == null) message = 'No accessible photos.';
+    } catch (e) {
+      if (e is! PlatformException || e.code != 'cancelled') {
+        message = 'Could not delete photo: $e';
+      }
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> prepareReviewEdit({bool analyze = false}) async {
+    if (busy || reviewLoading || original == null) return false;
+    reviewLoading = true;
+    notifyListeners();
+    final token = _reviewLoad;
+    try {
+      if (!_reviewFullResolution && reviewAssetId != null) {
+        final full = await host.loadLibraryPhoto(reviewAssetId!);
+        if (token != _reviewLoad || !reviewing) {
+          await _release(full);
+          return false;
+        }
+        final previous = original!;
+        original = full;
+        selected = full;
+        _reviewFullResolution = true;
+        if (_libraryIndex >= 0) _libraryCache[_libraryIndex] = full;
+        if (!history.contains(previous) && !importedPhotos.contains(previous)) {
+          await _release(previous);
+        }
+      }
+      if (analyze && photoAnalysis == null) await _analyzeStill();
+      return token == _reviewLoad && reviewing;
+    } catch (e) {
+      if (token == _reviewLoad) message = 'Could not load full photo: $e';
+      return false;
+    } finally {
+      if (token == _reviewLoad) {
+        reviewLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> shareReviewPhoto({bool originalView = false}) async {
+    if (!await prepareReviewEdit()) return;
+    if (busy || original == null || !_reviewFullResolution) return;
+    try {
+      await host.share(originalView ? original! : selected!);
+    } catch (e) {
+      message = 'Could not share photo: $e';
       notifyListeners();
     }
   }
@@ -462,15 +649,19 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       original = await host.recover();
       if (_pendingCaptureId != original?.id) _pendingCaptureRecipe = null;
       _pendingCaptureId = original?.id;
-      selected = original;
+      selected = _savedCaptures[original?.id] ?? original;
       reviewing = original != null;
       if (original != null) {
         history.removeWhere((photo) => photo.id == original!.id);
         history.insert(0, original!);
+      } else {
+        original = history.firstOrNull;
+        selected = _savedCaptures[original?.id] ?? original;
       }
-      await host.reconcilePrivatePhotos(
-        history.map((photo) => photo.path).toList(),
-      );
+      await host.reconcilePrivatePhotos([
+        ...history.map((photo) => photo.path),
+        ..._savedCaptures.values.map((photo) => photo.path),
+      ]);
     } catch (e) {
       message = 'Recovery needs attention: $e';
     }
@@ -478,7 +669,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (!reviewing) {
       await start();
     } else {
-      await _analyzeStill();
+      photoAnalysis = null;
+      analysisError = null;
     }
   }
 
@@ -562,10 +754,16 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       takingPhoto = false;
       capturedPhotoSequence++;
       _pendingCaptureId = original!.id;
-      if (prior != null && !history.any((p) => p.id == prior.id)) {
+      if (prior != null &&
+          !history.any((p) => p.id == prior.id) &&
+          !_savedCaptures.containsValue(prior)) {
         await _release(prior);
       }
       selected = original;
+      _historyReviewId = original!.id;
+      reviewAssetId = null;
+      reviewInfo = null;
+      _reviewFullResolution = true;
       capturePreviewPath = original!.path;
       capturePreviewStatus = 'Processing photo...';
       styled = false;
@@ -584,10 +782,16 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       }
       await _saveCapturedPhoto(onStage: recordStage);
       if (reviewing) {
-        message = 'Photo saved. Analyzing photo...';
+        _historyReviewId = original!.id;
+        original = selected;
+        styled = false;
+        selectedTreatment = 'original';
+        reviewAssetId = await host.replacementTarget(original!);
+        unawaited(refreshReviewInfo());
+        message = 'Photo saved to Photos';
         notifyListeners();
-        await _analyzeStill();
-        recordStage('review-analysis');
+        photoAnalysis = null;
+        analysisError = null;
         message = 'Photo saved to Photos';
       }
     } catch (error) {
@@ -676,6 +880,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     await host.saveCaptured(source, selected!);
     source.unsaved = false;
     selected!.unsaved = false;
+    _savedCaptures[source.id] = selected!;
     _pendingCaptureRecipe = null;
     _pendingCaptureId = null;
     onStage?.call('gallery');
@@ -775,14 +980,19 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         await _releaseVariant();
         await _clearImportedPhotos();
         await _clearLibraryPhotos();
+        _historyReviewId = null;
+        reviewAssetId = null;
+        reviewInfo = null;
+        _reviewFullResolution = true;
         importedPhotos.addAll(result.photos);
         original = importedPhotos.first;
-        selected = original;
+        selected = _savedCaptures[original?.id] ?? original;
         styled = false;
         selectedTreatment = 'original';
         reviewing = true;
         await pause();
-        await _analyzeStill();
+        photoAnalysis = null;
+        analysisError = null;
         message = result.skipped > 0
             ? '${result.photos.length} photos opened; ${result.skipped} skipped. Imports are limited to 50 photos.'
             : '${result.photos.length} ${result.photos.length == 1 ? 'photo' : 'photos'} opened';
@@ -799,13 +1009,33 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   Future<void> openLatest() async {
     if (original == null || busy) return;
     reviewing = true;
+    message = null;
+    if (original?.unsaved != true && selected != null) {
+      if (history.any((p) => p.id == original!.id)) {
+        _historyReviewId = original!.id;
+      }
+      original = selected;
+      selectedTreatment = 'original';
+      styled = false;
+      reviewAssetId = await host.replacementTarget(original!);
+      unawaited(refreshReviewInfo());
+    }
+    _reviewFullResolution = true;
     await pause();
-    await _analyzeStill();
+    photoAnalysis = null;
+    analysisError = null;
     notifyListeners();
   }
 
   Future<void> returnToCamera() async {
     if (busy) return;
+    ++_reviewLoad;
+    _failedReviewIndex = null;
+    reviewLoading = false;
+    reviewAssetId = null;
+    reviewInfo = null;
+    _reviewUpdate?.cancel();
+    _reviewRevision++;
     _capturePreviewTimer?.cancel();
     capturePreviewPath = null;
     busy = true;
@@ -816,7 +1046,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         await _clearImportedPhotos();
         await _clearLibraryPhotos();
         original = history.firstOrNull;
-        selected = original;
+        selected = _savedCaptures[original?.id] ?? original;
         styled = false;
       }
     } finally {
@@ -920,25 +1150,90 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   }
 
   Future<void> openHistory(PhotoHandle photo) async {
-    if (busy || (original?.unsaved == true && original?.id != photo.id)) return;
-    cancelSequence();
-    busy = true;
+    if (busy || reviewLoading || original?.unsaved == true) return;
+    final imported = importedPhotos.contains(photo);
+    final token = ++_reviewLoad;
+    reviewing = true;
+    reviewLoading = true;
+    message = null;
     notifyListeners();
+    await pause();
     try {
+      final asset = imported ? null : await host.replacementTarget(photo);
+      final display =
+          _savedCaptures[photo.id] ??
+          (asset == null ? photo : await host.loadPhotoPreview(asset, 1600));
+      if (token != _reviewLoad || _disposed) {
+        if (display != photo && !_savedCaptures.containsValue(display)) {
+          await _release(display);
+        }
+        return;
+      }
       await _releaseVariant();
+      await _releaseStandaloneOriginal();
       await _clearLibraryPhotos();
-      original = photo;
-      selected = photo;
+      if (!imported) await _clearImportedPhotos();
+      _historyReviewId = photo.id;
+      original = display;
+      selected = display;
+      reviewAssetId = asset;
+      reviewInfo = null;
+      _reviewFullResolution =
+          asset == null || _savedCaptures.containsKey(photo.id);
       styled = false;
       selectedTreatment = 'original';
-      if (!reviewingImport) await _clearImportedPhotos();
-      reviewing = true;
-      await pause();
-      await _analyzeStill();
+      photoAnalysis = null;
+      analysisError = null;
+      unawaited(refreshReviewInfo());
+    } catch (e) {
+      if (token == _reviewLoad) message = 'Could not load saved photo: $e';
     } finally {
-      busy = false;
-      notifyListeners();
+      if (token == _reviewLoad) {
+        reviewLoading = false;
+        notifyListeners();
+      }
     }
+  }
+
+  Future<void> commitReviewEdits() async {
+    final photo = selected;
+    if (photo == null) return;
+    final previous = original;
+    final copied = message == 'Selected copy saved to Photos';
+    final target = await host.replacementTarget(photo) ?? reviewAssetId;
+    if (copied && target != null) {
+      final cached = _libraryCache.values.toList();
+      _libraryCache.clear();
+      for (final old in cached) {
+        if (old != photo && old != previous) await _release(old);
+      }
+      libraryPhotos.clear();
+      libraryPhotos.add(LibraryPhoto(id: target, title: 'Saved photo'));
+      _libraryIndex = 0;
+      _libraryHasMore = true;
+      _historyReviewId = null;
+    }
+    original = photo;
+    if (!copied &&
+        _historyReviewId != null &&
+        _savedCaptures.containsKey(_historyReviewId)) {
+      _savedCaptures[_historyReviewId!] = photo;
+      await _persistHistory();
+    }
+    if (previous != null &&
+        !history.contains(previous) &&
+        !_savedCaptures.containsValue(previous) &&
+        !importedPhotos.contains(previous)) {
+      await _release(previous);
+    }
+    selectedTreatment = 'original';
+    styled = false;
+    if (_libraryIndex >= 0) _libraryCache[_libraryIndex] = photo;
+    reviewAssetId = target;
+    reviewInfo = null;
+    photoAnalysis = null;
+    notifyListeners();
+    unawaited(refreshReviewInfo());
   }
 
   Future<void> applyStyle() async {
@@ -1083,6 +1378,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (busy || original == null) return;
     _reviewUpdate?.cancel();
     _reviewRevision++;
+    if (!await prepareReviewEdit(analyze: true)) return;
     await applyTreatment(autoReviewTreatment, strength: 3, flags: {});
   }
 
@@ -1162,11 +1458,24 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     }
   }
 
+  Future<void> _releaseStandaloneOriginal() async {
+    final photo = original;
+    if (photo != null &&
+        !photo.unsaved &&
+        !history.contains(photo) &&
+        !_savedCaptures.containsValue(photo) &&
+        !importedPhotos.contains(photo) &&
+        !_libraryCache.containsValue(photo)) {
+      await _release(photo);
+    }
+  }
+
   Future<void> _releaseVariant() async {
     final photo = selected;
     if (photo != null &&
         photo.id != original?.id &&
         !history.any((p) => p.id == photo.id) &&
+        !_savedCaptures.containsValue(photo) &&
         !importedPhotos.any((p) => p.id == photo.id)) {
       await _release(photo);
     }
@@ -1277,6 +1586,16 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       for (final data
           in jsonDecode(prefs.getString('history') ?? '[]') as List) {
         if (File(data['path'] as String).existsSync()) {
+          if (data['saved'] case final Map saved) {
+            if (File(saved['path'] as String).existsSync()) {
+              _savedCaptures[data['id'] as String] = PhotoHandle(
+                path: saved['path'] as String,
+                id: saved['id'] as String,
+                unsaved: false,
+                mimeType: saved['mimeType'] as String?,
+              );
+            }
+          }
           history.add(
             PhotoHandle(
               path: data['path'] as String,
@@ -1348,6 +1667,12 @@ class CameraController extends ChangeNotifier implements CameraEvents {
                     'id': p.id,
                     'unsaved': p.unsaved,
                     'mimeType': p.mimeType,
+                    if (_savedCaptures[p.id] case final saved?)
+                      'saved': {
+                        'path': saved.path,
+                        'id': saved.id,
+                        'mimeType': saved.mimeType,
+                      },
                   },
                 )
                 .toList(),
@@ -1363,6 +1688,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       ..clear()
       ..addAll(keep);
     for (final photo in dropped) {
+      final saved = _savedCaptures.remove(photo.id);
+      if (saved != null && saved.id != photo.id) await _release(saved);
       await _release(photo);
     }
   }
@@ -1840,7 +2167,13 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     _reviewUpdate?.cancel();
     _focusIndicator?.cancel();
     _disposed = true;
-    unawaited(_releaseVariant().then((_) => _clearImportedPhotos()));
+    ++_reviewLoad;
+    unawaited(
+      _releaseVariant()
+          .then((_) => _releaseStandaloneOriginal())
+          .then((_) => _clearImportedPhotos())
+          .then((_) => _clearLibraryPhotos()),
+    );
     CameraEvents.setUp(null);
     super.dispose();
   }

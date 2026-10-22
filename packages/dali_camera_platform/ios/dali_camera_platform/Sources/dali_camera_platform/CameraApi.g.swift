@@ -446,6 +446,11 @@ protocol CameraHostApi {
   func pickPhotos(folder: Bool, completion: @escaping (Result<PhotoImport, Error>) -> Void)
   func analyzePhoto(photo: PhotoHandle, completion: @escaping (Result<String, Error>) -> Void)
   func listPhotoLibrary(completion: @escaping (Result<PhotoLibrary, Error>) -> Void)
+  func listPhotoPage(offset: Int64, limit: Int64, completion: @escaping (Result<PhotoLibrary, Error>) -> Void)
+  func loadPhotoPreview(id: String, maximumSize: Int64, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
+  func photoInfo(id: String, completion: @escaping (Result<String, Error>) -> Void)
+  func setPhotoFavorite(id: String, favorite: Bool, completion: @escaping (Result<Void, Error>) -> Void)
+  func deleteLibraryPhoto(id: String, completion: @escaping (Result<Void, Error>) -> Void)
   func loadLibraryPhoto(id: String, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func renderEffects(original: PhotoHandle, recipe: String, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
   func render(original: PhotoHandle, rotationDegrees: Double, crop: Bool, strength: Double, completion: @escaping (Result<PhotoHandle, Error>) -> Void)
@@ -692,6 +697,94 @@ class CameraHostApiSetup {
       }
     } else {
       listPhotoLibraryChannel.setMessageHandler(nil)
+    }
+    let listPhotoPageChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.listPhotoPage\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      listPhotoPageChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let offsetArg = args[0] as! Int64
+        let limitArg = args[1] as! Int64
+        api.listPhotoPage(offset: offsetArg, limit: limitArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      listPhotoPageChannel.setMessageHandler(nil)
+    }
+    let loadPhotoPreviewChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.loadPhotoPreview\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      loadPhotoPreviewChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let idArg = args[0] as! String
+        let maximumSizeArg = args[1] as! Int64
+        api.loadPhotoPreview(id: idArg, maximumSize: maximumSizeArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      loadPhotoPreviewChannel.setMessageHandler(nil)
+    }
+    let photoInfoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.photoInfo\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      photoInfoChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let idArg = args[0] as! String
+        api.photoInfo(id: idArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      photoInfoChannel.setMessageHandler(nil)
+    }
+    let setPhotoFavoriteChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.setPhotoFavorite\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setPhotoFavoriteChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let idArg = args[0] as! String
+        let favoriteArg = args[1] as! Bool
+        api.setPhotoFavorite(id: idArg, favorite: favoriteArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      setPhotoFavoriteChannel.setMessageHandler(nil)
+    }
+    let deleteLibraryPhotoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.deleteLibraryPhoto\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      deleteLibraryPhotoChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let idArg = args[0] as! String
+        api.deleteLibraryPhoto(id: idArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      deleteLibraryPhotoChannel.setMessageHandler(nil)
     }
     let loadLibraryPhotoChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.loadLibraryPhoto\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

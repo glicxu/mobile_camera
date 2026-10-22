@@ -1,6 +1,89 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 
+class ReviewPhotoViewer extends StatefulWidget {
+  const ReviewPhotoViewer({
+    super.key,
+    required this.before,
+    required this.after,
+    required this.mode,
+    required this.onSwipe,
+    required this.onZoom,
+  });
+  final String before, after, mode;
+  final ValueChanged<int> onSwipe;
+  final VoidCallback onZoom;
+  @override
+  State<ReviewPhotoViewer> createState() => _ReviewPhotoViewerState();
+}
+
+class _ReviewPhotoViewerState extends State<ReviewPhotoViewer> {
+  final transform = TransformationController();
+  Offset start = Offset.zero, end = Offset.zero, doubleTap = Offset.zero;
+  bool zoomed = false, multiplePointers = false, startedZoomed = false;
+  @override
+  void dispose() {
+    transform.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onDoubleTapDown: (details) => doubleTap = details.localPosition,
+    onDoubleTap: () {
+      if (zoomed) {
+        transform.value = Matrix4.identity();
+      } else {
+        widget.onZoom();
+        transform.value = Matrix4.identity()
+          ..translateByDouble(-doubleTap.dx * 2, -doubleTap.dy * 2, 0, 1)
+          ..scaleByDouble(3, 3, 1, 1);
+      }
+      setState(() => zoomed = !zoomed);
+    },
+    child: InteractiveViewer(
+      transformationController: transform,
+      minScale: 1,
+      maxScale: 8,
+      panEnabled: zoomed,
+      onInteractionStart: (details) {
+        start = end = details.focalPoint;
+        multiplePointers = details.pointerCount > 1;
+        startedZoomed = zoomed;
+      },
+      onInteractionUpdate: (details) {
+        end = details.focalPoint;
+        multiplePointers |= details.pointerCount > 1;
+        final next = transform.value.getMaxScaleOnAxis() > 1.01;
+        if (next != zoomed) {
+          if (next) widget.onZoom();
+          setState(() => zoomed = next);
+        }
+      },
+      onInteractionEnd: (_) {
+        final delta = end - start;
+        if (!startedZoomed &&
+            !zoomed &&
+            !multiplePointers &&
+            delta.dx.abs() >= 60 &&
+            delta.dx.abs() > delta.dy.abs()) {
+          widget.onSwipe(delta.dx < 0 ? 1 : -1);
+        }
+      },
+      child: ReviewComparison(
+        before: widget.before,
+        after: widget.after,
+        mode: widget.mode,
+        cacheWidth: zoomed
+            ? null
+            : (MediaQuery.sizeOf(context).width *
+                      MediaQuery.devicePixelRatioOf(context))
+                  .ceil(),
+      ),
+    ),
+  );
+}
+
 class ReviewComparison extends StatelessWidget {
   const ReviewComparison({
     super.key,
@@ -8,15 +91,17 @@ class ReviewComparison extends StatelessWidget {
     required this.after,
     required this.mode,
     this.split = .5,
+    this.cacheWidth = 2400,
   });
   final String before;
   final String after;
   final String mode;
   final double split;
+  final int? cacheWidth;
   Widget image(String path, String label) => SizedBox.expand(
     child: Image.file(
       File(path),
-      cacheWidth: 2400,
+      cacheWidth: cacheWidth,
       fit: BoxFit.contain,
       semanticLabel: label,
       errorBuilder: (_, _, _) =>

@@ -42,7 +42,7 @@ const tutorialSteps = [
   ),
   (
     'Review and return',
-    'Tap the lower-left thumbnail to review. Swipe through photos, compare Before and After, then tap Back to Camera when you are ready to shoot again.',
+    'Tap the lower-left thumbnail to review the saved photo. Swipe to browse and pinch or double-tap to zoom. Tap Edit only when you want to make changes, or Back to Camera to keep shooting.',
     Icons.photo_library,
     ['Swipe for previous photos', 'Back to Camera resumes shooting'],
   ),

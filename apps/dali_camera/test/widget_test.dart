@@ -165,13 +165,39 @@ class FakeHost extends CameraHostApi {
   PhotoLibrary libraryResult = PhotoLibrary(photos: [], status: 'empty');
   final List<String> loadedLibraryIds = [];
   String? failedLibraryId;
+  int analyses = 0;
+  int fullLoads = 0;
+  final List<(int, int)> pageRequests = [];
+  @override
+  Future<PhotoLibrary> listPhotoPage(int offset, int limit) async {
+    pageRequests.add((offset, limit));
+    return PhotoLibrary(
+      photos: libraryResult.photos.skip(offset).take(limit).toList(),
+      status: libraryResult.status,
+    );
+  }
+
+  @override
+  Future<PhotoHandle> loadPhotoPreview(String id, int maximumSize) async {
+    loadedLibraryIds.add(id);
+    if (failedLibraryId == id) throw StateError('iCloud offline');
+    return PhotoHandle(path: 'library-$id.jpg', id: 'copy-$id', unsaved: false);
+  }
+
+  @override
+  Future<String> photoInfo(String id) async =>
+      '{"width":1200,"height":1600,"favoriteSupported":true,"favorite":false}';
+  @override
+  Future<void> setPhotoFavorite(String id, bool favorite) async {}
+  @override
+  Future<void> deleteLibraryPhoto(String id) async {}
   @override
   Future<PhotoLibrary> listPhotoLibrary() async => libraryResult;
   @override
   Future<PhotoHandle> loadLibraryPhoto(String id) async {
-    loadedLibraryIds.add(id);
+    fullLoads++;
     if (failedLibraryId == id) throw StateError('iCloud offline');
-    return PhotoHandle(path: 'library-$id.jpg', id: 'copy-$id', unsaved: false);
+    return PhotoHandle(path: 'library-$id.jpg', id: 'full-$id', unsaved: false);
   }
 
   @override
@@ -185,12 +211,16 @@ class FakeHost extends CameraHostApi {
   @override
   Future<void> share(PhotoHandle photo) async {}
   @override
-  Future<String> analyzePhoto(PhotoHandle photo) async => jsonEncode({
-    'schemaVersion': 1,
-    'sourceId': photo.id,
-    'faces': [],
-    'poseKeypoints': {},
-  });
+  Future<String> analyzePhoto(PhotoHandle photo) async {
+    analyses++;
+    return jsonEncode({
+      'schemaVersion': 1,
+      'sourceId': photo.id,
+      'faces': [],
+      'poseKeypoints': {},
+    });
+  }
+
   @override
   Future<PhotoHandle> renderEffects(PhotoHandle original, String recipe) async {
     if (failRender) throw StateError('Renderer unavailable');
@@ -491,7 +521,8 @@ void main() {
       host.finishRendering.complete();
       await capture;
       expect(camera.busy, isFalse);
-      expect(camera.selected!.id, isNot(camera.original!.id));
+      expect(camera.selected!.id, camera.original!.id);
+      expect(camera.history.first.id, 'original-1');
       expect(camera.original!.unsaved, isFalse);
       expect(host.savedIds, ['original-1-final']);
       expect(host.retained, isNull);
@@ -581,9 +612,8 @@ void main() {
       await tester.tap(find.byKey(const Key('saveReviewPhotoAs')));
       await tester.pumpAndSettle();
       expect(host.savedIds.last, editedId);
-      await tester.tap(find.byTooltip('Close photo tools'));
-      await tester.pumpAndSettle();
-      expect(find.byType(ReviewModeControls), findsOneWidget);
+      expect(find.byType(ReviewModeControls), findsNothing);
+      expect(find.byKey(const Key('saveReviewEdits')), findsNothing);
       camera.dispose();
     },
   );
@@ -607,12 +637,11 @@ void main() {
       );
       expect(camera.message, isNull);
       final selectedId = camera.selected!.id;
-      final originalId = camera.original!.id;
       final saves = host.savedIds.length;
       await tester.tap(find.text('Before'));
       await tester.tap(find.byKey(const Key('saveReviewEdits')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel').last);
       await tester.pumpAndSettle();
       expect(host.savedIds, hasLength(saves));
       expect(host.replacedIds, isEmpty);
@@ -623,7 +652,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(host.replacedIds, ['library-original:$selectedId']);
       expect(host.savedIds, hasLength(saves));
-      expect(camera.original!.id, originalId);
+      expect(camera.original!.id, selectedId);
       expect(camera.message, 'Photo replaced');
       host.failReplace = true;
       await camera.saveSelected(replaceId: 'library-original');
@@ -636,6 +665,9 @@ void main() {
       expect(camera.message, isNull);
       expect(camera.selected!.id, selectedId);
       host.replaceTarget = null;
+      await camera.variant(crop: true);
+      await tester.pumpAndSettle();
+      final copyId = camera.selected!.id;
       await tester.tap(find.byKey(const Key('saveReviewEdits')));
       await tester.pumpAndSettle();
       expect(
@@ -646,7 +678,7 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('saveReviewPhotoAs')));
       await tester.pumpAndSettle();
-      expect(host.savedIds.last, selectedId);
+      expect(host.savedIds.last, copyId);
       camera.dispose();
     },
   );
@@ -702,7 +734,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Save photo'), findsOneWidget);
     expect(tester.takeException(), isNull, reason: 'large-text save choices');
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel').last);
     await tester.pumpAndSettle();
     camera.dispose();
   });
@@ -1270,11 +1302,11 @@ void main() {
   });
 
   test(
-    'Library loads lazily, wraps, retains failed selection and releases copies',
+    'Review pages metadata, loads previews only, stops at boundaries and defers analysis',
     () async {
       final host = FakeHost()
         ..libraryResult = PhotoLibrary(
-          status: 'limited',
+          status: 'authorized',
           photos: [
             for (var i = 0; i < 8; i++)
               LibraryPhoto(id: '$i', title: 'Photo $i'),
@@ -1282,63 +1314,52 @@ void main() {
         );
       final camera = CameraController(host: host, register: false);
       await camera.initialize();
-      expect(await camera.openPhotoLibrary(), isTrue);
+      await camera.openPhotoLibrary();
+      expect(host.pageRequests, [(0, 1), (1, 30)]);
       expect(camera.reviewCount, 8);
       expect(host.loadedLibraryIds, ['0']);
-      expect(camera.message, contains('allowed'));
+      expect(host.fullLoads, 0);
+      expect(host.analyses, 0);
       await camera.previousPhoto();
-      expect(camera.reviewIndex, 7);
-      await camera.nextPhoto();
       expect(camera.reviewIndex, 0);
-      expect(host.loadedLibraryIds, ['0', '7']);
       host.failedLibraryId = '1';
       await camera.nextPhoto();
       expect(camera.reviewIndex, 0);
-      expect(camera.original!.id, 'copy-0');
       expect(camera.message, contains('retained'));
-      host.failedLibraryId = '0';
-      expect(await camera.openPhotoLibrary(), isTrue);
-      expect(camera.original!.id, 'copy-0');
-      expect(camera.reviewCount, 8);
       host.failedLibraryId = null;
-      await camera.nextPhoto();
-      await camera.nextPhoto();
-      await camera.nextPhoto();
-      expect(host.releasedIds.length, 2);
+      for (var i = 0; i < 7; i++) {
+        await camera.nextPhoto();
+      }
+      expect(camera.reviewIndex, 7);
+      expect(camera.canNextPhoto, isFalse);
+      expect(host.releasedIds.length, greaterThanOrEqualTo(5));
+      expect(host.analyses, 0);
+      await camera.prepareReviewEdit(analyze: true);
+      expect(host.fullLoads, 1);
+      expect(host.analyses, 1);
       await camera.returnToCamera();
-      expect(camera.reviewingLibrary, isFalse);
       expect(camera.libraryPhotos, isEmpty);
-      expect(host.releasedIds.toSet(), {
-        'copy-0',
-        'copy-7',
-        'copy-1',
-        'copy-2',
-        'copy-3',
-      });
       camera.dispose();
     },
   );
 
   test(
-    'Denied library falls back to history and cannot replace an unsaved original',
+    'Denied library stays navigable and unsaved captures are retained',
     () async {
       final host = FakeHost()
         ..libraryResult = PhotoLibrary(photos: [], status: 'denied');
       final camera = CameraController(host: host, register: false);
       await camera.initialize();
-      expect(await camera.openPhotoLibrary(), isFalse);
-      expect(camera.message, contains('denied'));
-      final saved = PhotoHandle(path: 'saved.jpg', id: 'saved', unsaved: false);
-      camera.history.add(saved);
       expect(await camera.openPhotoLibrary(), isTrue);
-      expect(camera.original, saved);
+      expect(camera.reviewLoading, isFalse);
+      expect(camera.message, contains('access'));
       await camera.returnToCamera();
       camera.original = PhotoHandle(
         path: 'pending.jpg',
         id: 'pending',
         unsaved: true,
       );
-      expect(await camera.openPhotoLibrary(), isTrue);
+      await camera.openPhotoLibrary();
       expect(camera.original!.id, 'pending');
       expect(host.loadedLibraryIds, isEmpty);
       camera.dispose();
@@ -1466,7 +1487,8 @@ void main() {
       await camera.capturePhoto();
       expect(host.effectsRecipe!['treatment'], 'landscape');
       expect(host.effectsRecipe!['strength'], 3);
-      expect(camera.photoAnalysis!['sourceId'], camera.original!.id);
+      expect(camera.photoAnalysis, isNull);
+      expect(host.analyses, 0);
       camera.reviewTreatments['portrait']!['strength'] = 4;
       await camera.applyTreatment('portrait');
       expect(host.effectsRecipe!['strength'], 4);
@@ -1475,13 +1497,13 @@ void main() {
       host.failRender = true;
       await camera.applyTreatment('enhance');
       expect(camera.selected, same(selected));
-      expect(camera.original!.id, 'original-1');
+      expect(camera.history.first.id, 'original-1');
       expect(camera.original!.unsaved, isFalse);
       camera.dispose();
     },
   );
   test(
-    'Imported selection wraps, preserves captures and cleans only copies',
+    'Imported selection stops at boundaries, preserves captures and cleans only copies',
     () async {
       final host = FakeHost();
       final camera = CameraController(host: host, register: false);
@@ -1499,8 +1521,10 @@ void main() {
       expect(camera.history, [captured]);
       expect(camera.message, contains('1 skipped'));
       await camera.previousPhoto();
-      expect(camera.original, same(second));
+      expect(camera.original, same(first));
       await camera.nextPhoto();
+      expect(camera.original, same(second));
+      await camera.previousPhoto();
       expect(camera.original, same(first));
       await camera.variant(crop: true);
       await camera.nextPhoto();
@@ -1586,11 +1610,9 @@ void main() {
         await camera.capturePhoto(review: false);
       }
       await camera.openHistory(camera.history.first);
-      expect(camera.canPreviousPhoto, isTrue);
+      expect(camera.canPreviousPhoto, isFalse);
       expect(camera.canNextPhoto, isTrue);
       await camera.previousPhoto();
-      expect(camera.original!.id, 'original-1');
-      await camera.nextPhoto();
       expect(camera.original!.id, 'original-3');
       await camera.nextPhoto();
       expect(camera.original!.id, 'original-2');
@@ -1950,6 +1972,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Open photo library'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Photo options'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Import photos'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Import photos'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('importFolder')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('importFolder')));
@@ -1988,7 +2016,8 @@ void main() {
       await tester.tap(find.byTooltip('View last photo'));
       await tester.pumpAndSettle();
       expect(camera.reviewing, isTrue);
-      expect(camera.original!.id, 'original-1');
+      expect(camera.original!.id, 'original-1-final');
+      expect(camera.history.first.id, 'original-1');
       expect(camera.selected!.id, 'original-1-final');
       expect(host.loadedLibraryIds, isEmpty);
 

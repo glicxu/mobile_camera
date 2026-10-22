@@ -84,6 +84,10 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     private var pendingPicker: ((Result<PhotoHandle?>) -> Unit)? = null
     private var pendingBatchPicker: ((Result<PhotoImport>) -> Unit)? = null
     private var pendingLibrary: ((Result<PhotoLibrary>) -> Unit)? = null
+    private var libraryOffset = 0L
+    private var libraryLimit = 50L
+    private var pendingPhotoAction: ((Result<Unit>) -> Unit)? = null
+    private var pendingLegacyDelete: Pair<String, (Result<Unit>) -> Unit>? = null
     private var pickerIsFolder = false
     private var pendingSave: Pair<PhotoHandle, (Result<Unit>) -> Unit>? = null
     private data class Replacement(val id: String, val photo: PhotoHandle, val callback: (Result<Unit>) -> Unit)
@@ -156,6 +160,8 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         pendingBatchPicker?.invoke(Result.failure(IllegalStateException("Picker interrupted"))); pendingBatchPicker = null
         pendingSave?.second?.invoke(Result.failure(IllegalStateException("Save interrupted; original retained"))); pendingSave = null
         pendingLibrary?.invoke(Result.failure(IllegalStateException("Library interrupted"))); pendingLibrary = null
+        pendingPhotoAction?.invoke(Result.failure(IllegalStateException("Photo action interrupted"))); pendingPhotoAction = null
+        pendingLegacyDelete?.second?.invoke(Result.failure(IllegalStateException("Photo deletion interrupted"))); pendingLegacyDelete = null
         pendingReplacement?.callback?.invoke(Result.failure(IllegalStateException("Replacement interrupted"))); pendingReplacement = null
         binding = null; activity = null
     }
@@ -217,6 +223,14 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         (context.getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(this)
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray): Boolean {
+        if (requestCode == 710) {
+            val request = pendingLegacyDelete; pendingLegacyDelete = null
+            if (request != null) {
+                if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) deleteLibraryPhoto(request.first, request.second)
+                else request.second(Result.failure(SecurityException("Photo deletion permission denied")))
+            }
+            return true
+        }
         if (requestCode == 707) {
             val request = pendingReplacement; pendingReplacement = null
             if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) request?.let { performReplacement(it, true) }
@@ -609,6 +623,11 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         return "denied"
     }
     override fun listPhotoLibrary(callback: (Result<PhotoLibrary>) -> Unit) {
+        listPhotoPage(0, 50, callback)
+    }
+    override fun listPhotoPage(offset: Long, limit: Long, callback: (Result<PhotoLibrary>) -> Unit) {
+        if (pendingLibrary != null) { callback(Result.failure(IllegalStateException("Library request in progress"))); return }
+        libraryOffset = offset.coerceAtLeast(0); libraryLimit = limit.coerceIn(1, 100)
         if (libraryAccess() != "denied") { queryPhotoLibrary(callback); return }
         val host = activity ?: return callback(Result.failure(IllegalStateException("No activity")))
         if (pendingLibrary != null) { callback(Result.failure(IllegalStateException("Library request in progress"))); return }
@@ -622,14 +641,19 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
     }
     private fun queryPhotoLibrary(callback: (Result<PhotoLibrary>) -> Unit) {
         val access = libraryAccess()
+        val offset = libraryOffset.toInt(); val limit = libraryLimit.toInt()
         if (access == "denied") { callback(Result.success(PhotoLibrary(emptyList(), access))); return }
         executor.execute {
             try {
                 val photos = mutableListOf<LibraryPhoto>()
+                val query = Bundle().apply {
+                    putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, "${MediaStore.Images.Media.DATE_ADDED} DESC, ${MediaStore.Images.Media._ID} DESC")
+                    putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
+                    putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
+                }
                 context.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.DATE_ADDED), null, null,
-                    "${MediaStore.Images.Media.DATE_ADDED} DESC, ${MediaStore.Images.Media._ID} DESC")?.use { cursor ->
-                    while (cursor.moveToNext()) {
+                    arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.DATE_ADDED), query, null)?.use { cursor ->
+                    while (photos.size < limit && cursor.moveToNext()) {
                         val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0))
                         val timestamp = cursor.getLong(2).takeIf { it > 0 } ?: (cursor.getLong(3) * 1000)
                         val title = if (timestamp > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(timestamp)) else cursor.getString(1) ?: "Photo"
@@ -649,6 +673,97 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                 main.post { callback(Result.success(photo)) }
             } catch (e: Exception) { main.post { callback(Result.failure(e)) } }
         }
+    }
+    override fun loadPhotoPreview(id: String, maximumSize: Long, callback: (Result<PhotoHandle>) -> Unit) {
+        executor.execute {
+            var file: File? = null
+            try {
+                val uri = Uri.parse(id)
+                require(uri.authority == MediaStore.AUTHORITY) { "Invalid photo" }
+                val size = maximumSize.toInt().coerceIn(96, 4096)
+                val bitmap = if (Build.VERSION.SDK_INT >= 28 && size > 256) {
+                    ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
+                        val ratio = min(1.0, size.toDouble() / max(info.size.width, info.size.height))
+                        decoder.setTargetSize(max(1, (info.size.width * ratio).toInt()), max(1, (info.size.height * ratio).toInt()))
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    }
+                } else if (Build.VERSION.SDK_INT >= 29) {
+                    context.contentResolver.loadThumbnail(uri, Size(size, size), null)
+                } else {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                    val options = BitmapFactory.Options().apply {
+                        while (max(bounds.outWidth, bounds.outHeight) / (inSampleSize * 2) >= size) inSampleSize *= 2
+                    }
+                    val decoded = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+                        ?: error("Photo unavailable")
+                    val exif = context.contentResolver.openInputStream(uri)?.use { ExifInterface(it) }
+                    val matrix = Matrix().apply {
+                        if (exif?.isFlipped == true) postScale(-1f, 1f)
+                        postRotate((exif?.rotationDegrees ?: 0).toFloat())
+                    }
+                    Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true).also { if (it !== decoded) decoded.recycle() }
+                }
+                file = File(context.filesDir, "import-preview-${UUID.randomUUID()}.jpg")
+                file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }; bitmap.recycle()
+                rememberSource(file.nameWithoutExtension, id)
+                val photo = PhotoHandle(file.path, file.nameWithoutExtension, false, "image/jpeg")
+                main.post { callback(Result.success(photo)) }
+            } catch (e: Exception) { file?.delete(); main.post { callback(Result.failure(e)) } }
+        }
+    }
+    override fun photoInfo(id: String, callback: (Result<String>) -> Unit) {
+        executor.execute {
+            try {
+                val fields = mutableListOf(MediaStore.Images.Media.WIDTH, MediaStore.Images.Media.HEIGHT, MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.SIZE)
+                if (Build.VERSION.SDK_INT >= 30) fields.add(MediaStore.Images.Media.IS_FAVORITE)
+                val info = context.contentResolver.query(Uri.parse(id), fields.toTypedArray(), null, null, null)?.use { c ->
+                    check(c.moveToFirst()) { "Photo unavailable" }
+                    JSONObject().put("width", c.getInt(0)).put("height", c.getInt(1)).put("date", c.getLong(2)).put("bytes", c.getLong(3))
+                        .put("favoriteSupported", Build.VERSION.SDK_INT >= 30).put("favorite", Build.VERSION.SDK_INT >= 30 && c.getInt(4) != 0)
+                } ?: error("Photo unavailable")
+                main.post { callback(Result.success(info.toString())) }
+            } catch (e: Exception) { main.post { callback(Result.failure(e)) } }
+        }
+    }
+    override fun setPhotoFavorite(id: String, favorite: Boolean, callback: (Result<Unit>) -> Unit) {
+        if (Build.VERSION.SDK_INT < 30) { callback(Result.failure(IllegalStateException("Library favorites require Android 11"))); return }
+        try { launchPhotoAction(MediaStore.createFavoriteRequest(context.contentResolver, listOf(Uri.parse(id)), favorite), callback) }
+        catch (e: Exception) { callback(Result.failure(e)) }
+    }
+    override fun deleteLibraryPhoto(id: String, callback: (Result<Unit>) -> Unit) {
+        try {
+            val uri = Uri.parse(id)
+            require(uri.authority == MediaStore.AUTHORITY) { "Invalid photo" }
+            if (Build.VERSION.SDK_INT >= 30) launchPhotoAction(MediaStore.createTrashRequest(context.contentResolver, listOf(uri), true), callback)
+            else {
+                if (Build.VERSION.SDK_INT < 29 && ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                    check(pendingLegacyDelete == null) { "Photo deletion in progress" }
+                    val host = activity ?: error("No activity")
+                    pendingLegacyDelete = Pair(id, callback)
+                    host.requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 710)
+                    return
+                }
+                context.contentResolver.delete(uri, null, null)
+                callback(Result.success(Unit))
+            }
+        } catch (e: Exception) {
+            if (Build.VERSION.SDK_INT == 29 && e is RecoverableSecurityException) {
+                try {
+                    check(pendingLegacyDelete == null) { "Photo deletion in progress" }
+                    val host = activity ?: error("No activity")
+                    pendingLegacyDelete = Pair(id, callback)
+                    host.startIntentSenderForResult(e.userAction.actionIntent.intentSender, 709, null, 0, 0, 0)
+                } catch (error: Exception) { pendingLegacyDelete = null; callback(Result.failure(error)) }
+            } else callback(Result.failure(e))
+        }
+    }
+    private fun launchPhotoAction(intent: android.app.PendingIntent, callback: (Result<Unit>) -> Unit) {
+        check(pendingPhotoAction == null) { "Photo action in progress" }
+        val host = activity ?: error("No activity")
+        pendingPhotoAction = callback
+        try { host.startIntentSenderForResult(intent.intentSender, 708, null, 0, 0, 0) }
+        catch (e: Exception) { pendingPhotoAction = null; throw e }
     }
     override fun pickPhotos(folder: Boolean, callback: (Result<PhotoImport>) -> Unit) {
         launchPicker(folder, true, null, callback)
@@ -707,6 +822,19 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         } catch (error: Exception) { file.delete(); throw error }
     }
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode == 709) {
+            val request = pendingLegacyDelete; pendingLegacyDelete = null
+            if (request != null) {
+                if (resultCode == Activity.RESULT_OK) deleteLibraryPhoto(request.first, request.second)
+                else request.second(Result.failure(FlutterError("cancelled", "Photo deletion cancelled")))
+            }
+            return true
+        }
+        if (requestCode == 708) {
+            val callback = pendingPhotoAction; pendingPhotoAction = null
+            callback?.invoke(if (resultCode == Activity.RESULT_OK) Result.success(Unit) else Result.failure(FlutterError("cancelled", "Photo action cancelled")))
+            return true
+        }
         if (requestCode == 706) {
             val request = pendingReplacement; pendingReplacement = null
             if (request != null) {

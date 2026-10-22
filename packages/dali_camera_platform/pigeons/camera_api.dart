@@ -124,6 +124,16 @@ abstract class CameraHostApi {
   @async
   PhotoLibrary listPhotoLibrary();
   @async
+  PhotoLibrary listPhotoPage(int offset, int limit);
+  @async
+  PhotoHandle loadPhotoPreview(String id, int maximumSize);
+  @async
+  String photoInfo(String id);
+  @async
+  void setPhotoFavorite(String id, bool favorite);
+  @async
+  void deleteLibraryPhoto(String id);
+  @async
   PhotoHandle loadLibraryPhoto(String id);
   @async
   PhotoHandle renderEffects(PhotoHandle original, String recipe);

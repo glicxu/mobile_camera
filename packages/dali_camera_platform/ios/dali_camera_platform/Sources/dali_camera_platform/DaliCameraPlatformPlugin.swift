@@ -276,6 +276,9 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         beginPicker(folder: false, limit: 1) { result in completion(result.map { $0.photos.first }) }
     }
     func listPhotoLibrary(completion: @escaping (Result<PhotoLibrary, Error>) -> Void) {
+        listPhotoPage(offset: 0, limit: 50, completion: completion)
+    }
+    func listPhotoPage(offset: Int64, limit: Int64, completion: @escaping (Result<PhotoLibrary, Error>) -> Void) {
         PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
             guard status == .authorized || status == .limited else {
                 DispatchQueue.main.async { completion(.success(PhotoLibrary(photos: [], status: "denied"))) }; return
@@ -283,11 +286,16 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             self.importQueue.async {
                 let options = PHFetchOptions()
                 options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+                let start = max(0, Int(offset)); let count = min(100, max(1, Int(limit)))
+                options.fetchLimit = start + count
                 let assets = PHAsset.fetchAssets(with: .image, options: options)
                 let formatter = DateFormatter(); formatter.dateStyle = .medium; formatter.timeStyle = .short
                 var photos: [LibraryPhoto] = []
-                assets.enumerateObjects { asset, _, _ in
-                    photos.append(LibraryPhoto(id: asset.localIdentifier, title: asset.creationDate.map { formatter.string(from: $0) } ?? "Photo"))
+                if start < assets.count {
+                    for index in start..<min(assets.count, start + count) {
+                        let asset = assets.object(at: index)
+                        photos.append(LibraryPhoto(id: asset.localIdentifier, title: asset.creationDate.map { formatter.string(from: $0) } ?? "Photo"))
+                    }
                 }
                 let access = photos.isEmpty ? "empty" : status == .limited ? "limited" : "authorized"
                 DispatchQueue.main.async { completion(.success(PhotoLibrary(photos: photos, status: access))) }
@@ -313,6 +321,58 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                     DispatchQueue.main.async { completion(.success(photo)) }
                 } catch { DispatchQueue.main.async { completion(.failure(error)) } }
             }
+        }
+    }
+    func loadPhotoPreview(id: String, maximumSize: Int64, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
+            completion(.failure(failure("Photo unavailable"))); return
+        }
+        let options = PHImageRequestOptions()
+        options.isNetworkAccessAllowed = true; options.version = .current
+        options.deliveryMode = .highQualityFormat; options.resizeMode = .fast
+        let size = CGFloat(min(4096, max(96, maximumSize)))
+        PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: size, height: size), contentMode: .aspectFit, options: options) { image, info in
+            if (info?[PHImageResultIsDegradedKey] as? Bool) == true { return }
+            guard let image, let data = image.jpegData(compressionQuality: 0.95) else {
+                DispatchQueue.main.async { completion(.failure(self.failure("Photo unavailable; check iCloud connectivity"))) }; return
+            }
+            self.importQueue.async {
+                do {
+                    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
+                    defer { try? FileManager.default.removeItem(at: temporary) }
+                    try data.write(to: temporary, options: .atomic)
+                    let photo = try self.copyImportedPhoto(temporary)
+                    UserDefaults.standard.set(id, forKey: "photo-source-" + photo.id)
+                    DispatchQueue.main.async { completion(.success(photo)) }
+                } catch { DispatchQueue.main.async { completion(.failure(error)) } }
+            }
+        }
+    }
+    func photoInfo(id: String, completion: @escaping (Result<String, Error>) -> Void) {
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
+            completion(.failure(failure("Photo unavailable"))); return
+        }
+        do {
+            let info: [String: Any] = ["width": asset.pixelWidth, "height": asset.pixelHeight,
+                "date": (asset.creationDate?.timeIntervalSince1970 ?? 0) * 1000,
+                "favoriteSupported": true, "favorite": asset.isFavorite]
+            let data = try JSONSerialization.data(withJSONObject: info)
+            completion(.success(String(decoding: data, as: UTF8.self)))
+        } catch { completion(.failure(error)) }
+    }
+    func setPhotoFavorite(id: String, favorite: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else {
+            completion(.failure(failure("Photo unavailable"))); return
+        }
+        PHPhotoLibrary.shared().performChanges({ PHAssetChangeRequest(for: asset).isFavorite = favorite }) { success, error in
+            DispatchQueue.main.async { completion(success ? .success(()) : .failure(error ?? self.failure("Could not change favorite"))) }
+        }
+    }
+    func deleteLibraryPhoto(id: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        let assets = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil)
+        guard assets.count > 0 else { completion(.failure(failure("Photo unavailable"))); return }
+        PHPhotoLibrary.shared().performChanges({ PHAssetChangeRequest.deleteAssets(assets) }) { success, error in
+            DispatchQueue.main.async { completion(success ? .success(()) : .failure(error ?? self.failure("Photo deletion cancelled"))) }
         }
     }
     func pickPhotos(folder: Bool, completion: @escaping (Result<PhotoImport, Error>) -> Void) {
