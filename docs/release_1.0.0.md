@@ -82,3 +82,18 @@ identity and icon so development builds can coexist with production installs.
   shared catalog checks, native-processing export checks, and signed iOS archive.
 - Archive: `/private/tmp/dali-camera-build6.9DcAxo/DaliCam.xcarchive`.
 - Upload does not submit the app for review or publish a release.
+
+## Build 10 follow-up — October 22, 2026
+
+- Uploaded Dali Cam `1.0.0 (10)`, bundle `com.dalifin.camera`, to App Store
+  Connect from commit `13ecfa6`. Xcode reported `Upload succeeded` and
+  `EXPORT SUCCEEDED`; Apple finished processing with state `VALID` and marked
+  the build App Store eligible.
+- Build ID and delivery UUID: `b28bcf64-fdb3-46d1-8a24-c58fb879934a`.
+- Export compliance is set to no non-exempt encryption. TestFlight reports
+  `READY_FOR_BETA_TESTING` for the internal `cam testing` group, which has
+  access to all builds. External testing remains ready for beta submission.
+- Includes the approved portrait beautifier recipes, landscape preset
+  guidance, and long-press quick selectors for Beautifier and Filters.
+- Archive: `/private/tmp/dali-camera-build10-20261022/DaliCam.xcarchive`.
+- Upload does not submit the app for App Review or publish a release.
