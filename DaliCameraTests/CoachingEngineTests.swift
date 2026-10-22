@@ -38,7 +38,7 @@ final class CoachingEngineTests: XCTestCase {
     }
 
     func testBeautifyLevelsHaveStableNamesAndClampTheirStrength() {
-        let expectedNames = ["Original", "Natural", "Fresh", "Polished", "Glam", "Max"]
+        let expectedNames = ["Original", "Subtle", "Natural", "Polished", "Max", "Glam"]
         for (level, name) in expectedNames.enumerated() {
             let settings = BeautifySettings(strength: level)
             XCTAssertEqual(settings.levelName, name)
@@ -47,7 +47,7 @@ final class CoachingEngineTests: XCTestCase {
 
         XCTAssertEqual(BeautifySettings(strength: -2).normalizedStrength, 0)
         XCTAssertEqual(BeautifySettings(strength: 8).normalizedStrength, 1)
-        XCTAssertEqual(BeautifySettings(strength: 8).levelName, "Max")
+        XCTAssertEqual(BeautifySettings(strength: 8).levelName, "Glam")
         XCTAssertTrue(BeautifySettings().landscapeSkyEnabled)
         XCTAssertTrue(BeautifySettings().landscapeColorEnabled)
     }
@@ -129,9 +129,21 @@ final class CoachingEngineTests: XCTestCase {
         XCTAssertFalse(naturalPortrait.landscapeColorEnabled)
 
         let glamPortrait = PortraitBeautifierPreset.glam.defaultSettings
-        XCTAssertEqual(glamPortrait.strength, 4)
-        XCTAssertTrue(glamPortrait.eyeEnlargementEnabled)
-        XCTAssertTrue(glamPortrait.lipPlumpingEnabled)
+        XCTAssertEqual(glamPortrait.strength, 5)
+        XCTAssertFalse(glamPortrait.eyeEnlargementEnabled)
+        XCTAssertFalse(glamPortrait.lipPlumpingEnabled)
+
+        let maxPortrait = PortraitBeautifierPreset.maximum.defaultSettings
+        XCTAssertEqual(maxPortrait.strength, 4)
+        XCTAssertTrue(maxPortrait.eyeEnlargementEnabled)
+        XCTAssertTrue(maxPortrait.lipPlumpingEnabled)
+
+        let glamWeights = BeautifyEngine.portraitMaskWeights(strength: 0.8)
+        XCTAssertEqual(glamWeights.skin, 1, accuracy: 0.0001)
+        XCTAssertEqual(glamWeights.protected, 0, accuracy: 0.0001)
+        let maxWeights = BeautifyEngine.portraitMaskWeights(strength: 1)
+        XCTAssertEqual(maxWeights.skin, 0.65, accuracy: 0.0001)
+        XCTAssertEqual(maxWeights.protected, 0.35, accuracy: 0.0001)
 
         let naturalLandscape = LandscapeBeautifierPreset.natural.defaultSettings
         XCTAssertEqual(naturalLandscape.strength, 2)

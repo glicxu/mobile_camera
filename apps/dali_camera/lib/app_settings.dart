@@ -119,23 +119,6 @@ Future<void> showAppSettings(
                       'Light and dark appearance choices coming soon',
                     ),
                   ),
-                  const _Section('Purchase'),
-                  const ListTile(
-                    leading: Icon(Icons.workspace_premium),
-                    title: Text('Dali Pro'),
-                    subtitle: Text('Coming soon'),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Dali Pro will remove the signature watermark from captured photos and unlock premium camera features.',
-                    ),
-                  ),
-                  const ListTile(
-                    leading: Icon(Icons.restore),
-                    title: Text('Restore purchases'),
-                    subtitle: Text('Coming soon'),
-                  ),
                   const _Section('More'),
                   ListTile(
                     leading: const Icon(Icons.help_outline),

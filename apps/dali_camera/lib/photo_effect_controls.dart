@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'beautifier_preset_guidance.dart';
 import 'camera_controller.dart';
 import 'package:dali_camera_core/dali_camera_core.dart';
 
@@ -141,7 +142,7 @@ class PhotoEffectControls extends StatelessWidget {
               items: [
                 for (final preset
                     in treatment == 'portrait'
-                        ? ['Natural', 'Polished', 'Glam', 'Custom']
+                        ? ['Natural', 'Polished', 'Glam', 'Max', 'Custom']
                         : ['Natural', 'Vivid', 'Dramatic', 'Custom'])
                   DropdownMenuItem(value: preset, child: Text(preset)),
               ],
@@ -159,11 +160,14 @@ class PhotoEffectControls extends StatelessWidget {
                             ? 2
                             : (preset == 'Polished' || preset == 'Vivid')
                             ? 3
+                            : preset == 'Glam'
+                            ? 5
                             : 4;
                         settings['flags'] = treatment == 'portrait'
                             ? <String, bool>{
-                                'eyeEnlargement': preset != 'Natural',
-                                'lipPlumping': preset == 'Glam',
+                                'eyeEnlargement':
+                                    preset == 'Polished' || preset == 'Max',
+                                'lipPlumping': preset == 'Max',
                               }
                             : <String, bool>{'sky': preset != 'Natural'};
                       }
@@ -173,7 +177,11 @@ class PhotoEffectControls extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(8),
               child: Text(
-                "${settings['preset'] ?? 'Custom'} combines the settings below. Changing any individual setting creates Custom.",
+                guidanceForBeautifierPreset(
+                      treatment,
+                      settings['preset'] as String?,
+                    ) ??
+                    "${settings['preset'] ?? 'Custom'} combines the settings below. Changing any individual setting creates Custom.",
               ),
             ),
           ],

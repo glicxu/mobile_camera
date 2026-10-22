@@ -248,8 +248,8 @@ class TutorialIllustration extends StatelessWidget {
           const SizedBox(height: 18),
           Text(
             step == 1
-                ? 'Choose package  ?  Choose pose'
-                : 'Choose scene  ?  Frame photo',
+                ? 'Choose package  →  Choose pose'
+                : 'Choose scene  →  Frame photo',
             textScaler: TextScaler.noScaling,
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
           ),
@@ -290,9 +290,16 @@ class TutorialIllustration extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            '? Timer     Voice     Burst',
-            textScaler: TextScaler.noScaling,
+          const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.timer_outlined, size: 18),
+              SizedBox(width: 4),
+              Text(
+                'Timer     Voice     Burst',
+                textScaler: TextScaler.noScaling,
+              ),
+            ],
           ),
         ],
       ),

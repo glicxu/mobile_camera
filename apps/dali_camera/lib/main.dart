@@ -25,6 +25,7 @@ import 'landscape_instruments.dart';
 import 'app_settings.dart';
 import 'camera_tutorial.dart';
 import 'beautifier_quick_sheet.dart';
+import 'filter_quick_sheet.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -208,7 +209,27 @@ class _CameraScreenState extends State<CameraScreen>
   Widget build(BuildContext context) {
     final current = MediaQuery.orientationOf(context);
     return Scaffold(
-      body: SafeArea(child: camera.reviewing ? review() : live(current)),
+      body: SafeArea(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Preserve the native preview surface while reviewing a photo.
+            // Recreating it on return can stall even with a running session.
+            ExcludeSemantics(
+              excluding: camera.reviewing,
+              child: IgnorePointer(
+                ignoring: camera.reviewing,
+                child: live(current),
+              ),
+            ),
+            if (camera.reviewing)
+              Material(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: review(),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -835,6 +856,8 @@ class _CameraScreenState extends State<CameraScreen>
               child: CameraSelectionRow(
                 camera: camera,
                 showGuides: camera.guidanceOverlayVisible,
+                onFilterLongPress: () =>
+                    cameraSheet(() => showFilterQuickSheet(context, camera)),
                 onBeautifierLongPress: () => cameraSheet(
                   () => showBeautifierQuickSheet(context, camera),
                 ),
@@ -1231,7 +1254,6 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> backToCamera() async {
-    if (camera.busy) return;
     if (await leaveReviewEdits()) await camera.returnToCamera();
   }
 
@@ -1300,7 +1322,7 @@ class _CameraScreenState extends State<CameraScreen>
             children: [
               IconButton(
                 tooltip: 'Back to camera',
-                onPressed: camera.busy ? null : backToCamera,
+                onPressed: backToCamera,
                 icon: const Icon(Icons.arrow_back),
               ),
               Expanded(

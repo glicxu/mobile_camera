@@ -21,11 +21,11 @@ class ReviewTreatmentControls extends StatelessWidget {
         ? ['Original', 'Natural', 'Balanced', 'Vivid', 'Dramatic', 'Max']
         : [
             'Original',
+            'Subtle',
             'Natural',
-            'Fresh',
             'Polished',
-            'Glam',
             'Max',
+            'Glam',
           ])[strength];
     final faces = camera.photoAnalysis?['faces'] as List?;
     final status = strength == 0

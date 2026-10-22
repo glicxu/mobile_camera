@@ -65,3 +65,20 @@ identity and icon so development builds can coexist with production installs.
   code before uploading the bundle to the intended track.
 - Keep the native source and rollback instructions until the production rollout
   and data-migration behavior are accepted.
+
+## Build 6 follow-up — October 15, 2026
+
+- Uploaded Dali Cam `1.0.0 (6)`, bundle `com.dalifin.camera`, to App Store
+  Connect app `6822162016`. Xcode reported `Upload succeeded` and
+  `EXPORT SUCCEEDED`; Apple finished processing with state `VALID`.
+  Build ID: `02359242-8584-4720-910e-f80ab83f5d72`.
+- Keeps the native camera preview mounted behind photo review, avoiding its
+  recreation when returning to the camera. Three physical iPhone Profile test
+  cycles completed in 5, 10, and 14 ms with the native preview displaying,
+  unchanged preview attachment count, and capture enabled.
+- Leaving review invalidates pending edits and releases derived photo copies.
+- Replaces the tutorial's stray question marks with arrows and a timer icon.
+- Release checks: clean Flutter analysis, 47 app tests, 37 shared-core tests,
+  shared catalog checks, native-processing export checks, and signed iOS archive.
+- Archive: `/private/tmp/dali-camera-build6.9DcAxo/DaliCam.xcarchive`.
+- Upload does not submit the app for review or publish a release.

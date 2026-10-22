@@ -1771,6 +1771,9 @@ struct FaceAnalysis: Equatable {
 struct FaceLandmarkGeometry: Equatable {
     var leftEye: [CGPoint]
     var rightEye: [CGPoint]
+    var leftEyebrow: [CGPoint]
+    var rightEyebrow: [CGPoint]
+    var nose: [CGPoint]
     var outerLips: [CGPoint]
     var faceContour: [CGPoint]
 
@@ -2106,11 +2109,11 @@ struct BeautifySettings: Equatable {
     var levelName: String {
         switch max(0, min(5, strength)) {
         case 0: return "Original"
-        case 1: return "Natural"
-        case 2: return "Fresh"
+        case 1: return "Subtle"
+        case 2: return "Natural"
         case 3: return "Polished"
-        case 4: return "Glam"
-        default: return "Max"
+        case 4: return "Max"
+        default: return "Glam"
         }
     }
 }
@@ -2119,6 +2122,7 @@ enum PortraitBeautifierPreset: String, CaseIterable, Identifiable {
     case natural
     case polished
     case glam
+    case maximum
     case custom
 
     var id: String { rawValue }
@@ -2128,6 +2132,7 @@ enum PortraitBeautifierPreset: String, CaseIterable, Identifiable {
         case .natural: return "Natural"
         case .polished: return "Polished"
         case .glam: return "Glam"
+        case .maximum: return "Max"
         case .custom: return "Custom"
         }
     }
@@ -2145,6 +2150,10 @@ enum PortraitBeautifierPreset: String, CaseIterable, Identifiable {
             settings.strength = 3
             settings.lipPlumpingEnabled = false
         case .glam:
+            settings.strength = 5
+            settings.eyeEnlargementEnabled = false
+            settings.lipPlumpingEnabled = false
+        case .maximum:
             settings.strength = 4
         case .custom:
             break

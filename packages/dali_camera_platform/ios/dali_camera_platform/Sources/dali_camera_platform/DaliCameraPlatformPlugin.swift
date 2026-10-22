@@ -25,6 +25,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     private let speech = SpeechShutterService()
     private var events: CameraEvents!
     private var preview: CameraView?
+    private var previewAttachments = 0
     private var device: AVCaptureDevice?
     private var front = false
     private var configuration = ""
@@ -62,6 +63,13 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             case .landscapeLeft: result(3)
             default: result(0)
             }
+        }
+        let diagnostics = FlutterMethodChannel(name: "dali/preview-diagnostics", binaryMessenger: registrar.messenger())
+        diagnostics.setMethodCallHandler { [weak plugin] call, reply in
+            guard call.method == "status", let plugin else { reply(FlutterMethodNotImplemented); return }
+            reply(["attachments": plugin.previewAttachments,
+                   "previewReady": plugin.preview?.layer.isPreviewing == true,
+                   "sessionRunning": plugin.session.isRunning])
         }
         plugin.speech.onState = { [weak plugin] listening, status in plugin?.events.voiceState(listening: listening, status: status) { _ in } }
         registrar.register(CameraViewFactory(plugin: plugin), withId: "dali/camera")
@@ -814,7 +822,11 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             }
         } catch { DispatchQueue.main.async { self.events.error(code: "analysis", message: error.localizedDescription) { _ in } } }
     }
-    fileprivate func attach(_ view: CameraView) { preview = view; view.layer.session = session }
+    fileprivate func attach(_ view: CameraView) {
+        previewAttachments += 1
+        preview = view
+        view.layer.session = session
+    }
     fileprivate func updateOrientation(_ orientation: UIInterfaceOrientation) {
         let angle = cameraRotationAngle(for: orientation)
         guard active, angle != rotation else { return }
@@ -852,13 +864,24 @@ private extension UIDeviceOrientation {
 private extension CGFloat { func clamped(_ low: CGFloat, _ high: CGFloat) -> CGFloat { Swift.min(high, Swift.max(low, self)) } }
 private extension Float { func clamped(_ low: Float, _ high: Float) -> Float { Swift.min(high, Swift.max(low, self)) } }
 private final class PreviewContainer: UIView {
-    override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
+    let previewLayer = AVCaptureVideoPreviewLayer()
     var orientationChanged: ((UIInterfaceOrientation) -> Void)?
     var depthLevel = 0
     var subjectRect: CGRect?
     private let depth = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        clipsToBounds = true
+        layer.addSublayer(previewLayer)
+    }
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        clipsToBounds = true
+        layer.addSublayer(previewLayer)
+    }
     override func layoutSubviews() {
         super.layoutSubviews()
+        previewLayer.frame = bounds
         if let orientation = UIDevice.current.orientation.interfaceOrientation
             ?? window?.windowScene?.interfaceOrientation {
             orientationChanged?(orientation)
@@ -867,8 +890,8 @@ private final class PreviewContainer: UIView {
         depth.frame = bounds
         depth.isHidden = depthLevel == 0 || subjectRect == nil
         depth.alpha = 0.30 + Double(depthLevel) * 0.09
-        guard let subjectRect, let preview = layer as? AVCaptureVideoPreviewLayer else { return }
-        let content = preview.layerRectConverted(fromMetadataOutputRect: CGRect(x: 0, y: 0, width: 1, height: 1))
+        guard let subjectRect else { return }
+        let content = previewLayer.layerRectConverted(fromMetadataOutputRect: CGRect(x: 0, y: 0, width: 1, height: 1))
         let subject = CGRect(x: content.minX + subjectRect.minX * content.width, y: content.minY + subjectRect.minY * content.height, width: subjectRect.width * content.width, height: subjectRect.height * content.height)
         let path = UIBezierPath(rect: content)
         path.append(UIBezierPath(roundedRect: subject, cornerRadius: min(subject.width, subject.height) * 0.28))
@@ -879,7 +902,7 @@ private final class PreviewContainer: UIView {
 private final class CameraView: NSObject, FlutterPlatformView {
     let container = PreviewContainer()
     private var orientationObserver: NSObjectProtocol?
-    var layer: AVCaptureVideoPreviewLayer { container.layer as! AVCaptureVideoPreviewLayer }
+    var layer: AVCaptureVideoPreviewLayer { container.previewLayer }
     func view() -> UIView { container }
     init(frame: CGRect) { super.init(); container.frame = frame; layer.videoGravity = .resizeAspect }
     func beginOrientationUpdates() {

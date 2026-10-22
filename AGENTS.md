@@ -52,3 +52,9 @@ xcrun devicectl device info apps \
 ```
 
 If the profile is missing or expired, do not switch silently to another device or profile. Report that the dedicated Alayna profile must be restored or regenerated.
+
+## Flutter physical review-return testing
+
+Use profile mode on Alayna's iPhone. For `flutter drive`, pass `--keep-app-running` so test cleanup does not uninstall the production bundle and reset its permissions. The test binary must then be replaced with a fresh normal build using `flutter build ios --profile --target lib/main.dart` before handing the phone back. Never install the shared build artifact after an integration test without rebuilding the normal entry point.
+
+`apps/dali_camera/integration_test/review_return_test.dart` checks that iOS's native preview remains actively displaying and its attachment count stays unchanged across three photo-review return cycles. Coaching analysis events are not a measure of preview readiness.

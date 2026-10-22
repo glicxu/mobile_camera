@@ -5,6 +5,14 @@ import UIKit
 struct BeautifyEngine {
     private let context = CIContext(options: [.useSoftwareRenderer: false])
 
+    static func portraitMaskWeights(strength: Double) -> (skin: Double, protected: Double) {
+        // Only the Max preset uses the approved 65/35 treatment. Keeping this
+        // as a hard boundary preserves the established appearance of levels
+        // 1–4 instead of gradually changing Glam as it approaches Max.
+        guard strength >= 0.999 else { return (1, 0) }
+        return (0.65, 0.35)
+    }
+
     func apply(to image: UIImage, measurements: Measurements, settings: BeautifySettings) -> (image: UIImage, result: BeautifyResult) {
         let strength = settings.normalizedStrength
         let skyApplied = settings.landscapeSkyEnabled && measurements.skyOrOpenAreaRatio >= 0.08
@@ -39,6 +47,7 @@ struct BeautifyEngine {
 
         if let face = measurements.faceBox {
             let skinMask = skinMask(
+                source: input,
                 extent: input.extent,
                 normalizedTopLeftRect: face.rect,
                 landmarks: measurements.faceLandmarks,
@@ -210,13 +219,20 @@ struct BeautifyEngine {
         mask: CIImage,
         strength: Double
     ) -> CIImage? {
+        let curve = pow(strength, 1.55)
+        let highEnd = pow(strength, 4)
+        let maximum = strength >= 0.999
         let controls = CIFilter.colorControls()
         controls.inputImage = image
-        controls.brightness = Float(0.015 + 0.10 * pow(strength, 1.2))
-        controls.contrast = Float(1 + 0.025 * strength)
-        controls.saturation = Float(1 - 0.045 * strength)
+        controls.brightness = Float(0.005 + 0.045 * curve + 0.010 * highEnd)
+        controls.contrast = Float(1 + 0.035 * curve)
+        controls.saturation = Float(1 - 0.040 * curve)
         guard let adjusted = controls.outputImage else { return nil }
-        return blend(adjusted, over: image, mask: maskWithOpacity(mask, opacity: 0.35 + strength * 0.55))
+        return blend(
+            adjusted,
+            over: image,
+            mask: maskWithOpacity(mask, opacity: maximum ? 1 : 0.20 + 0.60 * curve)
+        )
     }
 
     private func reduceBlemishes(
@@ -225,12 +241,19 @@ struct BeautifyEngine {
         mask: CIImage,
         strength: Double
     ) -> CIImage? {
+        let curve = pow(strength, 1.45)
+        let highEnd = pow(strength, 4)
+        let maximum = strength >= 0.999
         let cleanup = CIFilter.noiseReduction()
         cleanup.inputImage = image
-        cleanup.noiseLevel = Float(0.02 + 0.10 * strength)
-        cleanup.sharpness = Float(0.44 - 0.18 * strength)
+        cleanup.noiseLevel = Float(0.015 + 0.115 * curve + 0.030 * highEnd)
+        cleanup.sharpness = Float(0.46 - 0.20 * curve)
         guard let cleaned = cleanup.outputImage?.cropped(to: extent) else { return nil }
-        return blend(cleaned, over: image, mask: maskWithOpacity(mask, opacity: 0.10 + 0.40 * strength))
+        return blend(
+            cleaned,
+            over: image,
+            mask: maskWithOpacity(mask, opacity: maximum ? 1 : 0.08 + 0.62 * curve)
+        )
     }
 
     private func smoothSkin(
@@ -240,14 +263,49 @@ struct BeautifyEngine {
         mask: CIImage,
         strength: Double
     ) -> CIImage? {
-        let curve = pow(strength, 1.15)
+        let curve = pow(strength, 1.5)
+        let highEnd = pow(strength, 4)
+        let maximum = strength >= 0.999
         let facePixelWidth = faceRect.width * extent.width
-        let radius = min(34, max(1.2, facePixelWidth * (0.008 + 0.024 * curve)))
+        // Keep the blur below the scale of facial contours. A large Gaussian
+        // radius softens shadows and highlights together, which reads as a
+        // translucent mist even when the mask itself is correct.
+        let radiusFactor = maximum
+            ? 0.012
+            : 0.002 + 0.017 * curve + 0.010 * highEnd
+        let radius = min(32, max(1.0, facePixelWidth * radiusFactor))
         let blur = CIFilter.gaussianBlur()
         blur.inputImage = image.clampedToExtent()
         blur.radius = Float(radius)
-        guard let blurred = blur.outputImage?.cropped(to: extent) else { return nil }
-        return blend(blurred, over: image, mask: maskWithOpacity(mask, opacity: 0.10 + 0.65 * curve))
+        guard let blurred = blur.outputImage?.cropped(to: extent),
+              let softened = blend(
+                blurred,
+                over: image,
+                mask: maskWithOpacity(
+                    mask,
+                    // The Max mask already contains the approved absolute
+                    // 65% skin / 35% protected-feature blend. Multiplying it
+                    // by another opacity made Max weaker than Glam.
+                    opacity: maximum ? 1 : min(0.54, 0.06 + 0.58 * curve + 0.28 * highEnd)
+                )
+              ) else { return nil }
+
+        // Max restores fine detail from the pre-blur image. Sharpening the
+        // already blurred result cannot recover pores or local contrast and
+        // leaves the face looking veiled.
+        let detail = CIFilter.unsharpMask()
+        detail.inputImage = maximum ? image : softened
+        detail.radius = 1.1
+        detail.intensity = Float(maximum ? 0.28 : max(0.08, 0.14 + 0.42 * curve - 0.34 * highEnd))
+        guard let detailed = detail.outputImage?.cropped(to: extent) else { return softened }
+        return blend(
+            detailed,
+            over: softened,
+            mask: maskWithOpacity(
+                mask,
+                opacity: maximum ? 0.18 : max(0.10, 0.20 + 0.26 * curve - 0.30 * highEnd)
+            )
+        )
     }
 
     private func reshapeFeatures(
@@ -309,6 +367,7 @@ struct BeautifyEngine {
     }
 
     private func skinMask(
+        source: CIImage,
         extent: CGRect,
         normalizedTopLeftRect rect: CGRect,
         landmarks: FaceLandmarkGeometry?,
@@ -324,43 +383,245 @@ struct BeautifyEngine {
         format.scale = 1
         format.opaque = true
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
-        let image = renderer.image { context in
+        let geometryImage = renderer.image { rendererContext in
             UIColor.black.setFill()
-            context.fill(CGRect(origin: .zero, size: size))
+            rendererContext.fill(CGRect(origin: .zero, size: size))
 
-            let face = pixelRect(rect, size: size)
-                .insetBy(dx: -rect.width * size.width * 0.20, dy: -rect.height * size.height * 0.24)
-            UIColor.white.setFill()
-            context.cgContext.fillEllipse(in: face)
+            // Expand the sides progressively so high strengths cover both
+            // outer cheeks. Color and detail classification below still keep
+            // hair and the background out of the working mask.
+            let detectedFace = pixelRect(rect, size: size)
+            let sideExpansion = detectedFace.width * (0.01 + 0.055 * pow(strength, 1.7))
+            let face = detectedFace.insetBy(
+                dx: -sideExpansion,
+                dy: detectedFace.height * 0.015
+            )
+            let treatmentWeights = Self.portraitMaskWeights(strength: strength)
+            UIColor(white: CGFloat(treatmentWeights.skin), alpha: 1).setFill()
+            let coverage = pow(strength, 1.6)
+            UIBezierPath(
+                roundedRect: face,
+                cornerRadius: face.width * (0.46 - 0.14 * coverage)
+            ).fill()
 
-            UIColor.black.setFill()
             if let landmarks {
-                for eye in [landmarks.leftEye, landmarks.rightEye] {
-                    if let eyeRect = bounds(of: eye) {
-                        let pixels = pixelRect(eyeRect, size: size)
-                        context.cgContext.fillEllipse(in: pixels.insetBy(
-                            dx: -pixels.width * 0.55,
-                            dy: -pixels.height * 1.1
+                // Levels 1–4 leave protected features untouched. Max applies
+                // the approved absolute 35% treatment to eyes, eyebrows,
+                // nostrils, and lips while surrounding skin receives 65%.
+                let isMaximum = treatmentWeights.protected > 0
+                let levelFiveTransition = pow(strength, 12)
+                UIColor(white: CGFloat(treatmentWeights.protected), alpha: 1).setFill()
+                for (eye, eyebrow) in [
+                    (landmarks.leftEye, landmarks.leftEyebrow),
+                    (landmarks.rightEye, landmarks.rightEyebrow),
+                ] {
+                    // Preserve the established Levels 1–4 eye mask exactly;
+                    // add Vision's eyebrow geometry only for Max.
+                    let featurePoints = isMaximum ? eye + eyebrow : eye
+                    if let featureRect = bounds(of: featurePoints),
+                       let eyeRect = bounds(of: eye) {
+                        let pixels = pixelRect(featureRect, size: size)
+                        let eyePixels = pixelRect(eyeRect, size: size)
+                        rendererContext.cgContext.fillEllipse(in: pixels.insetBy(
+                            dx: -eyePixels.width * (0.78 + 0.30 * levelFiveTransition),
+                            dy: -eyePixels.height * (1.55 + 0.35 * levelFiveTransition)
+                        ))
+                    }
+                }
+                if let noseRect = bounds(of: landmarks.nose) {
+                    let pixels = pixelRect(noseRect, size: size)
+                    let nostrilSize = CGSize(
+                        width: pixels.width * 0.38,
+                        height: pixels.height * 0.27
+                    )
+                    for x in [pixels.minX + pixels.width * 0.12, pixels.minX + pixels.width * 0.50] {
+                        rendererContext.cgContext.fillEllipse(in: CGRect(
+                            x: x,
+                            y: pixels.minY + pixels.height * 0.71,
+                            width: nostrilSize.width,
+                            height: nostrilSize.height
                         ))
                     }
                 }
                 if let lipRect = bounds(of: landmarks.outerLips) {
                     let pixels = pixelRect(lipRect, size: size)
-                    context.cgContext.fillEllipse(in: pixels.insetBy(
-                        dx: -pixels.width * 0.28,
-                        dy: -pixels.height * 0.7
+                    rendererContext.cgContext.fillEllipse(in: pixels.insetBy(
+                        dx: -pixels.width * 0.38,
+                        dy: -pixels.height * 0.88
                     ))
                 }
             }
         }
 
-        guard var mask = CIImage(image: image) else { return nil }
+        guard let geometryCG = geometryImage.cgImage else { return nil }
+        let geometryMask = CIImage(cgImage: geometryCG).transformed(
+            by: CGAffineTransform(translationX: 0, y: size.height).scaledBy(x: 1, y: -1)
+        )
+        let fullSizeGeometryMask = maskScale < 1
+            ? geometryMask.transformed(
+                by: CGAffineTransform(scaleX: 1 / maskScale, y: 1 / maskScale)
+            )
+            : geometryMask
+        guard let sourceCG = context.createCGImage(source.cropped(to: extent), from: extent) else {
+            return fullSizeGeometryMask
+        }
+
+        let width = max(1, Int(size.width.rounded()))
+        let height = max(1, Int(size.height.rounded()))
+        let rowBytes = width * 4
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue
+            | CGImageAlphaInfo.premultipliedLast.rawValue
+        var sourcePixels = [UInt8](repeating: 0, count: rowBytes * height)
+        var geometryPixels = [UInt8](repeating: 0, count: rowBytes * height)
+
+        func drawTopLeft(_ cgImage: CGImage, into pixels: inout [UInt8]) -> Bool {
+            guard let bitmap = CGContext(
+                data: &pixels,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: rowBytes,
+                space: colorSpace,
+                bitmapInfo: bitmapInfo
+            ) else { return false }
+            bitmap.interpolationQuality = .high
+            bitmap.translateBy(x: 0, y: CGFloat(height))
+            bitmap.scaleBy(x: 1, y: -1)
+            bitmap.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+
+        guard drawTopLeft(sourceCG, into: &sourcePixels),
+              drawTopLeft(geometryCG, into: &geometryPixels) else {
+            return geometryMask
+        }
+
+        func components(at index: Int) -> (y: Double, cb: Double, cr: Double) {
+            let offset = index * 4
+            let red = Double(sourcePixels[offset]) / 255
+            let green = Double(sourcePixels[offset + 1]) / 255
+            let blue = Double(sourcePixels[offset + 2]) / 255
+            return (
+                0.299 * red + 0.587 * green + 0.114 * blue,
+                -0.168736 * red - 0.331264 * green + 0.5 * blue + 0.5,
+                0.5 * red - 0.418688 * green - 0.081312 * blue + 0.5
+            )
+        }
+
+        // Estimate the subject's chroma from two upper-cheek patches. Median
+        // samples tolerate a blemish or a small facial-hair overlap.
+        let face = pixelRect(rect, size: size)
+        let sampleRadius = max(2, Int(face.width * 0.055))
+        let sampleCenters = [
+            CGPoint(x: face.minX + face.width * 0.28, y: face.minY + face.height * 0.57),
+            CGPoint(x: face.minX + face.width * 0.72, y: face.minY + face.height * 0.57),
+        ]
+        var sampleY: [Double] = []
+        var sampleCb: [Double] = []
+        var sampleCr: [Double] = []
+        for center in sampleCenters {
+            let minX = max(0, Int(center.x) - sampleRadius)
+            let maxX = min(width - 1, Int(center.x) + sampleRadius)
+            let minY = max(0, Int(center.y) - sampleRadius)
+            let maxY = min(height - 1, Int(center.y) + sampleRadius)
+            guard minX <= maxX, minY <= maxY else { continue }
+            for y in minY...maxY {
+                for x in minX...maxX {
+                    let index = y * width + x
+                    // Max intentionally paints ordinary skin at 65% opacity.
+                    // Testing against the old near-white threshold rejected
+                    // every Max cheek sample and forced the fallback mask.
+                    guard geometryPixels[index * 4] > 32 else { continue }
+                    let value = components(at: index)
+                    guard value.y > 0.10 else { continue }
+                    sampleY.append(value.y)
+                    sampleCb.append(value.cb)
+                    sampleCr.append(value.cr)
+                }
+            }
+        }
+
+        func median(_ values: [Double]) -> Double? {
+            guard !values.isEmpty else { return nil }
+            let sorted = values.sorted()
+            return sorted[sorted.count / 2]
+        }
+        guard let referenceY = median(sampleY),
+              let referenceCb = median(sampleCb),
+              let referenceCr = median(sampleCr) else {
+            return fullSizeGeometryMask
+        }
+
+        func smoothstep(_ low: Double, _ high: Double, _ value: Double) -> Double {
+            let unit = min(1, max(0, (value - low) / max(0.0001, high - low)))
+            return unit * unit * (3 - 2 * unit)
+        }
+
+        var classified = [UInt8](repeating: 0, count: width * height)
+        for y in 0..<height {
+            for x in 0..<width {
+                let index = y * width + x
+                let geometry = Double(geometryPixels[index * 4]) / 255
+                guard geometry > 0 else { continue }
+                let value = components(at: index)
+                let coverage = pow(strength, 1.6)
+                let chromaDistance = hypot(value.cb - referenceCb, value.cr - referenceCr)
+                let skinColor = 1 - smoothstep(
+                    0.052 + 0.020 * coverage,
+                    0.135 + 0.075 * coverage,
+                    chromaDistance
+                )
+                let shadowProtection = smoothstep(
+                    referenceY * (0.32 - 0.10 * coverage),
+                    referenceY * (0.62 - 0.14 * coverage),
+                    value.y
+                )
+
+                let left = components(at: y * width + max(0, x - 1)).y
+                let right = components(at: y * width + min(width - 1, x + 1)).y
+                let above = components(at: max(0, y - 1) * width + x).y
+                let below = components(at: min(height - 1, y + 1) * width + x).y
+                let edge = abs(right - left) + abs(below - above)
+                let detailProtection = 1 - (0.72 - 0.62 * coverage) * smoothstep(0.025, 0.13, edge)
+
+                // At level 5, guarantee broad coverage through the forehead,
+                // eye bridge, under-eye skin, nose, and cheeks. The explicit
+                // eye/lip holes above still remain zero in the geometry mask.
+                let relativeY = (Double(y) - Double(face.minY)) / max(1, Double(face.height))
+                let centralFace = smoothstep(0.08, 0.20, relativeY)
+                    * (1 - smoothstep(0.88, 0.98, relativeY))
+                let coverageFloor = 0.48 * pow(strength, 6) * centralFace
+                let classifiedSkin = skinColor * shadowProtection * detailProtection
+                let alpha = geometry * max(classifiedSkin, coverageFloor)
+                classified[index] = UInt8((255 * min(1, max(0, alpha))).rounded())
+            }
+        }
+
+        guard let provider = CGDataProvider(data: Data(classified) as CFData),
+              let classifiedCG = CGImage(
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bitsPerPixel: 8,
+                bytesPerRow: width,
+                space: CGColorSpaceCreateDeviceGray(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: true,
+                intent: .defaultIntent
+              ) else { return fullSizeGeometryMask }
+
+        var mask = CIImage(cgImage: classifiedCG).transformed(
+            by: CGAffineTransform(translationX: 0, y: size.height).scaledBy(x: 1, y: -1)
+        )
         if maskScale < 1 {
             mask = mask.transformed(by: CGAffineTransform(scaleX: 1 / maskScale, y: 1 / maskScale))
         }
         let blur = CIFilter.gaussianBlur()
         blur.inputImage = mask.clampedToExtent()
-        blur.radius = Float(max(extent.width, extent.height) * (0.012 + 0.006 * pow(strength, 1.15)))
+        blur.radius = Float(max(extent.width, extent.height) * (0.0028 + 0.0032 * pow(strength, 1.15)))
         return blur.outputImage?.cropped(to: extent)
     }
 

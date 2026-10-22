@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'beautifier_preset_guidance.dart';
 import 'camera_controller.dart';
 
 Future<void> showBeautifierQuickSheet(
@@ -37,7 +38,11 @@ class BeautifierQuickSheet extends StatelessWidget {
 
   Future<void> choosePreset(String treatment, String preset) async {
     await camera.selectBeautifierPreset(treatment, preset);
+    final guidance = guidanceForBeautifierPreset(treatment, preset);
     onSelected();
+    if (guidance != null) {
+      camera.showPresetGuidance('$preset: $guidance');
+    }
   }
 
   @override
@@ -79,7 +84,7 @@ class BeautifierQuickSheet extends StatelessWidget {
             _PresetSection(
               title: 'Portrait',
               description: 'Face-aware skin and feature refinement',
-              presets: const ['Natural', 'Polished', 'Glam', 'Custom'],
+              presets: const ['Natural', 'Polished', 'Glam', 'Max'],
               selected: selectedTreatment == 'portrait' ? portraitPreset : null,
               keyPrefix: 'portrait',
               onSelected: (preset) => choosePreset('portrait', preset),
@@ -88,7 +93,7 @@ class BeautifierQuickSheet extends StatelessWidget {
             _PresetSection(
               title: 'Landscape',
               description: 'Rich scenery with optional blue sky and clouds',
-              presets: const ['Natural', 'Vivid', 'Dramatic', 'Custom'],
+              presets: const ['Natural', 'Vivid', 'Dramatic'],
               selected: selectedTreatment == 'landscape'
                   ? landscapePreset
                   : null,
@@ -147,6 +152,15 @@ class _PresetSection extends StatelessWidget {
               selected: selected == preset,
               onSelected: (_) => onSelected(preset),
             ),
+          TextButton.icon(
+            key: Key('beautifierQuick${keyPrefix}_Custom'),
+            onPressed: () => onSelected('Custom'),
+            icon: Icon(
+              selected == 'Custom' ? Icons.check : Icons.tune,
+              size: 18,
+            ),
+            label: const Text('Customize…'),
+          ),
         ],
       ),
     ],

@@ -30,7 +30,7 @@ void main() {
       expect(debug['instructionShown'], 'Move left');
       expect(debug['beautifierPreset'], 'Glam');
       expect(debug['captureRecipe']['treatment'], 'portrait');
-      expect(debug['captureRecipe']['strength'], 4);
+      expect(debug['captureRecipe']['strength'], 5);
       expect(debug['captureRecipe']['filter'], everyElement(0));
       camera.advice = const Advice(
         type: 'ready',

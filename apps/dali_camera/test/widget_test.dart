@@ -54,6 +54,7 @@ class FakeHost extends CameraHostApi {
   double zoomValue = 1;
   final List<double> requestedZooms = [];
   int starts = 0;
+  int stops = 0;
   final List<String> savedIds = [];
   String? replaceTarget = 'library-original';
   final List<String> replacedIds = [];
@@ -136,7 +137,10 @@ class FakeHost extends CameraHostApi {
   }
 
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async {
+    stops++;
+  }
+
   @override
   Future<void> setVoicePhrase(String phrase) async {}
   @override
@@ -981,6 +985,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('App Settings'), findsOneWidget);
     expect(find.text('0.1.0 (2001)'), findsOneWidget);
+    expect(find.text('Purchase'), findsNothing);
+    expect(find.text('Dali Pro'), findsNothing);
+    expect(find.text('Restore purchases'), findsNothing);
     expect(camera.canCapture, isFalse);
     camera.voicePreferred = true;
     camera.voiceShutter();
@@ -1374,6 +1381,72 @@ void main() {
       expect(host.analyses, 1);
       await camera.returnToCamera();
       expect(camera.libraryPhotos, isEmpty);
+      camera.dispose();
+    },
+  );
+
+  testWidgets(
+    'Back to camera responds during review work and reuses the warm session',
+    (tester) async {
+      final host = DelayedEffectsHost()
+        ..libraryResult = PhotoLibrary(
+          status: 'authorized',
+          photos: [LibraryPhoto(id: 'stored', title: 'Stored photo')],
+        );
+      final camera = CameraController(host: host, register: false);
+      await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
+      await tester.pumpAndSettle();
+      expect(host.starts, 1);
+
+      expect(await camera.openPhotoLibrary(), isTrue);
+      await tester.pump();
+      expect(camera.reviewing, isTrue);
+      expect(host.stops, 0);
+
+      final treatment = camera.applyTreatment('enhance');
+      await host.renderingStarted.future;
+      expect(camera.busy, isTrue);
+      await tester.tap(find.byTooltip('Back to camera'));
+      await tester.pump();
+
+      expect(camera.reviewing, isFalse);
+      expect(camera.busy, isFalse);
+      expect(camera.canCapture, isTrue);
+      expect(host.starts, 1);
+      expect(host.stops, 0);
+      expect(find.byTooltip('Back to camera'), findsNothing);
+
+      host.finishRendering.complete();
+      await treatment;
+      await tester.pump();
+      expect(
+        host.releasedIds,
+        containsAll(['copy-stored', 'effects-copy-stored']),
+      );
+      camera.dispose();
+    },
+  );
+
+  test(
+    'Back to camera discards a completed edit and restores the original',
+    () async {
+      final host = FakeHost();
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      camera.watermark = false;
+      await camera.capturePhoto(review: false);
+      final original = camera.original!;
+      await camera.openHistory(original);
+      await camera.variant(crop: true);
+      expect(camera.selected!.id, 'derived-${original.id}');
+
+      await camera.returnToCamera();
+
+      expect(camera.reviewing, isFalse);
+      expect(camera.selected, same(original));
+      expect(camera.styled, isFalse);
+      expect(camera.selectedTreatment, 'original');
+      expect(host.releasedIds, contains('derived-${original.id}'));
       camera.dispose();
     },
   );
@@ -1793,6 +1866,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(camera.filterEnabled, isFalse);
 
+    await tester.longPress(find.byKey(const Key('filterToggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('Filters'), findsOneWidget);
+    expect(find.text('Auto'), findsOneWidget);
+    expect(find.text('Customize…'), findsOneWidget);
+    expect(find.text('Off'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('filterQuick_vivid')));
+    await tester.pumpAndSettle();
+    expect(camera.filterEnabled, isTrue);
+    expect(camera.filterMode, 'custom');
+    expect(camera.customFilter, 'vivid');
+    expect(camera.filter, 'vivid');
+
+    await tester.longPress(find.byKey(const Key('filterToggle')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('filterQuickOff')));
+    await tester.tap(find.byKey(const Key('filterQuickOff')));
+    await tester.pumpAndSettle();
+    expect(camera.filterEnabled, isFalse);
+
     expect(camera.beautifierEnabled, isFalse);
     await tester.tap(find.byKey(const Key('beautifierToggle')));
     await tester.pumpAndSettle();
@@ -1804,6 +1897,20 @@ void main() {
     expect(find.text('Portrait'), findsOneWidget);
     expect(find.text('Landscape'), findsOneWidget);
     expect(find.text('General Enhance'), findsNothing);
+    expect(find.text('Customize…'), findsNWidgets(2));
+    expect(find.text('Custom'), findsNothing);
+    await tester.tap(find.byKey(const Key('beautifierQuickportrait_Max')));
+    await tester.pumpAndSettle();
+    expect(camera.customBeautifier, 'portrait');
+    expect(camera.captureTreatments['portrait']!['preset'], 'Max');
+    expect(camera.captureTreatments['portrait']!['strength'], 4);
+    expect(camera.captureTreatments['portrait']!['flags'], {
+      'eyeEnlargement': true,
+      'lipPlumping': true,
+    });
+
+    await tester.longPress(find.byKey(const Key('beautifierToggle')));
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const Key('beautifierQuicklandscape_Dramatic')),
     );

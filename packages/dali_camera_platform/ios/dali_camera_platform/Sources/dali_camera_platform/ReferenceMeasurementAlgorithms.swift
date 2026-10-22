@@ -221,6 +221,9 @@ struct ReferenceMeasurementAlgorithms {
         let geometry = FaceLandmarkGeometry(
             leftEye: landmarkPoints(landmarks.leftEye, in: face.rect),
             rightEye: landmarkPoints(landmarks.rightEye, in: face.rect),
+            leftEyebrow: landmarkPoints(landmarks.leftEyebrow, in: face.rect),
+            rightEyebrow: landmarkPoints(landmarks.rightEyebrow, in: face.rect),
+            nose: landmarkPoints(landmarks.nose, in: face.rect),
             outerLips: landmarkPoints(landmarks.outerLips, in: face.rect),
             faceContour: landmarkPoints(landmarks.faceContour, in: face.rect)
         )

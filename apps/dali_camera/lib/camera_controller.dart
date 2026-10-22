@@ -34,6 +34,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   String? _pendingCaptureRecipe;
   String? _pendingCaptureId;
   bool reviewing = false;
+  bool _returningToCamera = false;
   bool starting = false;
   bool foreground = true;
   bool front = false;
@@ -114,6 +115,39 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       useFilterMode(filterMode);
     }
     persistSettings();
+  }
+
+  Future<void> selectFilterAuto() async {
+    filterMode = 'auto';
+    filter = 'auto';
+    await persistSettings();
+  }
+
+  Future<void> selectFilterPreset(String preset) async {
+    final filters = catalog.data['filters'] as Map;
+    if (!filters.containsKey(preset)) return;
+    customFilter = preset;
+    filterMode = 'custom';
+    filter = preset;
+    await persistSettings();
+  }
+
+  Future<void> selectFilterCustom() async {
+    if (customFilter != 'custom' || customStyle.isEmpty) {
+      final seed = configuredStyle;
+      customStyle = {
+        for (final field in PhotoStyle.fields) field: seed.value(field),
+      };
+    }
+    customFilter = 'custom';
+    filterMode = 'custom';
+    filter = 'custom';
+    await persistSettings();
+  }
+
+  Future<void> selectFilterOff() async {
+    filter = 'off';
+    await persistSettings();
   }
 
   Map<String, int> customStyle = {};
@@ -309,11 +343,16 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     await persistSettings();
   }
 
+  void showPresetGuidance(String guidance) {
+    message = guidance;
+    notifyListeners();
+  }
+
   Future<void> selectBeautifierPreset(String treatment, String preset) async {
     if (!['portrait', 'landscape'].contains(treatment)) return;
     final settings = captureTreatments[treatment]!;
     final supported = treatment == 'portrait'
-        ? const ['Natural', 'Polished', 'Glam', 'Custom']
+        ? const ['Natural', 'Polished', 'Glam', 'Max', 'Custom']
         : const ['Natural', 'Vivid', 'Dramatic', 'Custom'];
     if (!supported.contains(preset)) return;
     settings['preset'] = preset;
@@ -322,11 +361,13 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           ? 2
           : (preset == 'Polished' || preset == 'Vivid')
           ? 3
+          : preset == 'Glam'
+          ? 5
           : 4;
       settings['flags'] = treatment == 'portrait'
           ? <String, bool>{
-              'eyeEnlargement': preset != 'Natural',
-              'lipPlumping': preset == 'Glam',
+              'eyeEnlargement': preset == 'Polished' || preset == 'Max',
+              'lipPlumping': preset == 'Max',
             }
           : <String, bool>{'sky': preset != 'Natural'};
     }
@@ -445,7 +486,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     reviewLoading = true;
     message = null;
     notifyListeners();
-    await pause();
+    await _pauseForReview();
     try {
       final page = await host.listPhotoPage(0, 1);
       if (token != _reviewLoad || _disposed) return true;
@@ -515,8 +556,10 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       photoAnalysis = null;
       analysisError = null;
       reviewing = true;
+      await _pauseForReview();
       notifyListeners();
       unawaited(refreshReviewInfo());
+      // Keep only three private copies. Listing never decodes the whole library.
       for (final old in _libraryCache.keys.toList()) {
         if (_libraryCache.length <= 3) break;
         if (old != index) await _release(_libraryCache.remove(old)!);
@@ -842,6 +885,15 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     notifyListeners();
   }
 
+  Future<void> _pauseForReview() async {
+    cancelSequence();
+    try {
+      await host.setVoiceEnabled(false);
+    } catch (_) {}
+    voice = false;
+    notifyListeners();
+  }
+
   Future<void> switchLens() async {
     if (busy || starting || reviewing) return;
     cancelSequence();
@@ -904,7 +956,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       reviewing = review;
       if (reviewing) {
         notifyListeners();
-        await pause();
+        await _pauseForReview();
       }
       await _saveCapturedPhoto(onStage: recordStage);
       if (reviewing) {
@@ -926,7 +978,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         message = 'Photo retained privately. Processing or save failed: $error';
         reviewing = true;
         notifyListeners();
-        await pause();
+        await _pauseForReview();
       } else {
         message = 'Photo could not be completed: $error';
       }
@@ -1117,7 +1169,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         styled = false;
         selectedTreatment = 'original';
         reviewing = true;
-        await pause();
+        await _pauseForReview();
         photoAnalysis = null;
         analysisError = null;
         message = result.skipped > 0
@@ -1148,40 +1200,78 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       unawaited(refreshReviewInfo());
     }
     _reviewFullResolution = true;
-    await pause();
+    await _pauseForReview();
     photoAnalysis = null;
     analysisError = null;
     notifyListeners();
   }
 
   Future<void> returnToCamera() async {
-    if (busy) return;
+    if (_returningToCamera) return;
+    if (!reviewing) {
+      if (snapshot?.ready == true) {
+        await _resumeVoice();
+      } else if (!busy) {
+        await start();
+      }
+      return;
+    }
+    _returningToCamera = true;
     ++_reviewLoad;
     _failedReviewIndex = null;
     reviewLoading = false;
     reviewAssetId = null;
     reviewInfo = null;
+    _capturePreviewTimer?.cancel();
     _reviewUpdate?.cancel();
     _reviewRevision++;
-    _capturePreviewTimer?.cancel();
     capturePreviewPath = null;
-    busy = true;
-    notifyListeners();
+    final cleanup = <PhotoHandle>[];
     try {
+      final reviewedOriginal = original;
+      final reviewSelection = selected;
+      if (reviewSelection != null &&
+          reviewSelection.id != reviewedOriginal?.id) {
+        cleanup.add(reviewSelection);
+      }
+      selected = reviewedOriginal;
+      styled = false;
+      selectedTreatment = 'original';
       if (reviewingImport || reviewingLibrary) {
-        await _releaseVariant();
-        await _clearImportedPhotos();
-        await _clearLibraryPhotos();
+        cleanup.addAll(importedPhotos);
+        cleanup.addAll(_libraryCache.values);
+        importedPhotos.clear();
+        _libraryCache.clear();
+        libraryPhotos.clear();
+        _libraryIndex = -1;
         original = history.firstOrNull;
         selected = _savedCaptures[original?.id] ?? original;
         styled = false;
       }
-    } finally {
+      reviewing = false;
       busy = false;
+      notifyListeners();
+      if (snapshot?.ready == true) {
+        await _resumeVoice();
+      } else {
+        while (busy && !_disposed && !reviewing) {
+          await Future<void>.delayed(const Duration(milliseconds: 25));
+        }
+        if (!_disposed && !reviewing) await start();
+      }
+    } finally {
+      _returningToCamera = false;
     }
-    reviewing = false;
-    await start();
-    notifyListeners();
+    if (cleanup.isNotEmpty) {
+      await _releaseReviewCopies(cleanup);
+    }
+  }
+
+  Future<void> _releaseReviewCopies(List<PhotoHandle> photos) async {
+    final released = <String>{};
+    for (final photo in photos) {
+      if (released.add(photo.id)) await _release(photo);
+    }
   }
 
   Future<void> variant({
@@ -1192,12 +1282,21 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     if (busy || original == null) return;
     _reviewUpdate?.cancel();
     _reviewRevision++;
+    final revision = _reviewRevision;
+    final source = original!;
     busy = true;
     notifyListeners();
     try {
       final result = rotation == 0 && !crop && strength == 0
-          ? original
-          : await host.render(original!, rotation, crop, strength);
+          ? source
+          : await host.render(source, rotation, crop, strength);
+      if (_disposed ||
+          !reviewing ||
+          original?.id != source.id ||
+          revision != _reviewRevision) {
+        if (result.id != source.id) await _release(result);
+        return;
+      }
       await _releaseVariant();
       styled = false;
       selected = result;
@@ -1284,7 +1383,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     reviewLoading = true;
     message = null;
     notifyListeners();
-    await pause();
+    await _pauseForReview();
     try {
       final asset = imported ? null : await host.replacementTarget(photo);
       final display =
@@ -1365,10 +1464,19 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   Future<void> applyStyle() async {
     if (busy || original == null) return;
+    final source = original!;
+    final revision = ++_reviewRevision;
     busy = true;
     notifyListeners();
     try {
-      final result = await _renderStyle(original!);
+      final result = await _renderStyle(source);
+      if (_disposed ||
+          !reviewing ||
+          original?.id != source.id ||
+          revision != _reviewRevision) {
+        await _release(result);
+        return;
+      }
       await _releaseVariant();
       selected = result;
       styled = true;
@@ -1427,13 +1535,17 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   Future<void> _analyzeStill() async {
     final source = original;
+    final revision = _reviewRevision;
     photoAnalysis = null;
     analysisError = null;
     if (source == null) return;
     try {
       final result =
           jsonDecode(await host.analyzePhoto(source)) as Map<String, dynamic>;
-      if (original?.id == source.id && result['sourceId'] == source.id) {
+      if (reviewing &&
+          revision == _reviewRevision &&
+          original?.id == source.id &&
+          result['sourceId'] == source.id) {
         if (result['imageWidth'] != null) {
           final measured = NativeFrame(result);
           if (measured.poseAnalysis != null) {
@@ -1463,7 +1575,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         photoAnalysis = result;
       }
     } catch (error) {
-      if (original?.id == source.id) {
+      if (reviewing &&
+          revision == _reviewRevision &&
+          original?.id == source.id) {
         analysisError = 'Photo analysis unavailable: $error';
       }
     }

@@ -58,11 +58,13 @@ class CameraSelectionRow extends StatelessWidget {
   const CameraSelectionRow({
     super.key,
     required this.camera,
+    required this.onFilterLongPress,
     required this.onBeautifierLongPress,
     this.showGuides = true,
   });
 
   final CameraController camera;
+  final VoidCallback onFilterLongPress;
   final VoidCallback onBeautifierLongPress;
   final bool showGuides;
 
@@ -78,6 +80,7 @@ class CameraSelectionRow extends StatelessWidget {
           enabled: camera.filterEnabled,
           busy: camera.busy,
           onTap: camera.toggleFilter,
+          onLongPress: onFilterLongPress,
         ),
         _EffectToggle(
           key: const Key('beautifierToggle'),
