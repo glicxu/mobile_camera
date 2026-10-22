@@ -1,7 +1,9 @@
 # Dali Camera photo review UX improvement plan
 
-Date: October 21, 2026  
-Status: Implemented and tested on Android; iPhone and extended acceptance pending  
+Date: October 21, 2026
+
+Status: Implemented and tested on Android; iPhone and extended acceptance pending
+
 Scope: Photo review in the Flutter app on iPhone and Android
 
 Tapping the last-photo thumbnail should immediately open a lightweight viewer of that photo. The user should be able to inspect, browse, share, favorite, or delete it without entering an editing workflow. Filters, Beautifier, and Enhance become available after the user chooses Edit.
