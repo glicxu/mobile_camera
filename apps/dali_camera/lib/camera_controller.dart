@@ -297,6 +297,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
   String customBeautifier = 'portrait';
   int depthLevel = 0;
   Timer? _focusIndicator;
+  bool _depthFocusIsAutomatic = false;
   String selectedTreatment = 'original';
   Map<String, dynamic>? photoAnalysis;
   String? analysisError;
@@ -854,6 +855,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       manualWorkspace = false;
       focusX = null;
       focusY = null;
+      _depthFocusIsAutomatic = false;
       aspectRatio = snapshot!.aspectRatio;
       if (foreground && !reviewing) {
         await refreshPhotoLocation(
@@ -2056,6 +2058,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     }
     focusX = x.clamp(0, 1);
     focusY = y.clamp(0, 1);
+    if (effectiveDepth > 0) _depthFocusIsAutomatic = false;
     _focusIndicator?.cancel();
     if (!manualWorkspace) {
       _focusIndicator = Timer(const Duration(seconds: 2), () {
@@ -2130,8 +2133,34 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   Future<void> setDepth(int value) async {
     depthLevel = value.clamp(0, 5);
+    if (depthLevel > 0 && (focusX == null || focusY == null)) {
+      _depthFocusIsAutomatic = true;
+      _setAutomaticDepthFocus();
+    } else if (depthLevel == 0 && _depthFocusIsAutomatic) {
+      focusX = null;
+      focusY = null;
+      _depthFocusIsAutomatic = false;
+    }
     notifyListeners();
     await updateDepthPreview();
+  }
+
+  void _setAutomaticDepthFocus() {
+    final faces = lastFrame?['faces'] as List? ?? const [];
+    final face = faces.whereType<Map>().firstOrNull;
+    if (face != null) {
+      focusX =
+          ((face['x'] as num).toDouble() +
+                  (face['width'] as num).toDouble() / 2)
+              .clamp(0.0, 1.0);
+      focusY =
+          ((face['y'] as num).toDouble() +
+                  (face['height'] as num).toDouble() / 2)
+              .clamp(0.0, 1.0);
+    } else {
+      focusX = .5;
+      focusY = .5;
+    }
   }
 
   Future<void> returnAuto({bool stayInManual = false}) async {
@@ -2150,6 +2179,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       if (!stayInManual) {
         focusX = null;
         focusY = null;
+        _depthFocusIsAutomatic = false;
       }
     }
     await updateDepthPreview();
@@ -2193,6 +2223,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         message = null;
       }
       lastFrame = data;
+      if (effectiveDepth > 0 && _depthFocusIsAutomatic) {
+        _setAutomaticDepthFocus();
+      }
       unawaited(updateDepthPreview());
       aspectRatio = packet.aspectRatio;
       var signals = packet.situationSignals;
@@ -2389,6 +2422,10 @@ class CameraController extends ChangeNotifier implements CameraEvents {
           'width': .36.clamp(0.0, 1 - left),
           'height': .48.clamp(0.0, 1 - top),
         };
+      }
+      if (rect != null) {
+        rect['focusX'] = focusX ?? .5;
+        rect['focusY'] = focusY ?? .5;
       }
       await host.setDepthPreview(
         current.configurationId,

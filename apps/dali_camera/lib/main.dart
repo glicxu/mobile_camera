@@ -257,33 +257,48 @@ class _CameraScreenState extends State<CameraScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (latestPhoto != null)
-                      IconButton(
-                        tooltip: 'View last photo',
-                        icon: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: UprightCaptureControl(
-                            child: Image.file(
-                              File(latestPhoto.path),
-                              width: 44,
-                              height: 44,
-                              cacheWidth: 160,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, error, stack) =>
-                                  const Icon(Icons.photo_outlined, size: 26),
-                            ),
-                          ),
-                        ),
-                        onPressed: camera.busy ? null : camera.openLatest,
-                      ),
                     IconButton(
-                      tooltip: 'Open photo library',
-                      icon: const UprightCaptureControl(
-                        child: Icon(Icons.photo_library_outlined, size: 26),
+                      key: const Key('galleryTile'),
+                      tooltip: latestPhoto == null
+                          ? 'Open photo library'
+                          : 'View last photo',
+                      icon: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: UprightCaptureControl(
+                          child: latestPhoto == null
+                              ? Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: .35),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(alpha: .5),
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.photo_outlined,
+                                    size: 26,
+                                  ),
+                                )
+                              : Image.file(
+                                  File(latestPhoto.path),
+                                  width: 44,
+                                  height: 44,
+                                  cacheWidth: 160,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, error, stack) => const Icon(
+                                    Icons.photo_outlined,
+                                    size: 26,
+                                  ),
+                                ),
+                        ),
                       ),
                       onPressed: camera.busy
                           ? null
-                          : () => cameraSheet(openPhotoLibrary),
+                          : latestPhoto == null
+                          ? () => cameraSheet(openPhotoLibrary)
+                          : camera.openLatest,
                     ),
                   ],
                 ),
@@ -376,30 +391,6 @@ class _CameraScreenState extends State<CameraScreen>
                           ),
                           const Text(
                             'Guide',
-                            textScaler: TextScaler.noScaling,
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    HeaderAction(
-                      key: const Key('cameraControlsButton'),
-                      tooltip: 'Camera controls',
-                      size: 52,
-                      radius: 10,
-                      onPressed: camera.busy
-                          ? null
-                          : () => cameraSheet(settings),
-                      child: const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.camera_outlined, size: 20),
-                          Text(
-                            'Controls',
                             textScaler: TextScaler.noScaling,
                             style: TextStyle(
                               fontSize: 9,
@@ -619,35 +610,29 @@ class _CameraScreenState extends State<CameraScreen>
                         ),
                       if (camera.focusX != null && camera.focusY != null)
                         Positioned(
-                          left: camera.focusX! * previewBounds.maxWidth - 36,
-                          top: camera.focusY! * previewBounds.maxHeight - 36,
+                          left: camera.focusX! * previewBounds.maxWidth - 10,
+                          top: camera.focusY! * previewBounds.maxHeight - 10,
                           child: IgnorePointer(
-                            child: SizedBox(
-                              width: 72,
-                              height: 72,
-                              child: Stack(
-                                children: [
-                                  Positioned.fill(
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                          color: cameraTeal,
-                                          width: 3,
-                                        ),
-                                        borderRadius: BorderRadius.circular(7),
-                                      ),
-                                    ),
+                            child: Semantics(
+                              label: 'Focus point',
+                              child: Container(
+                                width: 20,
+                                height: 20,
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
                                   ),
-                                  if (!camera.manualWorkspace)
-                                    const Align(
-                                      alignment: Alignment.bottomRight,
-                                      child: Icon(
-                                        Icons.wb_sunny,
-                                        size: 20,
-                                        color: Colors.yellow,
-                                      ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black54,
+                                      blurRadius: 4,
+                                      spreadRadius: 1,
                                     ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -827,14 +812,7 @@ class _CameraScreenState extends State<CameraScreen>
                   setState(() => manualToolsVisible = !manualToolsVisible);
                 }
               },
-        onSettings: () => cameraSheet(
-          () => showAppSettings(
-            context,
-            camera: camera,
-            onHelp: help,
-            onImport: choosePhotos,
-          ),
-        ),
+        onSettings: camera.busy ? null : () => cameraSheet(settings),
         onSwitch: camera.starting || camera.busy ? null : camera.switchLens,
       ),
     );
@@ -1711,9 +1689,11 @@ class _CameraScreenState extends State<CameraScreen>
     ),
   );
 
-  Future<void> settings() {
+  Future<void> settings() async {
     camera.cancelSequence();
-    return showModalBottomSheet<void>(
+    await camera.refreshPhotoLocation();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
@@ -1726,7 +1706,7 @@ class _CameraScreenState extends State<CameraScreen>
               children: [
                 ListTile(
                   title: Text(
-                    'Camera controls',
+                    'Settings',
                     style: Theme.of(ctx).textTheme.titleLarge,
                   ),
                   trailing: TextButton(
@@ -1754,21 +1734,89 @@ class _CameraScreenState extends State<CameraScreen>
                           },
                         ),
                         ExpansionTile(
-                          title: const Text('Diagnostics'),
+                          key: const Key('photoSettingsGroup'),
+                          title: const Text('Photos'),
                           children: [
                             SwitchListTile(
-                              title: const Text('Debug overlay'),
-                              value: camera.debug,
-                              onChanged: (value) {
-                                camera.debug = value;
-                                refresh();
-                              },
+                              key: const Key('photoLocationToggle'),
+                              secondary: const Icon(Icons.location_on_outlined),
+                              title: const Text('Save photo location'),
+                              subtitle: Text(camera.photoLocationDescription),
+                              value: camera.photoLocationEnabled,
+                              onChanged:
+                                  camera.busy || camera.photoLocationUpdating
+                                  ? null
+                                  : camera.setPhotoLocationEnabled,
                             ),
-                            TextButton(
-                              onPressed: () => Clipboard.setData(
-                                ClipboardData(text: jsonEncode(camera.log)),
+                            if (camera.photoLocationEnabled &&
+                                camera.photoLocationStatus ==
+                                    'permissionDenied')
+                              TextButton(
+                                onPressed: camera.host.openSettings,
+                                child: const Text('Open location permissions'),
                               ),
-                              child: const Text('Copy diagnostic log'),
+                          ],
+                        ),
+                        ExpansionTile(
+                          key: const Key('aboutSettingsGroup'),
+                          title: const Text('About'),
+                          children: [
+                            const AboutSettingsContent(),
+                            ExpansionTile(
+                              title: const Text('Diagnostics'),
+                              children: [
+                                SwitchListTile(
+                                  key: const Key('captureDebugToggle'),
+                                  secondary: const Icon(
+                                    Icons.bug_report_outlined,
+                                  ),
+                                  title: const Text(
+                                    'Save capture debug information',
+                                  ),
+                                  subtitle: const Text(
+                                    'Stores guidance and effect settings in photo metadata for troubleshooting. Nothing is uploaded.',
+                                  ),
+                                  value: camera.saveCaptureDebug,
+                                  onChanged: camera.busy
+                                      ? null
+                                      : camera.setSaveCaptureDebug,
+                                ),
+                                SwitchListTile(
+                                  title: const Text('Debug overlay'),
+                                  value: camera.debug,
+                                  onChanged: (value) {
+                                    camera.debug = value;
+                                    refresh();
+                                  },
+                                ),
+                                TextButton(
+                                  onPressed: () => Clipboard.setData(
+                                    ClipboardData(text: jsonEncode(camera.log)),
+                                  ),
+                                  child: const Text('Copy diagnostic log'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        ExpansionTile(
+                          key: const Key('helpSettingsGroup'),
+                          title: const Text('Help'),
+                          children: [
+                            HelpSettingsContent(
+                              onTutorial: () async {
+                                Navigator.pop(ctx);
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    fullscreenDialog: true,
+                                    builder: (_) => const CameraTutorial(),
+                                  ),
+                                );
+                              },
+                              onHelp: () async {
+                                Navigator.pop(ctx);
+                                await help();
+                              },
                             ),
                           ],
                         ),
@@ -1787,10 +1835,10 @@ class _CameraScreenState extends State<CameraScreen>
   Future<void> help() => showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Take a photo with Dali'),
+      title: const Text('Dali Camera Help'),
       content: const SingleChildScrollView(
         child: Text(
-          'Frame your subject and follow one short cue at a time. Choose a posture, landscape, or Food reference for framing and light. Next confirms a posture step; Dali does not verify the pose.\n\nPinch the live preview or use − and + to zoom. Tap the shutter for one photo; hold for a paced burst. Click sound, timer, and custom voice phrase are in Camera controls. Voice runs on device where your phone supports it.\n\nFilters and Beautifier have separate quick on/off buttons. Open Camera controls to choose Auto or Custom and fine-tune each effect. Depth of focus softens the background around the detected subject or your focus point. Selected effects and the signature are applied before the final photo saves to Photos. A private original is retained for review and recovery.\n\nReview opens the saved photo without processing. Use Share, Favorite, Info or Delete, or tap Edit for photo tools. Pinch or double-tap to zoom; swipe at normal zoom to browse. The photo menu can show nearby thumbnails. In Edit, Before and After compare the saved photo with your changes; Split shows them side by side. Save keeps the edited result even while viewing Before.\n\nImport up to 20 photos or 50 images from a folder for this review session. Folder import does not install reference packages. Recent photos keeps up to 25 saved originals. Failed processing or saves retain the private capture for retry.',
+          'Take a photo\nChoose Auto, Portrait, Landscape, Food, or another scene at the top. Tap Guide for live framing and lighting suggestions. Pinch the preview or use − and + to zoom. Tap the shutter for one photo, or hold it for a paced burst.\n\nManual controls\nTap M to open Focus, Blur, and Exposure. Focus lets you choose a point in the preview. Blur softens the background around the subject. Exposure provides brightness adjustment and, when supported, shutter speed and ISO. Reset Auto clears the manual adjustments.\n\nFilters and Beautifier\nUse the quick buttons beside the preview to turn each configured effect on or off. Open Settings to choose Auto or Custom and fine-tune the results. Effects and the Dali Cam signature are applied before the photo is saved.\n\nPhotos and review\nThe lower-left tile shows your latest photo. Before the first photo, its placeholder opens the photo library. In review, use Share, Favorite, Info, Delete, or Edit. Pinch or double-tap to zoom, and swipe at normal zoom to browse. Photo options provides the library, thumbnails, and photo import. Before, After, and Split help compare edits.\n\nSettings\nThe top-right gear contains shutter controls, Filters, Beautifier, Focus and Exposure, Photos, About, and Help. Photo location is optional under Photos. The tutorial is under Help.\n\nPrivacy\nYour photos and camera analysis stay on your phone. Dali Camera does not collect or upload your photos or personal data.',
         ),
       ),
       actions: [

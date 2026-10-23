@@ -87,7 +87,7 @@ class _ManualPreviewControlsState extends State<ManualPreviewControls> {
                   ],
                   const SizedBox(height: 7),
                   railButton(
-                    'Auto',
+                    'Reset Auto',
                     Icons.auto_mode,
                     const Key('returnToAutoFromPreview'),
                     false,
@@ -109,7 +109,7 @@ class _ManualPreviewControlsState extends State<ManualPreviewControls> {
   Widget toolButton(ManualTool tool) {
     final title = switch (tool) {
       ManualTool.focus => 'Focus',
-      ManualTool.depth => 'Depth',
+      ManualTool.depth => 'Blur',
       ManualTool.exposure => 'Exposure',
     };
     final icon = switch (tool) {
@@ -216,7 +216,7 @@ class _ManualPreviewControlsState extends State<ManualPreviewControls> {
             max: 5,
             divisions: 5,
             semanticFormatterCallback: (value) =>
-                'Depth of focus ${value.round()}',
+                'Background blur ${value.round()}',
             onChanged: camera.busy
                 ? null
                 : (value) => camera.setDepth(value.round()),

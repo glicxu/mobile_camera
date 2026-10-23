@@ -15,7 +15,6 @@ Future<void> openPhotoTool(WidgetTester tester, String tool) async {
   await tester.tap(find.byKey(Key('reviewTool_$tool')));
   await tester.pumpAndSettle();
 }
-
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
@@ -49,21 +48,29 @@ void main() {
       expect(camera.canCapture, isTrue);
       await tester.tap(find.byKey(const Key('coachingToggle')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('appSettingsButton')));
+      await tester.tap(find.byKey(const Key('settingsButton')));
       await tester.pumpAndSettle();
-      expect(find.text('App Settings'), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
       expect(camera.canCapture, isFalse);
+      await tester.ensureVisible(find.byKey(const Key('aboutSettingsGroup')));
+      await tester.tap(find.byKey(const Key('aboutSettingsGroup')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Version'));
       expect(find.text('Version'), findsOneWidget);
       expect(find.text('Unavailable'), findsNothing);
+      await tester.ensureVisible(find.byKey(const Key('helpSettingsGroup')));
+      await tester.tap(find.byKey(const Key('helpSettingsGroup')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Quick camera tutorial'));
       await tester.tap(find.text('Quick camera tutorial'));
       await tester.pumpAndSettle();
       expect(find.text('Choose your shot'), findsOneWidget);
       await tester.tap(find.text('Skip'));
       await tester.pumpAndSettle();
       expect(camera.canCapture, isTrue);
-      await tester.tap(find.byTooltip('Camera controls'));
+      await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
-      expect(find.text('Camera controls'), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
       await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
       expect(camera.canCapture, isTrue);
@@ -390,7 +397,11 @@ void main() {
       expect(camera.message, contains('copy saved'));
       await camera.returnToCamera();
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Open photo library'));
+      await tester.tap(find.byTooltip('View last photo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Photo options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open photo library'));
       await tester.pumpAndSettle();
       for (
         var i = 0;

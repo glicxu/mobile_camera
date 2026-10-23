@@ -2,6 +2,7 @@
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import UIKit
+import Vision
 
 struct BeautifyEngine {
     private let context = CIContext(options: [.useSoftwareRenderer: false])
@@ -706,17 +707,31 @@ struct DepthBlurEngine {
         level: Int
     ) -> UIImage {
         let level = max(0, min(5, level))
+        let normalizedRect = subjectRect(from: measurements, focusPoint: focusPoint)
         guard level > 0,
               let input = CIImage(image: image),
-              let normalizedSubject = subjectRect(from: measurements, focusPoint: focusPoint),
-              let mask = subjectMask(extent: input.extent, normalizedRect: normalizedSubject) else {
+              let mask = subjectMask(
+                input: input,
+                extent: input.extent,
+                normalizedRect: normalizedRect,
+                focusPoint: focusPoint,
+                preserveWholeSubject: measurements.personBox != nil || measurements.faceBox != nil,
+                level: level
+              ) else {
             return image
         }
 
-        let blur = CIFilter.gaussianBlur()
-        blur.inputImage = input.clampedToExtent()
-        blur.radius = Float(3 + level * 4)
-        guard let blurred = blur.outputImage?.cropped(to: input.extent) else { return image }
+        // The maximum Gaussian radius is 0.5%, 1%, 2%, 3%, then 4% of the
+        // photo's long edge. The radius
+        // ramps outward from the focus point instead of flattening the
+        // entire background with one uniform blur.
+        let radiusRatio: [CGFloat] = [0, 0.005, 0.01, 0.02, 0.03, 0.04]
+        let center = focusPoint ?? normalizedRect.map { CGPoint(x: $0.midX, y: $0.midY) } ?? CGPoint(x: 0.5, y: 0.5)
+        let blurred = distanceBlurredImage(
+            input,
+            focusPoint: center,
+            maximumRadius: max(input.extent.width, input.extent.height) * radiusRatio[level]
+        )
 
         let blend = CIFilter.blendWithMask()
         blend.inputImage = input
@@ -728,6 +743,49 @@ struct DepthBlurEngine {
         }
 
         return UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
+    }
+
+    private func distanceBlurredImage(
+        _ input: CIImage,
+        focusPoint: CGPoint,
+        maximumRadius: CGFloat
+    ) -> CIImage {
+        let extent = input.extent
+        let focusX = min(1, max(0, focusPoint.x))
+        let focusY = min(1, max(0, focusPoint.y))
+        let center = CGPoint(
+            x: extent.minX + focusX * extent.width,
+            y: extent.minY + (1 - focusY) * extent.height
+        )
+        let corners = [
+            CGPoint(x: extent.minX, y: extent.minY), CGPoint(x: extent.maxX, y: extent.minY),
+            CGPoint(x: extent.minX, y: extent.maxY), CGPoint(x: extent.maxX, y: extent.maxY)
+        ]
+        let farthest = corners.map { hypot($0.x - center.x, $0.y - center.y) }.max() ?? 1
+        let bands: [(radius: CGFloat, start: CGFloat, end: CGFloat)] = [
+            (0.25, 0.02, 0.28), (0.50, 0.24, 0.52),
+            (0.75, 0.48, 0.76), (1.00, 0.72, 1.00)
+        ]
+        var result = input
+        for band in bands {
+            let blur = CIFilter.gaussianBlur()
+            blur.inputImage = input.clampedToExtent()
+            blur.radius = Float(maximumRadius * band.radius)
+            guard let blurred = blur.outputImage?.cropped(to: extent) else { continue }
+            let gradient = CIFilter.radialGradient()
+            gradient.center = center
+            gradient.radius0 = Float(farthest * band.start)
+            gradient.radius1 = Float(farthest * band.end)
+            gradient.color0 = CIColor(red: 0, green: 0, blue: 0, alpha: 1)
+            gradient.color1 = CIColor(red: 1, green: 1, blue: 1, alpha: 1)
+            guard let mask = gradient.outputImage?.cropped(to: extent) else { continue }
+            let blend = CIFilter.blendWithMask()
+            blend.inputImage = blurred
+            blend.backgroundImage = result
+            blend.maskImage = mask
+            result = blend.outputImage?.cropped(to: extent) ?? result
+        }
+        return result
     }
 
     private func subjectRect(from measurements: Measurements, focusPoint: CGPoint?) -> CGRect? {
@@ -763,7 +821,136 @@ struct DepthBlurEngine {
         return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
 
-    private func subjectMask(extent: CGRect, normalizedRect: CGRect) -> CIImage? {
+    private func subjectMask(
+        input: CIImage,
+        extent: CGRect,
+        normalizedRect: CGRect?,
+        focusPoint: CGPoint?,
+        preserveWholeSubject: Bool,
+        level: Int
+    ) -> CIImage? {
+        // Foreground segmentation does not need a prior tap or a saliency
+        // observation. Generate an upright image from the same CIImage used
+        // for the final blend so the Vision mask and photo always align.
+        if let cgImage = context.createCGImage(input, from: extent),
+           let segmented = segmentedSubjectMask(cgImage: cgImage, extent: extent, focusPoint: focusPoint) {
+            return focusedMask(
+                segmented,
+                extent: extent,
+                normalizedRect: normalizedRect,
+                focusPoint: focusPoint,
+                preserveWholeSubject: preserveWholeSubject,
+                level: level
+            )
+        }
+
+        // Older OS versions and scenes where Vision finds no foreground can
+        // still use the focus/analysis rectangle when one is available.
+        guard let normalizedRect,
+              let fallback = rectangularSubjectMask(extent: extent, normalizedRect: normalizedRect) else {
+            return nil
+        }
+        return focusedMask(
+            fallback,
+            extent: extent,
+            normalizedRect: normalizedRect,
+            focusPoint: focusPoint,
+            preserveWholeSubject: preserveWholeSubject,
+            level: level
+        )
+    }
+
+    private func segmentedSubjectMask(cgImage: CGImage, extent: CGRect, focusPoint: CGPoint?) -> CIImage? {
+        let request = VNGenerateForegroundInstanceMaskRequest()
+        let handler = VNImageRequestHandler(cgImage: cgImage, orientation: .up)
+        do {
+            try handler.perform([request])
+            guard let observation = request.results?.first,
+                  !observation.allInstances.isEmpty else { return nil }
+            let instances: IndexSet
+            if let focusPoint,
+               let instance = instanceIndex(at: focusPoint, in: observation.instanceMask),
+               observation.allInstances.contains(instance) {
+                instances = IndexSet(integer: instance)
+            } else {
+                instances = observation.allInstances
+            }
+            let buffer = try observation.generateScaledMaskForImage(
+                forInstances: instances,
+                from: handler
+            )
+            let mask = CIImage(cvPixelBuffer: buffer)
+            let sx = extent.width / mask.extent.width
+            let sy = extent.height / mask.extent.height
+            return mask.transformed(by: CGAffineTransform(scaleX: sx, y: sy)).cropped(to: extent)
+        } catch {
+            return nil
+        }
+    }
+
+    private func instanceIndex(at point: CGPoint, in buffer: CVPixelBuffer) -> Int? {
+        CVPixelBufferLockBaseAddress(buffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddress(buffer) else { return nil }
+        let width = CVPixelBufferGetWidth(buffer)
+        let height = CVPixelBufferGetHeight(buffer)
+        let x = Int((point.x * CGFloat(width)).rounded(.down)).clamped(0, width - 1)
+        let y = Int((point.y * CGFloat(height)).rounded(.down)).clamped(0, height - 1)
+        let row = base.advanced(by: y * CVPixelBufferGetBytesPerRow(buffer))
+        switch CVPixelBufferGetPixelFormatType(buffer) {
+        case kCVPixelFormatType_OneComponent8:
+            let value = Int(row.assumingMemoryBound(to: UInt8.self)[x])
+            return value > 0 ? value : nil
+        case kCVPixelFormatType_OneComponent16Half:
+            let value = Int(row.assumingMemoryBound(to: UInt16.self)[x])
+            return value > 0 ? value : nil
+        case kCVPixelFormatType_OneComponent32Float:
+            let value = Int(row.assumingMemoryBound(to: Float32.self)[x].rounded())
+            return value > 0 ? value : nil
+        default:
+            return nil
+        }
+    }
+
+    private func focusedMask(
+        _ subject: CIImage,
+        extent: CGRect,
+        normalizedRect: CGRect?,
+        focusPoint: CGPoint?,
+        preserveWholeSubject: Bool,
+        level: Int
+    ) -> CIImage? {
+        var result = subject
+
+        // At maximum strength, ordinary objects use a thinner focus plane:
+        // the tapped/front area stays crisp while the object's rear/top can
+        // fall out of focus. People remain fully protected.
+        if level >= 5, !preserveWholeSubject, let normalizedRect {
+            let focusY = focusPoint?.y ?? normalizedRect.midY
+            let fadeStart = max(normalizedRect.minY, focusY - normalizedRect.height * 0.42)
+            let fadeEnd = min(normalizedRect.maxY, focusY - normalizedRect.height * 0.10)
+            if fadeEnd > fadeStart {
+                let gradient = CIFilter.linearGradient()
+                gradient.point0 = CGPoint(x: extent.midX, y: extent.height * (1 - fadeStart))
+                gradient.point1 = CGPoint(x: extent.midX, y: extent.height * (1 - fadeEnd))
+                gradient.color0 = CIColor(red: 0, green: 0, blue: 0, alpha: 1)
+                gradient.color1 = CIColor(red: 1, green: 1, blue: 1, alpha: 1)
+                if let plane = gradient.outputImage?.cropped(to: extent) {
+                    let multiply = CIFilter.multiplyCompositing()
+                    multiply.inputImage = result
+                    multiply.backgroundImage = plane
+                    result = multiply.outputImage?.cropped(to: extent) ?? result
+                }
+            }
+        }
+
+        let soften = CIFilter.gaussianBlur()
+        soften.inputImage = result.clampedToExtent()
+        soften.radius = Float(max(extent.width, extent.height) * (level >= 4 ? 0.0035 : 0.006))
+        return soften.outputImage?.cropped(to: extent)
+    }
+
+    private func rectangularSubjectMask(extent: CGRect, normalizedRect: CGRect) -> CIImage? {
         let maximumDimension: CGFloat = 1_024
         let scale = min(1, maximumDimension / max(extent.width, extent.height))
         let size = CGSize(width: max(1, extent.width * scale), height: max(1, extent.height * scale))
@@ -790,9 +977,10 @@ struct DepthBlurEngine {
         if scale < 1 {
             mask = mask.transformed(by: CGAffineTransform(scaleX: 1 / scale, y: 1 / scale))
         }
-        let soften = CIFilter.gaussianBlur()
-        soften.inputImage = mask.clampedToExtent()
-        soften.radius = Float(max(extent.width, extent.height) * 0.018)
-        return soften.outputImage?.cropped(to: extent)
+        return mask.cropped(to: extent)
     }
+}
+
+private extension Int {
+    func clamped(_ low: Int, _ high: Int) -> Int { Swift.min(high, Swift.max(low, self)) }
 }

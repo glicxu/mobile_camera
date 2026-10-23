@@ -33,6 +33,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     private var pickerCompletion: ((Result<PhotoImport, Error>) -> Void)?
     private let importQueue = DispatchQueue(label: "dali.import")
     private var lastFrame = CFAbsoluteTimeGetCurrent()
+    private var lastDepthFrame = CFAbsoluteTimeGetCurrent()
     private var lastState = CFAbsoluteTimeGetCurrent()
     private var currentRoll = 0.0
     private var currentMotion = 0.0
@@ -42,6 +43,8 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     private var rotation: CGFloat = 90
     private var zoomScale: CGFloat = 1
     private var capturing = false
+    private var depthPreviewLevel = 0
+    private var depthPreviewFocus = CGPoint(x: 0.5, y: 0.5)
     private var presenter: UIViewController? {
         UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }.first { $0.isKeyWindow }?.rootViewController
     }
@@ -112,7 +115,10 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         }
         guard status == .authorized else { completion(.failure(failure("Camera permission denied. Open Settings to enable it."))); return }
         self.front = front
+        depthPreviewLevel = 0
+        depthPreviewFocus = CGPoint(x: 0.5, y: 0.5)
         preview?.container.depthLevel = 0
+        preview?.container.displayDepthFrame(nil)
         preview?.container.subjectRect = nil
         preview?.container.setNeedsLayout()
         let epoch = UUID(); generation = epoch
@@ -174,7 +180,7 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
     func configurePhotoLocation(enabled: Bool, requestPermission: Bool) throws -> String {
         photoLocation.configure(enabled: enabled, requestPermission: requestPermission)
     }
-    func stop() throws { photoLocation.setActive(false); active = false; generation = UUID(); speech.stop(); preview?.container.depthLevel = 0; preview?.container.setNeedsLayout(); motion.stopDeviceMotionUpdates(); queue.async { self.session.stopRunning() } }
+    func stop() throws { photoLocation.setActive(false); active = false; generation = UUID(); speech.stop(); depthPreviewLevel = 0; preview?.container.depthLevel = 0; preview?.container.displayDepthFrame(nil); preview?.container.setNeedsLayout(); motion.stopDeviceMotionUpdates(); queue.async { self.session.stopRunning() } }
     func capture(shutterSound: Bool, debugMetadata: String?, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
         do {
             guard active, !capturing, try recover() == nil else { throw failure("Save or discard the retained original first") }
@@ -754,12 +760,30 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             guard let x = data["x"], let y = data["y"], let w = data["width"], let h = data["height"], [x,y,w,h].allSatisfy({ $0.isFinite }), w > 0, h > 0 else { return nil }
             return CGRect(x: x, y: y, width: w, height: h)
         }
-        preview?.container.depthLevel = Int(max(0, min(5, level)))
+        let clampedLevel = Int(max(0, min(5, level)))
+        depthPreviewLevel = clampedLevel
+        if let data = value,
+           let x = data["focusX"], let y = data["focusY"],
+           x.isFinite, y.isFinite {
+            depthPreviewFocus = CGPoint(x: min(1, max(0, x)), y: min(1, max(0, y)))
+        }
+        preview?.container.depthLevel = clampedLevel
         preview?.container.subjectRect = rect
+        if clampedLevel == 0 { preview?.container.displayDepthFrame(nil) }
         preview?.container.setNeedsLayout()
     }
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        let now = CFAbsoluteTimeGetCurrent(); guard active, now - lastFrame > 0.15, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        let now = CFAbsoluteTimeGetCurrent(); guard active, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        if depthPreviewLevel > 0, now - lastDepthFrame > 0.10 {
+            lastDepthFrame = now
+            renderDepthPreview(
+                buffer: buffer,
+                epoch: generation,
+                level: depthPreviewLevel,
+                focusPoint: depthPreviewFocus
+            )
+        }
+        guard now - lastFrame > 0.15 else { return }
         lastFrame = now; let epoch = generation
         let people = VNDetectHumanRectanglesRequest(); people.upperBodyOnly = false
         let faces = VNDetectFaceLandmarksRequest()
@@ -822,6 +846,70 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             }
         } catch { DispatchQueue.main.async { self.events.error(code: "analysis", message: error.localizedDescription) { _ in } } }
     }
+    private func renderDepthPreview(buffer: CVPixelBuffer, epoch: UUID, level: Int, focusPoint: CGPoint) {
+        let input = CIImage(cvPixelBuffer: buffer)
+        let extent = input.extent
+        let longEdge = max(extent.width, extent.height)
+        guard longEdge > 0 else { return }
+
+        // Render the preview at bounded resolution. The ratio is preserved
+        // proportionally, while the small working image keeps this live GPU
+        // pass practical on older devices.
+        let workingLongEdge: CGFloat = 240
+        let scale = min(1, workingLongEdge / longEdge)
+        let small = input.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let ratio: [CGFloat] = [0, 0.005, 0.01, 0.02, 0.03, 0.04]
+        let maximumRadius = max(small.extent.width, small.extent.height) * ratio[max(0, min(5, level))]
+        let blurredSmall = distanceBlurredPreview(small, focusPoint: focusPoint, maximumRadius: maximumRadius)
+        let enlarged = blurredSmall.transformed(by: CGAffineTransform(scaleX: 1 / scale, y: 1 / scale))
+            .cropped(to: extent)
+        guard let cgImage = ci.createCGImage(enlarged, from: extent) else { return }
+        let image = UIImage(cgImage: cgImage)
+        DispatchQueue.main.async {
+            guard self.active, self.generation == epoch, self.depthPreviewLevel > 0 else { return }
+            self.preview?.container.displayDepthFrame(image)
+        }
+    }
+    private func distanceBlurredPreview(
+        _ input: CIImage,
+        focusPoint: CGPoint,
+        maximumRadius: CGFloat
+    ) -> CIImage {
+        let extent = input.extent
+        let center = CGPoint(
+            x: extent.minX + focusPoint.x.clamped(0, 1) * extent.width,
+            y: extent.minY + (1 - focusPoint.y.clamped(0, 1)) * extent.height
+        )
+        let corners = [
+            CGPoint(x: extent.minX, y: extent.minY), CGPoint(x: extent.maxX, y: extent.minY),
+            CGPoint(x: extent.minX, y: extent.maxY), CGPoint(x: extent.maxX, y: extent.maxY)
+        ]
+        let farthest = corners.map { hypot($0.x - center.x, $0.y - center.y) }.max() ?? 1
+        let bands: [(radius: CGFloat, start: CGFloat, end: CGFloat)] = [
+            (0.25, 0.02, 0.28), (0.50, 0.24, 0.52),
+            (0.75, 0.48, 0.76), (1.00, 0.72, 1.00)
+        ]
+        var result = input
+        for band in bands {
+            let blur = CIFilter.gaussianBlur()
+            blur.inputImage = input.clampedToExtent()
+            blur.radius = Float(maximumRadius * band.radius)
+            guard let blurred = blur.outputImage?.cropped(to: extent) else { continue }
+            let gradient = CIFilter.radialGradient()
+            gradient.center = center
+            gradient.radius0 = Float(farthest * band.start)
+            gradient.radius1 = Float(farthest * band.end)
+            gradient.color0 = CIColor(red: 0, green: 0, blue: 0, alpha: 1)
+            gradient.color1 = CIColor(red: 1, green: 1, blue: 1, alpha: 1)
+            guard let mask = gradient.outputImage?.cropped(to: extent) else { continue }
+            let blend = CIFilter.blendWithMask()
+            blend.inputImage = blurred
+            blend.backgroundImage = result
+            blend.maskImage = mask
+            result = blend.outputImage?.cropped(to: extent) ?? result
+        }
+        return result
+    }
     fileprivate func attach(_ view: CameraView) {
         previewAttachments += 1
         preview = view
@@ -869,6 +957,8 @@ private final class PreviewContainer: UIView {
     var depthLevel = 0
     var subjectRect: CGRect?
     private let depth = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+    private let extremeDepth = UIImageView()
+    private var depthEffectLevel = -1
     override init(frame: CGRect) {
         super.init(frame: frame)
         clipsToBounds = true
@@ -886,17 +976,41 @@ private final class PreviewContainer: UIView {
             ?? window?.windowScene?.interfaceOrientation {
             orientationChanged?(orientation)
         }
-        if depth.superview == nil { depth.isUserInteractionEnabled = false; depth.isAccessibilityElement = false; addSubview(depth) }
+        if depth.superview == nil {
+            depth.isUserInteractionEnabled = false
+            depth.isAccessibilityElement = false
+            addSubview(depth)
+            extremeDepth.isUserInteractionEnabled = false
+            extremeDepth.isAccessibilityElement = false
+            extremeDepth.contentMode = .scaleAspectFit
+            addSubview(extremeDepth)
+        }
         depth.frame = bounds
-        depth.isHidden = depthLevel == 0 || subjectRect == nil
-        depth.alpha = 0.30 + Double(depthLevel) * 0.09
+        extremeDepth.frame = bounds
+        depth.isHidden = true
+        extremeDepth.isHidden = depthLevel == 0 || subjectRect == nil || extremeDepth.image == nil
+        let clampedDepth = max(0, min(5, depthLevel))
+        if depthEffectLevel != clampedDepth {
+            let style: UIBlurEffect.Style = clampedDepth >= 5
+                ? .systemThickMaterial
+                : clampedDepth >= 4 ? .systemThinMaterial : .systemUltraThinMaterial
+            depth.effect = UIBlurEffect(style: style)
+            depthEffectLevel = clampedDepth
+        }
+        depth.alpha = [0, 0.39, 0.48, 0.60, 0.82, 1.0][clampedDepth]
         guard let subjectRect else { return }
         let content = previewLayer.layerRectConverted(fromMetadataOutputRect: CGRect(x: 0, y: 0, width: 1, height: 1))
         let subject = CGRect(x: content.minX + subjectRect.minX * content.width, y: content.minY + subjectRect.minY * content.height, width: subjectRect.width * content.width, height: subjectRect.height * content.height)
         let path = UIBezierPath(rect: content)
         path.append(UIBezierPath(roundedRect: subject, cornerRadius: min(subject.width, subject.height) * 0.28))
-        let mask = CAShapeLayer(); mask.frame = bounds; mask.path = path.cgPath; mask.fillRule = .evenOdd
-        depth.layer.mask = mask
+        for view in [depth, extremeDepth] {
+            let mask = CAShapeLayer(); mask.frame = bounds; mask.path = path.cgPath; mask.fillRule = .evenOdd
+            view.layer.mask = mask
+        }
+    }
+    func displayDepthFrame(_ image: UIImage?) {
+        extremeDepth.image = image
+        extremeDepth.isHidden = depthLevel == 0 || subjectRect == nil || image == nil
     }
 }
 private final class CameraView: NSObject, FlutterPlatformView {

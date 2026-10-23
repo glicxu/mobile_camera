@@ -937,7 +937,7 @@ void main() {
     final headerKeys = [
       'situationMenu',
       'manualControlsButton',
-      'appSettingsButton',
+      'settingsButton',
       'switchCamera',
     ];
     for (var i = 1; i < headerKeys.length; i++) {
@@ -947,14 +947,8 @@ void main() {
       );
     }
     expect(
-      tester.getCenter(find.byKey(const Key('coachingToggle'))).dx,
-      lessThan(
-        tester.getCenter(find.byKey(const Key('cameraControlsButton'))).dx,
-      ),
-    );
-    expect(
-      tester.getCenter(find.byKey(const Key('coachingToggle'))).dy,
-      tester.getCenter(find.byKey(const Key('cameraControlsButton'))).dy,
+      tester.getCenter(find.byKey(const Key('settingsButton'))).dy,
+      lessThan(tester.getCenter(find.byKey(const Key('coachingToggle'))).dy),
     );
     await tester.tap(find.byKey(const Key('manualControlsButton')));
     await tester.pumpAndSettle();
@@ -981,13 +975,24 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('captureGuidanceOverlay')), findsNothing);
     expect(find.byKey(const Key('guidesToggle')), findsNothing);
-    await tester.tap(find.byKey(const Key('appSettingsButton')));
+    await tester.tap(find.byKey(const Key('settingsButton')));
     await tester.pumpAndSettle();
-    expect(find.text('App Settings'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Shutter Controls'), findsOneWidget);
+    expect(find.text('Filters'), findsOneWidget);
+    expect(find.text('Beautifier'), findsOneWidget);
+    expect(find.text('Focus and Exposure'), findsOneWidget);
+    expect(find.text('Photos'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('aboutSettingsGroup')));
+    await tester.tap(find.byKey(const Key('aboutSettingsGroup')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Version'));
     expect(find.text('0.1.0 (2001)'), findsOneWidget);
+    expect(find.text('Diagnostics'), findsOneWidget);
     expect(find.text('Purchase'), findsNothing);
     expect(find.text('Dali Pro'), findsNothing);
     expect(find.text('Restore purchases'), findsNothing);
+    expect(find.text('Import photos'), findsNothing);
     expect(camera.canCapture, isFalse);
     camera.voicePreferred = true;
     camera.voiceShutter();
@@ -997,6 +1002,9 @@ void main() {
       0,
       reason: 'A settings sheet must block voice capture',
     );
+    await tester.ensureVisible(find.byKey(const Key('helpSettingsGroup')));
+    await tester.tap(find.byKey(const Key('helpSettingsGroup')));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Quick camera tutorial'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Quick camera tutorial'));
@@ -1010,9 +1018,9 @@ void main() {
     await tester.tap(find.text('Start taking photos'));
     await tester.pumpAndSettle();
     expect(camera.canCapture, isTrue);
-    await tester.tap(find.byTooltip('Camera controls'));
+    await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('Camera controls'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   testWidgets('Manual opens native rail and one live editor at a time', (
@@ -1026,6 +1034,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(camera.snapshot!.manualExposure, isFalse);
     expect(find.byKey(const Key('manualToolFocus')), findsOneWidget);
+    expect(find.text('Reset Auto'), findsOneWidget);
     expect(find.byKey(const Key('manualFocusPrompt')), findsNothing);
     final preview = tester.getRect(find.byType(AspectRatio).first);
     expect(
@@ -1048,7 +1057,7 @@ void main() {
     await camera.meter(.4, .5);
     await tester.pumpAndSettle();
     expect(host.lastFocusOnly, isTrue);
-    await tester.tap(find.byKey(const Key('manualToolDepth')));
+    await tester.tap(find.byKey(const Key('manualToolBlur')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('manualFocusPrompt')), findsNothing);
     tester
@@ -1107,6 +1116,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  test(
+    'Blur focuses a detected face by default and respects a later tap',
+    () async {
+      final host = ManualHost();
+      final camera = CameraController(host: host, register: false);
+      await camera.initialize();
+      await camera.enterManual();
+      camera.lastFrame = {
+        'configurationId': 'test',
+        'people': [],
+        'faces': [
+          {'x': .2, 'y': .3, 'width': .2, 'height': .2},
+        ],
+      };
+
+      await camera.setDepth(3);
+      expect(camera.focusX, closeTo(.3, .0001));
+      expect(camera.focusY, closeTo(.4, .0001));
+
+      await camera.meter(.8, .7);
+      expect(camera.focusX, .8);
+      expect(camera.focusY, .7);
+      await camera.setDepth(0);
+      expect(camera.focusX, .8);
+      camera.dispose();
+    },
+  );
+
   testWidgets(
     'Manual editors and review treatment remain usable at large text',
     (tester) async {
@@ -1133,14 +1170,16 @@ void main() {
           ),
         ),
       );
-      for (final name in ['Focus', 'Depth', 'Exposure']) {
+      for (final entry in {
+        'Focus': 'focus',
+        'Blur': 'depth',
+        'Exposure': 'exposure',
+      }.entries) {
+        final name = entry.key;
         await tester.tap(find.byKey(Key('manualTool$name')));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: name);
-        expect(
-          find.byKey(Key('manualEditor_${name.toLowerCase()}')),
-          findsOneWidget,
-        );
+        expect(find.byKey(Key('manualEditor_${entry.value}')), findsOneWidget);
       }
       await tester.pumpWidget(
         MaterialApp(
@@ -2171,7 +2210,13 @@ void main() {
 
       await camera.returnToCamera();
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Open photo library'));
+      expect(find.byTooltip('Open photo library'), findsNothing);
+      expect(find.byKey(const Key('galleryTile')), findsOneWidget);
+      await tester.tap(find.byTooltip('View last photo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Photo options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open photo library'));
       await tester.pumpAndSettle();
       expect(camera.original!.id, 'copy-other');
       camera.dispose();
@@ -2196,12 +2241,21 @@ void main() {
         25,
       );
       expect(find.byKey(const Key('shutter')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('appSettingsButton')));
+      await tester.tap(find.byKey(const Key('settingsButton')));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Help'));
-      await tester.tap(find.text('Help'));
+      await tester.ensureVisible(find.byKey(const Key('helpSettingsGroup')));
+      await tester.tap(find.byKey(const Key('helpSettingsGroup')));
       await tester.pumpAndSettle();
-      expect(find.text('Take a photo with Dali'), findsOneWidget);
+      await tester.ensureVisible(find.text('Camera help'));
+      await tester.tap(find.text('Camera help'));
+      await tester.pumpAndSettle();
+      expect(find.text('Dali Camera Help'), findsOneWidget);
+      expect(
+        find.textContaining(
+          'Your photos and camera analysis stay on your phone',
+        ),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );

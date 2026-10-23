@@ -49,43 +49,33 @@ class CameraHeader extends StatelessWidget {
             ? cameraTeal
             : Colors.white,
         onPressed: onManual,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: manualVisible
-                    ? Colors.black
-                    : manualMode
-                    ? cameraTeal
-                    : Colors.white,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                'M',
-                textScaler: TextScaler.noScaling,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: manualVisible ? cameraTeal : Colors.black,
-                ),
-              ),
+        child: Container(
+          width: 20,
+          height: 20,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: manualVisible
+                ? Colors.black
+                : manualMode
+                ? cameraTeal
+                : Colors.white,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            'M',
+            textScaler: TextScaler.noScaling,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: manualVisible ? cameraTeal : Colors.black,
             ),
-            const Text(
-              'Manual',
-              textScaler: TextScaler.noScaling,
-              style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
-            ),
-          ],
+          ),
         ),
       ),
       const SizedBox(width: 8),
       HeaderAction(
-        key: const Key('appSettingsButton'),
-        tooltip: 'App settings',
+        key: const Key('settingsButton'),
+        tooltip: 'Settings',
         onPressed: onSettings,
         child: const Icon(Icons.settings, size: 20),
       ),

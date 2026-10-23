@@ -7,6 +7,8 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.*
 import com.google.mlkit.vision.pose.*
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
 import org.json.*
 import kotlin.math.*
 import java.util.concurrent.TimeUnit
@@ -18,11 +20,14 @@ internal class StillPhotoProcessor : AutoCloseable {
     private val contours = FaceDetection.getClient(FaceDetectorOptions.Builder().setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
         .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL).setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL).build())
     private val poses = PoseDetection.getClient(PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.SINGLE_IMAGE_MODE).build())
+    private val subjectSegmenter = SubjectSegmentation.getClient(
+        SubjectSegmenterOptions.Builder().enableForegroundConfidenceMask().build()
+    )
     private data class CaptureBuffer(val path: String, val bytes: ByteArray)
     @Volatile private var capturedBuffer: CaptureBuffer? = null
     fun retainCaptureBuffer(path: String, bytes: ByteArray) { capturedBuffer = CaptureBuffer(path, bytes) }
     fun releaseCaptureBuffer(path: String) { if (capturedBuffer?.path == path) capturedBuffer = null }
-    override fun close() { capturedBuffer = null; faces.close(); contours.close(); poses.close() }
+    override fun close() { capturedBuffer = null; faces.close(); contours.close(); poses.close(); subjectSegmenter.close() }
     fun load(path: String, bounded: Boolean = false): Bitmap {
         val buffer = capturedBuffer?.takeIf { it.path == path }?.bytes
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -156,7 +161,20 @@ internal class StillPhotoProcessor : AutoCloseable {
         if (small !== image) small.recycle()
         return output
     }
-    fun previewBlur(image: Bitmap, level: Int): Bitmap = blur(image, 2.0 + level * .8)
+    private fun depthBlurRatio(level: Int): Double = when (level.coerceIn(0, 5)) {
+        1 -> .005
+        2 -> .01
+        3 -> .02
+        4 -> .03
+        5 -> .04
+        else -> 0.0
+    }
+    private fun depthBlurRadius(image: Bitmap, level: Int): Double =
+        max(image.width, image.height) * depthBlurRatio(level)
+    fun previewBlurLayers(image: Bitmap, level: Int): List<Bitmap> {
+        val maximumRadius = depthBlurRadius(image, level)
+        return listOf(.25, .50, .75, 1.0).map { blur(image, maximumRadius * it) }
+    }
     private fun tonePass(image: Bitmap, shadows: Double, highlights: Double, mask: ((Int, Int) -> Double)? = null) {
         val row = IntArray(image.width)
         for (y in 0 until image.height) {
@@ -204,6 +222,59 @@ internal class StillPhotoProcessor : AutoCloseable {
             image.setPixels(row, 0, image.width, 0, y, image.width, 1)
         }
         blurred.recycle()
+    }
+    private fun depthSpatial(
+        image: Bitmap,
+        maximumRadius: Double,
+        focusX: Double,
+        focusY: Double,
+        mask: (Int, Int) -> Double
+    ) {
+        val factors = doubleArrayOf(.25, .50, .75, 1.0)
+        val layers = factors.map { blur(image, maximumRadius * it) }
+        try {
+            val sourceRow = IntArray(image.width)
+            val layerRows = layers.map { IntArray(it.width) }
+            val columns = layers.map { layer -> IntArray(image.width) { it * layer.width / image.width } }
+            val focusPX = focusX.coerceIn(0.0, 1.0) * image.width
+            val focusPY = focusY.coerceIn(0.0, 1.0) * image.height
+            val farthest = maxOf(
+                hypot(focusPX, focusPY), hypot(image.width - focusPX, focusPY),
+                hypot(focusPX, image.height - focusPY), hypot(image.width - focusPX, image.height - focusPY)
+            ).coerceAtLeast(1.0)
+            for (y in 0 until image.height) {
+                image.getPixels(sourceRow, 0, image.width, 0, y, image.width, 1)
+                layers.forEachIndexed { index, layer ->
+                    val layerY = y * layer.height / image.height
+                    layer.getPixels(layerRows[index], 0, layer.width, 0, layerY, layer.width, 1)
+                }
+                for (x in sourceRow.indices) {
+                    val original = sourceRow[x]
+                    val distance = hypot(x - focusPX, y - focusPY) / farthest
+                    val t = ((distance - .02) / .98).coerceIn(0.0, 1.0)
+                    val progress = t * t * (3 - 2 * t)
+                    val position = progress * layers.size
+                    val lower = floor(position).toInt().coerceIn(0, layers.size)
+                    val upper = ceil(position).toInt().coerceIn(0, layers.size)
+                    val blend = position - lower
+                    fun sample(layerIndex: Int): Int = if (layerIndex == 0) original else {
+                        layerRows[layerIndex - 1][columns[layerIndex - 1][x]]
+                    }
+                    val low = sample(lower); val high = sample(upper)
+                    val amount = mask(x, y).coerceIn(0.0, 1.0)
+                    fun channel(component: (Int) -> Int): Int {
+                        val target = component(low) + (component(high) - component(low)) * blend
+                        return (component(original) + (target - component(original)) * amount).roundToInt().coerceIn(0, 255)
+                    }
+                    sourceRow[x] = Color.argb(
+                        Color.alpha(original), channel(Color::red), channel(Color::green), channel(Color::blue)
+                    )
+                }
+                image.setPixels(sourceRow, 0, image.width, 0, y, image.width, 1)
+            }
+        } finally {
+            layers.forEach { it.recycle() }
+        }
     }
     private fun featureBounds(points: JSONArray?): RectF? {
         if (points == null || points.length() < 3) return null
@@ -345,11 +416,58 @@ internal class StillPhotoProcessor : AutoCloseable {
                     val right = (x + w * rightFactor).coerceIn(0.0, 1.0) * image.width; val bottom = (y + h * bottomFactor).coerceIn(0.0, 1.0) * image.height
                     val cx = (left + right) / 2; val cy = (top + bottom) / 2; val rx = (right - left) / 2; val ry = (bottom - top) / 2
                     val radius = min(rx, ry) * .56; val feather = max(image.width, image.height) * .018
-                    if (rx > 0 && ry > 0) spatial(image, (3 + depth * 4).toDouble(), 1.0, mask = { px, py ->
-                        val qx = abs(px - cx) - rx + radius; val qy = abs(py - cy) - ry + radius
-                        val distance = hypot(max(qx, 0.0), max(qy, 0.0)) + min(max(qx, qy), 0.0) - radius
-                        ((distance / feather + 1) / 2).coerceIn(0.0, 1.0)
-                    })
+                    if (rx > 0 && ry > 0) {
+                        val segmentationLongEdge = 1024.0
+                        val segmentationScale = min(1.0, segmentationLongEdge / max(image.width, image.height))
+                        val segmentationImage = Bitmap.createScaledBitmap(
+                            image,
+                            max(1, (image.width * segmentationScale).roundToInt()),
+                            max(1, (image.height * segmentationScale).roundToInt()),
+                            true
+                        )
+                        val foreground = try {
+                            val result = Tasks.await(
+                                subjectSegmenter.process(InputImage.fromBitmap(segmentationImage, 0)),
+                                30,
+                                TimeUnit.SECONDS
+                            )
+                            val values = FloatArray(segmentationImage.width * segmentationImage.height)
+                            result.foregroundConfidenceMask.get(values)
+                            values
+                        } catch (_: Throwable) {
+                            null
+                        } finally {
+                            if (segmentationImage !== image) segmentationImage.recycle()
+                        }
+                        val maskWidth = max(1, (image.width * segmentationScale).roundToInt())
+                        val maskHeight = max(1, (image.height * segmentationScale).roundToInt())
+                        val focusCenterX = fx ?: cx / image.width
+                        val focusCenterY = fy ?: cy / image.height
+                        val objectFocusY = focusCenterY
+                        val objectPlane = depth >= 5 && person == null && face == null
+                        val fadeStart = (objectFocusY - h * .42).coerceAtLeast(top / image.height)
+                        val fadeEnd = (objectFocusY - h * .10).coerceAtMost(bottom / image.height)
+                        depthSpatial(image, depthBlurRadius(image, depth), focusCenterX, focusCenterY, mask = { px, py ->
+                            val protection = foreground?.let { values ->
+                                val mx = (px * maskWidth / image.width).coerceIn(0, maskWidth - 1)
+                                val my = (py * maskHeight / image.height).coerceIn(0, maskHeight - 1)
+                                var confidence = values[my * maskWidth + mx].toDouble().coerceIn(0.0, 1.0)
+                                if (objectPlane && fadeEnd > fadeStart) {
+                                    val normalizedY = py.toDouble() / image.height
+                                    val plane = ((normalizedY - fadeStart) / (fadeEnd - fadeStart)).coerceIn(0.0, 1.0)
+                                    confidence *= plane * plane * (3 - 2 * plane)
+                                }
+                                confidence
+                            }
+                            if (protection != null) {
+                                1 - protection
+                            } else {
+                                val qx = abs(px - cx) - rx + radius; val qy = abs(py - cy) - ry + radius
+                                val distance = hypot(max(qx, 0.0), max(qy, 0.0)) + min(max(qx, qy), 0.0) - radius
+                                ((distance / feather + 1) / 2).coerceIn(0.0, 1.0)
+                            }
+                        })
+                    }
                 }
             }
             return image

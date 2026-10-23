@@ -51,8 +51,12 @@ void main() {
     final camera = CameraController(host: host, register: false);
     await tester.pumpWidget(DaliApp(controller: camera, onboarding: false));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('appSettingsButton')));
+    await tester.tap(find.byKey(const Key('settingsButton')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Photos'));
+    await tester.tap(find.text('Photos'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('photoLocationToggle')));
     expect(find.text('Save photo location'), findsOneWidget);
     expect(find.text('Open location permissions'), findsOneWidget);
     await tester.tap(find.byKey(const Key('photoLocationToggle')));

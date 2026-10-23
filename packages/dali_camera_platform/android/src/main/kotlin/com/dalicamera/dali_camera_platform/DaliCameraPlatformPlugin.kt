@@ -1135,6 +1135,10 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         val rect = subjectRect?.let { JSONObject(it) }
         overlay.level = level.toInt().coerceIn(0, 5); overlay.aspect = aspect
         overlay.subject = rect?.let { val x = it.getDouble("x").toFloat(); val y = it.getDouble("y").toFloat(); RectF(x, y, x + it.getDouble("width").toFloat(), y + it.getDouble("height").toFloat()) }
+        overlay.focus = PointF(
+            rect?.optDouble("focusX", .5)?.toFloat() ?: .5f,
+            rect?.optDouble("focusY", .5)?.toFloat() ?: .5f
+        )
         if (overlay.level == 0 || rect == null) { overlay.replace(null); return }
         overlay.invalidate()
         val now = SystemClock.elapsedRealtime()
@@ -1142,16 +1146,16 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         val source = previewView?.bitmap ?: return
         depthPending = true; lastDepth = now; val epoch = generation; val requestedLevel = overlay.level; val requestedRotation = displayRotation
         depthExecutor.execute {
-            var blurred: Bitmap? = null
+            var blurred: List<Bitmap>? = null
             try {
                 val scale = min(1.0, 320.0 / max(source.width, source.height))
                 val small = Bitmap.createScaledBitmap(source, max(1, (source.width * scale).toInt()), max(1, (source.height * scale).toInt()), true)
                 if (small !== source) source.recycle()
-                blurred = stillProcessor.previewBlur(small, requestedLevel)
-                if (small !== blurred) small.recycle()
+                blurred = stillProcessor.previewBlurLayers(small, requestedLevel)
+                small.recycle()
             } catch (_: Throwable) { if (!source.isRecycled) source.recycle() }
             val result = blurred
-            main.post { depthPending = false; if (epoch == generation && requestedRotation == displayRotation && active && depthView === overlay && overlay.level > 0) overlay.replace(result) else result?.recycle() }
+            main.post { depthPending = false; if (epoch == generation && requestedRotation == displayRotation && active && depthView === overlay && overlay.level > 0) overlay.replace(result) else result?.forEach { it.recycle() } }
         }
     }
 }

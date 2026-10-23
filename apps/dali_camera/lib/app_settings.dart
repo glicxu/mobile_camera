@@ -1,164 +1,59 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'camera_tutorial.dart';
-import 'camera_controller.dart';
 
-Future<void> showAppSettings(
-  BuildContext context, {
-  required CameraController camera,
-  required Future<void> Function() onHelp,
-  required Future<void> Function() onImport,
-}) async {
-  await camera.refreshPhotoLocation();
-  if (!context.mounted) return;
-  final action = await showModalBottomSheet<String>(
-    context: context,
-    useSafeArea: true,
-    isScrollControlled: true,
-    builder: (ctx) => SizedBox(
-      height: MediaQuery.sizeOf(ctx).height * .8,
-      child: Column(
-        children: [
-          ListTile(
-            title: const Text('App Settings'),
-            trailing: TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Done'),
-            ),
+class AboutSettingsContent extends StatelessWidget {
+  const AboutSettingsContent({super.key});
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const ListTile(title: Text('App'), subtitle: Text('Dali Camera')),
+      FutureBuilder<PackageInfo>(
+        future: PackageInfo.fromPlatform(),
+        builder: (_, result) => ListTile(
+          title: const Text('Version'),
+          subtitle: Text(
+            result.hasData
+                ? '${result.data!.version} (${result.data!.buildNumber})'
+                : result.hasError
+                ? 'Unavailable'
+                : 'Checking…',
           ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const _Section('Photos'),
-                  ListenableBuilder(
-                    listenable: camera,
-                    builder: (_, _) => Column(
-                      children: [
-                        SwitchListTile(
-                          key: const Key('captureDebugToggle'),
-                          secondary: const Icon(Icons.bug_report_outlined),
-                          title: const Text('Save capture debug information'),
-                          subtitle: const Text(
-                            'Includes guidance and filter/Beautifier settings in new photos and shared copies. Enabled for this testing round.',
-                          ),
-                          value: camera.saveCaptureDebug,
-                          onChanged: camera.busy
-                              ? null
-                              : camera.setSaveCaptureDebug,
-                        ),
-                        SwitchListTile(
-                          key: const Key('photoLocationToggle'),
-                          secondary: const Icon(Icons.location_on_outlined),
-                          title: const Text('Save photo location'),
-                          subtitle: Text(camera.photoLocationDescription),
-                          value: camera.photoLocationEnabled,
-                          onChanged: camera.busy || camera.photoLocationUpdating
-                              ? null
-                              : camera.setPhotoLocationEnabled,
-                        ),
-                        if (camera.photoLocationEnabled &&
-                            camera.photoLocationStatus == 'permissionDenied')
-                          TextButton(
-                            onPressed: camera.host.openSettings,
-                            child: const Text('Open location permissions'),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const _Section('About'),
-                  const ListTile(
-                    title: Text('App'),
-                    subtitle: Text('Dali Camera'),
-                  ),
-                  FutureBuilder<PackageInfo>(
-                    future: PackageInfo.fromPlatform(),
-                    builder: (_, result) => ListTile(
-                      title: const Text('Version'),
-                      subtitle: Text(
-                        result.hasData
-                            ? '${result.data!.version} (${result.data!.buildNumber})'
-                            : result.hasError
-                            ? 'Unavailable'
-                            : 'Checking…',
-                      ),
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Live photography guidance, camera controls, capture effects, and photo enhancement.',
-                    ),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.play_circle_outline),
-                    title: const Text('Quick camera tutorial'),
-                    onTap: () => Navigator.pop(ctx, 'tutorial'),
-                  ),
-                  const _Section('Language'),
-                  const ListTile(
-                    leading: Icon(Icons.language),
-                    title: Text('Language choice'),
-                    subtitle: Text('System default'),
-                  ),
-                  const ListTile(
-                    leading: Icon(Icons.schedule),
-                    title: Text('Additional languages coming soon'),
-                  ),
-                  const _Section('Display'),
-                  const ListTile(
-                    leading: Icon(Icons.contrast),
-                    title: Text('Display option'),
-                    subtitle: Text('System appearance'),
-                  ),
-                  const ListTile(
-                    leading: Icon(Icons.schedule),
-                    title: Text(
-                      'Light and dark appearance choices coming soon',
-                    ),
-                  ),
-                  const _Section('More'),
-                  ListTile(
-                    leading: const Icon(Icons.help_outline),
-                    title: const Text('Help'),
-                    onTap: () => Navigator.pop(ctx, 'help'),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.add_photo_alternate_outlined),
-                    title: const Text('Import photos'),
-                    onTap: () => Navigator.pop(ctx, 'import'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
-    ),
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16),
+        child: Text(
+          'Live photography guidance, camera controls, capture effects, and photo enhancement.',
+        ),
+      ),
+    ],
   );
-  if (!context.mounted) return;
-  if (action == 'tutorial') {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        fullscreenDialog: true,
-        builder: (_) => const CameraTutorial(),
-      ),
-    );
-  } else if (action == 'help') {
-    await onHelp();
-  } else if (action == 'import') {
-    await onImport();
-  }
 }
 
-class _Section extends StatelessWidget {
-  const _Section(this.title);
-  final String title;
+class HelpSettingsContent extends StatelessWidget {
+  const HelpSettingsContent({
+    super.key,
+    required this.onTutorial,
+    required this.onHelp,
+  });
+
+  final VoidCallback onTutorial;
+  final VoidCallback onHelp;
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 24, 16, 4),
-    child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+  Widget build(BuildContext context) => Column(
+    children: [
+      ListTile(
+        leading: const Icon(Icons.play_circle_outline),
+        title: const Text('Quick camera tutorial'),
+        onTap: onTutorial,
+      ),
+      ListTile(
+        leading: const Icon(Icons.help_outline),
+        title: const Text('Camera help'),
+        onTap: onHelp,
+      ),
+    ],
   );
 }
