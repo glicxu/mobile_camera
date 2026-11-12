@@ -11,3 +11,6 @@ packages/dali_camera_platform/example/
 
 __pycache__/
 *.pyc
+
+# Local browser automation logs, screenshots, and temporary upload helpers.
+/.playwright-mcp/
