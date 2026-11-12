@@ -97,3 +97,85 @@ identity and icon so development builds can coexist with production installs.
   guidance, and long-press quick selectors for Beautifier and Filters.
 - Archive: `/private/tmp/dali-camera-build10-20261022/DaliCam.xcarchive`.
 - Upload does not submit the app for App Review or publish a release.
+
+## Android Internal testing — October 24, 2026
+
+- Pulled `main` to `78ae514` before building. The release includes a local
+  Android compile fix: require a non-null foreground confidence mask before
+  reading it, preserving the existing fallback when segmentation is unavailable.
+- Built the normal `lib/main.dart` entry point as `com.dalifin.camera`, version
+  `1.0.0`, Android version code `2026102401`, min SDK 26, target SDK 36.
+  The explicit Android code exceeds the previously uploaded `2026101301`;
+  the shared pubspec/iOS build number remains unchanged.
+- Verified release signing against the existing Camera upload certificate.
+  Signing configuration location is documented in `AGENTS.md`; no credentials
+  were copied into the repository.
+- Validation: Flutter analysis passed, all 60 app tests and 37 core tests passed,
+  the signed Android App Bundle built successfully, and `jarsigner` verified it.
+  No physical Android device test was performed for this release.
+- Bundle: `apps/dali_camera/build/app/outputs/bundle/release/app-release.aab`.
+  SHA-256: `2544fafd94364b5dddaae47658970505fb0379a86f6e2bd500600729e8796fab`.
+- Uploaded and committed Play edit `02146904159971418034` to `internal`.
+  A fresh API read verified release `1.0.0 (2026102401)` with status `completed`
+  and a matching bundle SHA-256. The production track remains empty.
+
+
+## Android production preparation - November 11, 2026
+
+- Prepared production release `1.0.0 (2026111102)` in Google Play Console.
+  All setup blockers are resolved. Publishing overview reports that the 11
+  pending changes can be sent for review. The release has not been submitted
+  or published; managed publishing is currently off, so approval after a future
+  submission can lead to automatic publication.
+- Launch configuration: free, United States only; Photography category;
+  ESRB Everyone content rating; target audience ages 13 and older.
+- Referenced the published Apple listing for app `6822162016` and reused its
+  description with Android device-compatibility notes. Uploaded the existing
+  icon, a resized feature graphic, and two genuine Android screenshot layouts.
+  The owner confirmed only the feature graphic contains AI-generated imagery;
+  its Play asset label is set accordingly.
+- Completed privacy policy, app access, ads, advertising ID, content rating,
+  target audience, Data safety, government, financial, health, trader, and
+  photo-permission declarations. READ_MEDIA_IMAGES is explained by the
+  persistent in-app gallery, thumbnail, navigation, and editing workflow.
+- Added a privacy-policy link in Settings > About and corrected the Android
+  privacy wording. Google ML Kit diagnostics, app interactions, and device or
+  installation identifiers are disclosed; photo, voice-command, and capture
+  location processing stay on-device. Supporting SDK disclosure:
+  https://developers.google.com/ml-kit/android-data-disclosure
+- Published the corresponding policy correction at
+  https://dalifin.com/privacy/dali-cam from website commit `1434d7e`, branch
+  `codex/camera-android-privacy-20261111`. The website checkout is isolated at
+  `B:/src/workspaces/dalifin_company_camera_android_20261111`; the us3 source
+  checkout is on that branch. Existing changes in the original website checkout
+  were preserved. All 40 website tests passed; the normal packaging driver was
+  scoped to the website and followed by website/API smoke and public-policy
+  checks. Public policy returns HTTP 200 with the Android disclosure.
+- Validation: Flutter analysis passed; all 60 app tests passed; release bundle
+  built and jarsigner verified it against Camera's upload certificate.
+- Uploaded the replacement build to internal testing and updated the connected
+  Galaxy S10+ through Google Play. Verified installed code `2026111102`, Play
+  installer `com.android.vending`, and physically opened the updated policy
+  from Settings > About. The phone retains the normal production app.
+- Bundle: `apps/dali_camera/build/app/outputs/bundle/release/app-release.aab`.
+  SHA-256: `c72515c9e9ccd5be6b9f790b12bcee7fcca264051777a82426d47af5b653d8ab`.
+- Assets: `docs/play_store_assets/`; screenshots show an imported bundled
+  landscape reference, rather than claiming it was captured with the phone.
+- The high Android version-code acknowledgement is saved for this release.
+  Future Android releases should use the next available integer instead of
+  introducing another large jump. Existing Play history already requires the
+  current high code.
+
+### Google Play promo with fresh AudioLab narration
+
+- Generated new English narration in Dali Audio Lab using Dali Female Narrator
+  with Energetic delivery, job `6e7ef662-607b-4100-8ca4-dbdb004afb21`.
+- Final video: `docs/play_store_assets/video/dali-cam-google-play-promo-audiolab-30s.mp4`.
+  Verified 30-second H.264 video with AAC stereo audio and a successful full decode.
+  Standalone narration is available as `dali-cam-audiolab-voiceover.mp3` beside it.
+- Uploaded unlisted to the authorized Gang Li (@18miles) channel:
+  https://www.youtube.com/watch?v=ziwLmYTzTAI. Embedding is enabled, AI use is
+  disclosed, and YouTube checks completed with no issues found.
+- Saved the URL in the default Play listing. Feature graphic and video carry
+  AI asset labels; icon and actual app screenshots remain unlabeled.
+- The production release remains ready to send for review, without submission.

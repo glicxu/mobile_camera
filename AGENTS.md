@@ -1,5 +1,24 @@
 # Dali Camera agent notes
 
+## Android Play testing from Rainier
+
+- Package: `com.dalifin.camera`; use the existing `internal` testing track.
+- Publisher credentials: `C:/Users/glicx/.config/google-play/dalifin-play-publisher.json`.
+- The existing Camera upload certificate matches the shared Dalifin key configured
+  in `B:/src/workspaces/mobile_app/interprete/android/key.properties`. Resolve its
+  `storeFile` relative to that project's `android/app` directory. Read passwords
+  into the build process environment; never print or commit them.
+- Expected upload certificate SHA-256:
+  `3F:6B:34:90:27:DF:2B:54:18:89:92:9B:17:8F:50:54:8B:CF:3F:08:8C:1B:01:D1:6F:05:64:BF:71:F9:8F:3D`.
+  Dali Audio's separately stored upload key does not match Camera.
+- Supply the four `DALI_ANDROID_UPLOAD_*` variables required by
+  `apps/dali_camera/android/app/build.gradle.kts`, and leave
+  `DALI_ANDROID_TEST_APP` unset for Play builds.
+- Query Play before choosing the Android build number. Its history includes
+  `2026101301`, so the smaller shared iOS/pubspec build number is not the Android
+  release default. Pass an explicit unused, increasing `--build-number` and
+  `--target lib/main.dart` to `flutter build appbundle --release`.
+
 ## Installing on Alayna's iPhone
 
 Do not rely on automatic signing for this phone. Automatic signing may select the generic `iOS Team Provisioning Profile: com.dalifin.camera`, which currently excludes Alayna's device and causes installation error `0xe8008012` (the provisioning profile cannot be installed on this device).

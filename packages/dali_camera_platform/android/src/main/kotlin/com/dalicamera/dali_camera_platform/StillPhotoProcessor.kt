@@ -432,7 +432,7 @@ internal class StillPhotoProcessor : AutoCloseable {
                                 TimeUnit.SECONDS
                             )
                             val values = FloatArray(segmentationImage.width * segmentationImage.height)
-                            result.foregroundConfidenceMask.get(values)
+                            requireNotNull(result.foregroundConfidenceMask).get(values)
                             values
                         } catch (_: Throwable) {
                             null

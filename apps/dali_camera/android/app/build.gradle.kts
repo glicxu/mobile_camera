@@ -37,6 +37,8 @@ android {
     }
 
     defaultConfig {
+        manifestPlaceholders["daliAppLabel"] =
+            if (System.getenv("DALI_ANDROID_TEST_APP") == "true") "Dali Cam Test" else "Dali Camera"
         applicationId = when {
             System.getenv("DALI_ANDROID_TEST_APP") == "true" -> "com.dalicamera.dali_camera.test"
             releaseRequested -> "com.dalifin.camera"

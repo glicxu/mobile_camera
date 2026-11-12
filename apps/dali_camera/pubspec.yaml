@@ -17,6 +17,7 @@ dependencies:
   # release builds, so its native plugin must be on the release classpath.
   integration_test:
     sdk: flutter
+  url_launcher: ^6.3.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

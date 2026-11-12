@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AboutSettingsContent extends StatelessWidget {
   const AboutSettingsContent({super.key});
@@ -25,6 +26,31 @@ class AboutSettingsContent extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: 16),
         child: Text(
           'Live photography guidance, camera controls, capture effects, and photo enhancement.',
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.privacy_tip_outlined),
+        title: const Text('Privacy policy'),
+        subtitle: const Text('dalifin.com/privacy/dali-cam'),
+        onTap: () async {
+          final opened = await launchUrl(
+            Uri.parse('https://dalifin.com/privacy/dali-cam'),
+            mode: LaunchMode.externalApplication,
+          );
+          if (!opened && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Unable to open the privacy policy.')),
+            );
+          }
+        },
+      ),
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Text(
+          'Photos, camera analysis, voice commands, and optional photo location '
+          'are processed on your device. On Android, Google ML Kit collects '
+          'technical diagnostics, feature usage, and device or installation '
+          'identifiers. See the privacy policy for details.',
         ),
       ),
     ],
