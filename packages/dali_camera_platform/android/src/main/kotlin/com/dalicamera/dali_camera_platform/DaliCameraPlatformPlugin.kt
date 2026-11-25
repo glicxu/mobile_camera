@@ -462,6 +462,10 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                     try {
                         // Private recovery only. Effects decode this captured buffer, not a gallery JPEG.
                         file.writeBytes(bytes)
+                        val captureMetadata = debugMetadata?.let { runCatching { JSONObject(it) }.getOrNull() }
+                        if (captureMetadata?.optBoolean("hiddenWatermarkPixels", false) == true) {
+                            HiddenWatermark.embed(file, captureMetadata.optString("pixelWatermarkPayload").ifEmpty { null })
+                        }
                         val orientation = when (rotation) {
                             90 -> if (capturedFront) 5 else 6
                             180 -> if (capturedFront) 4 else 3
@@ -739,11 +743,71 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
         executor.execute {
             try {
                 val info = if (libraryAsset) {
-                    context.contentResolver.openInputStream(Uri.parse(identifier))?.use { PhotoMetadata.read(ExifInterface(it)) }
+                    val bytes = context.contentResolver.openInputStream(Uri.parse(identifier))?.use { it.readBytes() }
                         ?: error("Photo metadata unavailable")
-                } else PhotoMetadata.read(ExifInterface(identifier))
+                    val detection = HiddenWatermark.inspect(bytes)
+                    val exif = ExifInterface(bytes.inputStream())
+                    PhotoMetadata.read(exif).apply {
+                        put("hiddenPixelWatermark", detection.detected)
+                        put("hiddenPixelWatermarkVersion", detection.formatVersion)
+                        put("hiddenPixelWatermarkScore", detection.score)
+                        put("hiddenPixelWatermarkSamples", detection.samples)
+                        put("hiddenPixelWatermarkMinimumDimension", HiddenWatermark.minimumDimension)
+                        detection.ownerReference?.let { put("hiddenPixelWatermarkOwnerReference", it) }
+                        detection.photoReference?.let { put("hiddenPixelWatermarkPhotoReference", it) }
+                        detection.payloadConfidence?.let { put("hiddenPixelWatermarkPayloadConfidence", it) }
+                        detection.payloadRecoveryMode?.let { put("hiddenPixelWatermarkPayloadRecovery", it) }
+                        detection.robustScore?.let { put("hiddenPixelWatermarkRobustScore", it) }
+                        detection.robustAxis?.let { put("hiddenPixelWatermarkRobustAxis", it) }
+                        detection.robustQuarterTurns?.let { put("hiddenPixelWatermarkRobustQuarterTurns", it) }
+                        detection.elapsedMillis?.let { put("hiddenPixelWatermarkDetectionMillis", it) }
+                        SignedWatermark.inspect(
+                            bytes,
+                            PhotoMetadata.rawComment(exif),
+                            exif.getAttribute(ExifInterface.TAG_IMAGE_UNIQUE_ID),
+                        )?.addTo(this)
+                    }
+                } else {
+                    val detection = HiddenWatermark.inspect(identifier)
+                    val exif = ExifInterface(identifier)
+                    PhotoMetadata.read(exif).apply {
+                        put("hiddenPixelWatermark", detection.detected)
+                        put("hiddenPixelWatermarkVersion", detection.formatVersion)
+                        put("hiddenPixelWatermarkScore", detection.score)
+                        put("hiddenPixelWatermarkSamples", detection.samples)
+                        put("hiddenPixelWatermarkMinimumDimension", HiddenWatermark.minimumDimension)
+                        detection.ownerReference?.let { put("hiddenPixelWatermarkOwnerReference", it) }
+                        detection.photoReference?.let { put("hiddenPixelWatermarkPhotoReference", it) }
+                        detection.payloadConfidence?.let { put("hiddenPixelWatermarkPayloadConfidence", it) }
+                        detection.payloadRecoveryMode?.let { put("hiddenPixelWatermarkPayloadRecovery", it) }
+                        detection.robustScore?.let { put("hiddenPixelWatermarkRobustScore", it) }
+                        detection.robustAxis?.let { put("hiddenPixelWatermarkRobustAxis", it) }
+                        detection.robustQuarterTurns?.let { put("hiddenPixelWatermarkRobustQuarterTurns", it) }
+                        detection.elapsedMillis?.let { put("hiddenPixelWatermarkDetectionMillis", it) }
+                        SignedWatermark.inspect(
+                            identifier,
+                            PhotoMetadata.rawComment(exif),
+                            exif.getAttribute(ExifInterface.TAG_IMAGE_UNIQUE_ID),
+                        )?.addTo(this)
+                    }
+                }
                 main.post { callback(Result.success(info.toString())) }
             } catch (error: Exception) { main.post { callback(Result.failure(error)) } }
+        }
+    }
+    override fun editPhotoMetadata(original: PhotoHandle, metadata: String, callback: (Result<PhotoHandle>) -> Unit) {
+        executor.execute {
+            var destination: File? = null
+            try {
+                val extension = File(original.path).extension.ifEmpty { "jpg" }
+                val file = File(context.filesDir, "metadata-${UUID.randomUUID()}.$extension")
+                destination = file
+                PhotoMetadata.edit(original.path, file, JSONObject(metadata))
+                main.post { callback(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false, original.mimeType))) }
+            } catch (error: Exception) {
+                destination?.delete()
+                main.post { callback(Result.failure(error)) }
+            }
         }
     }
     override fun photoInfo(id: String, callback: (Result<String>) -> Unit) {
@@ -925,8 +989,9 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
             var output: Bitmap? = null
             var destination: File? = null
             try {
+                val request = JSONObject(recipe)
                 val image = stillProcessor.render(original, recipe); output = image
-                val markPath = JSONObject(recipe).optString("watermarkPath", "")
+                val markPath = request.optString("watermarkPath", "")
                 if (markPath.isNotEmpty()) {
                     val mark = BitmapFactory.decodeFile(markPath) ?: error("Cannot decode watermark")
                     val width = image.width * .23f; val height = width * mark.height / mark.width; val margin = image.width * .025f
@@ -934,9 +999,12 @@ class DaliCameraPlatformPlugin : FlutterPlugin, ActivityAware, CameraHostApi,
                         image.width - margin, image.height - margin), Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = 219 })
                     mark.recycle()
                 }
+                if (request.optBoolean("hiddenWatermarkPixels", false)) {
+                    HiddenWatermark.embed(image, request.optString("pixelWatermarkPayload").ifEmpty { null })
+                }
                 val file = photoFile(); destination = file
                 file.outputStream().use { check(image.compress(Bitmap.CompressFormat.JPEG, 95, it)) }
-                PhotoMetadata.copy(original.path, file, PhotoMetadata.software(context), JSONObject(recipe).optBoolean("capturePipeline", false))
+                PhotoMetadata.copy(original.path, file, PhotoMetadata.software(context), request.optBoolean("capturePipeline", false))
                 main.post { callback(Result.success(PhotoHandle(file.path, file.nameWithoutExtension, false, "image/jpeg"))) }
             } catch (error: Throwable) {
                 destination?.delete()

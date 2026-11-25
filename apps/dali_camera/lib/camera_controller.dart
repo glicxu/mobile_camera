@@ -7,15 +7,29 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dali_camera_core/dali_camera_core.dart';
 import 'package:dali_camera_platform/dali_camera_platform.dart';
 import 'package:flutter/foundation.dart';
+import 'watermark_identity.dart';
+import 'watermark_entitlement.dart';
 
 class CameraController extends ChangeNotifier implements CameraEvents {
-  CameraController({CameraHostApi? host, bool register = true})
-    : host = host ?? CameraHostApi() {
+  CameraController({
+    CameraHostApi? host,
+    bool register = true,
+    WatermarkEntitlement? watermarkEntitlement,
+  }) : host = host ?? CameraHostApi(),
+       watermarkEntitlement =
+           watermarkEntitlement ??
+           (host == null
+               ? StoreWatermarkEntitlement()
+               : FixedWatermarkEntitlement(unlocked: false)),
+       _ownsWatermarkEntitlement = watermarkEntitlement == null {
     livePreviewEnabled = register;
     if (register) CameraEvents.setUp(this);
+    this.watermarkEntitlement.addListener(_watermarkEntitlementChanged);
     guidance = CatalogSession(null, catalog);
   }
   final CameraHostApi host;
+  final WatermarkEntitlement watermarkEntitlement;
+  final bool _ownsWatermarkEntitlement;
   bool _disposed = false;
   late final bool livePreviewEnabled;
   final catalog = SharedCatalog();
@@ -152,6 +166,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
   Map<String, int> customStyle = {};
   bool watermark = true;
+  String hiddenWatermarkMode = 'both';
+  String watermarkOwnerId = _randomWatermarkToken(12);
+  String watermarkPublicId = '';
   bool saveCaptureDebug = true;
   bool guidanceOverlayVisible = false;
   bool guidanceDetailsVisible = false;
@@ -162,8 +179,109 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     await persistSettings();
   }
 
-  String? _captureDebugMetadata() {
-    if (!saveCaptureDebug) return null;
+  bool get watermarkUnlocked => watermarkEntitlement.unlocked;
+  bool get metadataHiddenWatermarkEnabled =>
+      watermarkUnlocked &&
+      (hiddenWatermarkMode == 'both' || hiddenWatermarkMode == 'metadata');
+  bool get pixelHiddenWatermarkEnabled =>
+      watermarkUnlocked &&
+      (hiddenWatermarkMode == 'both' || hiddenWatermarkMode == 'pixels');
+
+  void _watermarkEntitlementChanged() => notifyListeners();
+
+  Future<void> purchaseWatermarkUnlock() => watermarkEntitlement.purchase();
+
+  Future<void> restoreWatermarkUnlock() => watermarkEntitlement.restore();
+
+  Future<void> setHiddenWatermarkMode(String mode) async {
+    if (busy) return;
+    if (!watermarkUnlocked) {
+      message = 'Lifetime watermark access is required.';
+      notifyListeners();
+      return;
+    }
+    if (!['both', 'pixels', 'metadata', 'off'].contains(mode)) return;
+    hiddenWatermarkMode = mode;
+    await persistSettings();
+  }
+
+  static String _randomWatermarkToken(int length) {
+    final random = math.Random.secure();
+    final bytes = List<int>.generate(length, (index) => random.nextInt(256));
+    return base64UrlEncode(bytes).replaceAll('=', '');
+  }
+
+  String get watermarkProfileDescription {
+    final publicId = watermarkPublicId.isEmpty
+        ? 'No public ID'
+        : watermarkPublicId;
+    final shortOwner = watermarkOwnerId.length > 8
+        ? watermarkOwnerId.substring(0, 8)
+        : watermarkOwnerId;
+    return '$publicId · owner $shortOwner… · on-device only';
+  }
+
+  Future<String?> setWatermarkPublicId(String value) async {
+    if (busy) return 'Wait for the current camera operation to finish.';
+    if (!watermarkUnlocked) return 'Lifetime watermark access is required.';
+    final normalized = value.trim();
+    if (normalized.isNotEmpty &&
+        !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{2,39}$').hasMatch(normalized)) {
+      return 'Use 3–40 letters, numbers, periods, underscores, or hyphens.';
+    }
+    watermarkPublicId = normalized;
+    await persistSettings();
+    return null;
+  }
+
+  Future<bool> resetWatermarkProfile() async {
+    if (busy || !watermarkUnlocked) return false;
+    watermarkOwnerId = _randomWatermarkToken(12);
+    watermarkPublicId = '';
+    await persistSettings();
+    return true;
+  }
+
+  String createWatermarkRecoveryCode() => createDaliIdentityRecovery(
+    ownerId: watermarkOwnerId,
+    publicId: watermarkPublicId,
+  );
+
+  Future<String?> restoreWatermarkProfile(String recoveryCode) async {
+    if (busy) return 'Wait for the current camera operation to finish.';
+    if (!watermarkUnlocked) return 'Lifetime watermark access is required.';
+    final recovery = parseDaliIdentityRecovery(recoveryCode);
+    if (recovery == null) {
+      return 'This recovery code is invalid, incomplete, or damaged.';
+    }
+    watermarkOwnerId = recovery.ownerId;
+    watermarkPublicId = recovery.publicId;
+    await persistSettings();
+    return null;
+  }
+
+  String _newHiddenWatermark() {
+    return createDali2Watermark(
+      ownerId: watermarkOwnerId,
+      photoId: _randomWatermarkToken(12),
+      publicId: watermarkPublicId,
+    );
+  }
+
+  String? _captureDebugMetadata(String? watermarkIdentity) {
+    final hiddenMark = metadataHiddenWatermarkEnabled
+        ? watermarkIdentity
+        : null;
+    final pixelPayload = pixelHiddenWatermarkEnabled ? watermarkIdentity : null;
+    if (!saveCaptureDebug) {
+      return hiddenMark == null && !pixelHiddenWatermarkEnabled
+          ? null
+          : jsonEncode({
+              'hiddenWatermark': ?hiddenMark,
+              'hiddenWatermarkPixels': pixelHiddenWatermarkEnabled,
+              'pixelWatermarkPayload': ?pixelPayload,
+            });
+    }
     final currentAdvice = contextualGuidance?.advice ?? advice;
     final visible =
         coachingEnabled &&
@@ -172,6 +290,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         !bursting;
     return jsonEncode({
       'schema': 'dali.capture-debug.v1',
+      'hiddenWatermark': ?hiddenMark,
+      'hiddenWatermarkPixels': pixelHiddenWatermarkEnabled,
+      'pixelWatermarkPayload': ?pixelPayload,
       'shutterRequestedAtUtc': DateTime.now().toUtc().toIso8601String(),
       'shootingMode': shootingMode.name,
       'resolvedSituation': activeSituation.name,
@@ -217,6 +338,43 @@ class CameraController extends ChangeNotifier implements CameraEvents {
         .photoMetadata(useLibrary ? asset : photo.path, useLibrary)
         .timeout(const Duration(seconds: 30));
     return Map<String, dynamic>.from(jsonDecode(json) as Map);
+  }
+
+  Future<bool> editReviewMetadata(Map<String, String> metadata) async {
+    if (metadata['hiddenWatermark'] == 'add' && !watermarkUnlocked) {
+      message = 'Unlock lifetime watermark access to add a watermark.';
+      notifyListeners();
+      return false;
+    }
+    if (!await prepareReviewEdit()) return false;
+    final source = selected;
+    if (source == null || busy) return false;
+    final revision = ++_reviewRevision;
+    busy = true;
+    notifyListeners();
+    try {
+      final updates = Map<String, String>.of(metadata);
+      if (updates['hiddenWatermark'] == 'add') {
+        updates['hiddenWatermark'] = _newHiddenWatermark();
+      }
+      final result = await host.editPhotoMetadata(source, jsonEncode(updates));
+      if (_disposed || !reviewing || revision != _reviewRevision) {
+        await _release(result);
+        return false;
+      }
+      if (source.id != original?.id) await _release(source);
+      selected = result;
+      styled = true;
+      selectedTreatment = 'metadata';
+      message = 'Metadata updated. Save to keep changes.';
+      return true;
+    } catch (error) {
+      message = 'Could not update metadata: $error';
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
   }
 
   bool photoLocationEnabled = true;
@@ -809,6 +967,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       original?.unsaved != true;
 
   Future<void> initialize() async {
+    await watermarkEntitlement.initialize();
     if (livePreviewEnabled) await _loadPreferences();
     try {
       original = await host.recover();
@@ -912,7 +1071,11 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     takingPhoto = true;
     _capturePreviewTimer?.cancel();
     capturePreviewPath = null;
-    _pendingCaptureRecipe = _captureRecipe();
+    final watermarkIdentity =
+        metadataHiddenWatermarkEnabled || pixelHiddenWatermarkEnabled
+        ? _newHiddenWatermark()
+        : null;
+    _pendingCaptureRecipe = _captureRecipe(watermarkIdentity);
     message = 'Taking photo...';
     notifyListeners();
     final captureTimer = Stopwatch()..start();
@@ -929,7 +1092,10 @@ class CameraController extends ChangeNotifier implements CameraEvents {
 
     try {
       final prior = selected;
-      original = await host.capture(shutterSound, _captureDebugMetadata());
+      original = await host.capture(
+        shutterSound,
+        _captureDebugMetadata(watermarkIdentity),
+      );
       recordStage('camera');
       takingPhoto = false;
       capturedPhotoSequence++;
@@ -998,7 +1164,7 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     }
   }
 
-  String _captureRecipe() {
+  String _captureRecipe([String? watermarkIdentity]) {
     final treatment = beautifier == 'off' ? 'original' : captureTreatment;
     final settings = captureTreatments[treatment];
     final captureStyle = style;
@@ -1013,6 +1179,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       'depth': effectiveDepth,
       if (focusX != null && focusY != null) 'focus': {'x': focusX, 'y': focusY},
       'watermark': watermark,
+      'hiddenWatermarkPixels': pixelHiddenWatermarkEnabled,
+      if (pixelHiddenWatermarkEnabled && watermarkIdentity != null)
+        'pixelWatermarkPayload': watermarkIdentity,
     });
   }
 
@@ -1736,6 +1905,27 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     try {
       final prefs = await SharedPreferences.getInstance();
       saveCaptureDebug = prefs.getBool('saveCaptureDebug') ?? true;
+      hiddenWatermarkMode =
+          [
+            'both',
+            'pixels',
+            'metadata',
+            'off',
+          ].contains(prefs.getString('hiddenWatermarkMode'))
+          ? prefs.getString('hiddenWatermarkMode')!
+          : 'both';
+      final savedOwnerId = prefs.getString('watermarkOwnerId');
+      if (savedOwnerId != null &&
+          RegExp(r'^[A-Za-z0-9_-]{12,64}$').hasMatch(savedOwnerId)) {
+        watermarkOwnerId = savedOwnerId;
+      } else {
+        await prefs.setString('watermarkOwnerId', watermarkOwnerId);
+      }
+      final savedPublicId = prefs.getString('watermarkPublicId') ?? '';
+      watermarkPublicId =
+          RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{2,39}$').hasMatch(savedPublicId)
+          ? savedPublicId
+          : '';
       photoLocationEnabled = prefs.getBool('photoLocationEnabled') ?? true;
       _locationPermissionRequested =
           prefs.getBool('photoLocationPermissionRequested') ?? false;
@@ -1869,6 +2059,9 @@ class CameraController extends ChangeNotifier implements CameraEvents {
       await prefs.setBool('shutterSound', shutterSound);
       await prefs.setBool('photoLocationEnabled', photoLocationEnabled);
       await prefs.setBool('saveCaptureDebug', saveCaptureDebug);
+      await prefs.setString('hiddenWatermarkMode', hiddenWatermarkMode);
+      await prefs.setString('watermarkOwnerId', watermarkOwnerId);
+      await prefs.setString('watermarkPublicId', watermarkPublicId);
       await prefs.setString('filter', filter);
       await prefs.setString('filterMode', filterMode);
       await prefs.setString('customFilter', customFilter);
@@ -2450,6 +2643,8 @@ class CameraController extends ChangeNotifier implements CameraEvents {
     _capturePreviewTimer?.cancel();
     _reviewUpdate?.cancel();
     _focusIndicator?.cancel();
+    watermarkEntitlement.removeListener(_watermarkEntitlementChanged);
+    if (_ownsWatermarkEntitlement) watermarkEntitlement.dispose();
     _disposed = true;
     ++_reviewLoad;
     unawaited(

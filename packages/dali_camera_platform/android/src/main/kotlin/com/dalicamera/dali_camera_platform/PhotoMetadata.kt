@@ -11,6 +11,9 @@ import java.util.Locale
 import java.util.TimeZone
 
 internal object PhotoMetadata {
+    private fun isDaliWatermark(value: String): Boolean =
+        value.startsWith("DALI1-") || value.startsWith("DALI2-")
+
     // EXIF writers commonly encode UserComment as ASCII. JSON escapes preserve
     // every UTF-16 code unit, including surrogate pairs, without losing text.
     private fun asciiJson(value: String): String = buildString {
@@ -26,6 +29,8 @@ internal object PhotoMetadata {
         }
         return exif.getAttribute("UserComment")
     }
+
+    fun rawComment(exif: ExifInterface): String? = comment(exif)
     // Deliberately exclude MakerNote, serial numbers, thumbnails, and geometry
     // tied to the old pixels. Copy documented photographic fields only.
     private val fields = linkedMapOf(
@@ -38,7 +43,18 @@ internal object PhotoMetadata {
         "focalLength35mm" to "FocalLengthIn35mmFilm", "digitalZoom" to "DigitalZoomRatio",
         "whiteBalance" to "WhiteBalance", "colorSpace" to "ColorSpace", "software" to "Software",
         "artist" to "Artist", "copyright" to "Copyright", "description" to "ImageDescription",
-        "debug" to "UserComment"
+        "debug" to "UserComment", "hiddenWatermark" to "ImageUniqueID"
+    )
+
+    private val editableFields = linkedMapOf(
+        "description" to "ImageDescription", "artist" to "Artist", "copyright" to "Copyright",
+        "software" to "Software", "dateOriginal" to "DateTimeOriginal", "timeZone" to "OffsetTimeOriginal",
+        "subsecond" to "SubSecTimeOriginal", "make" to "Make", "model" to "Model",
+        "lensMake" to "LensMake", "lensModel" to "LensModel", "exposureSeconds" to "ExposureTime",
+        "aperture" to "FNumber", "iso" to "PhotographicSensitivity", "exposureBias" to "ExposureBiasValue",
+        "exposureProgram" to "ExposureProgram", "exposureMode" to "ExposureMode", "meteringMode" to "MeteringMode",
+        "flash" to "Flash", "focalLength" to "FocalLength", "focalLength35mm" to "FocalLengthIn35mmFilm",
+        "digitalZoom" to "DigitalZoomRatio", "whiteBalance" to "WhiteBalance", "colorSpace" to "ColorSpace"
     )
 
     fun software(context: Context): String {
@@ -49,6 +65,13 @@ internal object PhotoMetadata {
 
     fun capture(file: File, at: Date, debug: String?, software: String) {
         val exif = ExifInterface(file)
+        val payload = debug?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val hiddenWatermark = payload?.optString("hiddenWatermark")?.takeIf(::isDaliWatermark)
+        val debugComment = payload?.takeIf { it.optString("schema") == "dali.capture-debug.v1" }?.apply {
+            remove("hiddenWatermark")
+            remove("hiddenWatermarkPixels")
+            remove("pixelWatermarkPayload")
+        }?.toString()
         val date = exif.getAttribute("DateTimeOriginal") ?: SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(at)
         exif.setAttribute("DateTimeOriginal", date)
         exif.setAttribute("DateTimeDigitized", exif.getAttribute("DateTimeDigitized") ?: date)
@@ -58,21 +81,24 @@ internal object PhotoMetadata {
         exif.setAttribute("OffsetTimeDigitized", exif.getAttribute("OffsetTimeDigitized") ?: zone)
         exif.setAttribute("SubSecTimeOriginal", exif.getAttribute("SubSecTimeOriginal") ?: String.format(Locale.US, "%03d", at.time % 1000))
         exif.setAttribute("Software", software)
-        exif.setAttribute("UserComment", debug?.let { asciiJson(it) })
+        exif.setAttribute("ImageUniqueID", hiddenWatermark)
+        val signedComment = SignedWatermark.sign(file, hiddenWatermark, debugComment, createKey = true)
+        exif.setAttribute("UserComment", (signedComment ?: debugComment)?.let { asciiJson(it) })
         exif.saveAttributes()
     }
 
     fun copy(source: String, destination: File, software: String, captureEffectsApplied: Boolean = false) {
         val input = ExifInterface(source)
+        val sourceComment = comment(input)
+        var debugComment = SignedWatermark.captureDebug(sourceComment)
         PhotoLocation.copyGps(source, destination)
         val output = ExifInterface(destination)
         for (tag in fields.values + listOf("DateTimeDigitized", "OffsetTimeDigitized", "SubSecTimeDigitized")) {
             if (tag != "ColorSpace") output.setAttribute(tag, input.getAttribute(tag))
         }
-        output.setAttribute("UserComment", comment(input)?.let { asciiJson(it) })
-        if (captureEffectsApplied) comment(input)?.let { comment ->
+        if (captureEffectsApplied) debugComment?.let { comment ->
             runCatching { JSONObject(comment) }.getOrNull()?.takeIf { it.optString("schema") == "dali.capture-debug.v1" }?.let {
-                output.setAttribute("UserComment", asciiJson(it.put("captureEffectsApplied", true).toString()))
+                debugComment = it.put("captureEffectsApplied", true).toString()
             }
         }
         // Pixels have already been rotated/cropped by the renderer.
@@ -82,13 +108,59 @@ internal object PhotoMetadata {
         output.setAttribute("PixelXDimension", bounds.outWidth.toString())
         output.setAttribute("PixelYDimension", bounds.outHeight.toString())
         output.setAttribute("Software", software)
+        val hiddenWatermark = input.getAttribute("ImageUniqueID")?.takeIf(::isDaliWatermark)
+        val signedComment = SignedWatermark.sign(destination, hiddenWatermark, debugComment, createKey = false)
+        output.setAttribute("UserComment", (signedComment ?: debugComment)?.let { asciiJson(it) })
         output.saveAttributes()
+    }
+
+    fun edit(source: String, destination: File, metadata: JSONObject) {
+        File(source).copyTo(destination, overwrite = true)
+        val exif = ExifInterface(destination)
+        for ((name, tag) in editableFields) {
+            if (metadata.has(name)) {
+                val value = metadata.optString(name).trim().ifEmpty { null }
+                exif.setAttribute(tag, value)
+                when (name) {
+                    "dateOriginal" -> exif.setAttribute("DateTimeDigitized", value)
+                    "timeZone" -> exif.setAttribute("OffsetTimeDigitized", value)
+                    "subsecond" -> exif.setAttribute("SubSecTimeDigitized", value)
+                }
+            }
+        }
+        if (metadata.has("latitude") || metadata.has("longitude")) {
+            val latitude = metadata.optString("latitude").trim()
+            val longitude = metadata.optString("longitude").trim()
+            if (latitude.isEmpty() && longitude.isEmpty()) {
+                for (tag in listOf("GPSLatitude", "GPSLatitudeRef", "GPSLongitude", "GPSLongitudeRef")) {
+                    exif.setAttribute(tag, null)
+                }
+            } else {
+                require(latitude.isNotEmpty() && longitude.isNotEmpty()) { "Latitude and longitude must be provided together" }
+                exif.setLatLong(latitude.toDouble(), longitude.toDouble())
+            }
+        }
+        if (metadata.has("altitude")) {
+            val altitude = metadata.optString("altitude").trim()
+            if (altitude.isEmpty()) {
+                exif.setAttribute("GPSAltitude", null)
+                exif.setAttribute("GPSAltitudeRef", null)
+            } else {
+                exif.setAltitude(altitude.toDouble())
+            }
+        }
+        if (metadata.has("hiddenWatermark")) {
+            val value = metadata.optString("hiddenWatermark").trim()
+                .takeIf(::isDaliWatermark)
+            exif.setAttribute("ImageUniqueID", value)
+        }
+        exif.saveAttributes()
     }
 
     fun read(exif: ExifInterface): JSONObject {
         val result = JSONObject()
         for ((name, tag) in fields) exif.getAttribute(tag)?.let { result.put(name, it) }
-        comment(exif)?.let { result.put("debug", it) }
+        SignedWatermark.captureDebug(comment(exif))?.let { result.put("debug", it) }
         result.put("width", exif.getAttributeInt("ImageWidth", 0))
         result.put("height", exif.getAttributeInt("ImageLength", 0))
         result.put("orientation", exif.getAttributeInt("Orientation", 1))

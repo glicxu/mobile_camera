@@ -1,0 +1,36 @@
+{
+  "schema": "dali.watermark.android-phase0.v1",
+  "recordedAt": "2026-11-24",
+  "device": {
+    "manufacturer": "Samsung",
+    "model": "SM-G975U",
+    "product": "beyond2qltesq",
+    "androidVersion": "12"
+  },
+  "watermarkFormat": "DALI_PIXEL_V1",
+  "minimumDimension": 64,
+  "detectionThreshold": 0.75,
+  "source": {
+    "type": "deterministic synthetic corpus",
+    "width": 320,
+    "height": 240,
+    "scenes": 32
+  },
+  "outcomes": [
+    {"transformation":"original","detected":32,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":7.9467578125,"meanNegativeScore":0.0016015625},
+    {"transformation":"jpeg_90","detected":32,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":5.676048177083334,"meanNegativeScore":0.06500651041666666},
+    {"transformation":"jpeg_75","detected":24,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":3.4119856770833334,"meanNegativeScore":0.05348307291666668},
+    {"transformation":"jpeg_60","detected":24,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":2.1555859375,"meanNegativeScore":-0.035553385416666666},
+    {"transformation":"resize_75_percent","detected":0,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":0.003182870370370372,"meanNegativeScore":0.0019444444444444446},
+    {"transformation":"resize_50_percent","detected":0,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":0.018046875,"meanNegativeScore":0.018020833333333333},
+    {"transformation":"center_crop_80_percent","detected":32,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":7.981068929036459,"meanNegativeScore":0.0030008951822916687},
+    {"transformation":"center_crop_79_percent_unaligned","detected":0,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":-0.016534391534391533,"meanNegativeScore":-0.016534391534391533},
+    {"transformation":"rotate_90","detected":0,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":0.00529296875,"meanNegativeScore":0.00529296875},
+    {"transformation":"rotate_180","detected":0,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":-0.016510416666666663,"meanNegativeScore":-0.016510416666666663},
+    {"transformation":"blur_3x3","detected":32,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":3.17673828125,"meanNegativeScore":0.07462890625},
+    {"transformation":"sharpen_3x3","detected":32,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":32.297246093750005,"meanNegativeScore":-0.02494791666666666},
+    {"transformation":"grayscale_filter","detected":32,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":7.944192708333334,"meanNegativeScore":0.0009895833333333332},
+    {"transformation":"screenshot_simulation","detected":0,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":-0.019244791666666664,"meanNegativeScore":-0.032773437499999995},
+    {"transformation":"social_export_simulation","detected":0,"positiveTotal":32,"falsePositives":0,"negativeTotal":32,"meanPositiveScore":0.09458188657407406,"meanNegativeScore":0.05110677083333333}
+  ]
+}

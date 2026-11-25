@@ -21,14 +21,36 @@ import 'package:package_info_plus/package_info_plus.dart';
 class FakeHost extends CameraHostApi {
   String? capturedDebug;
   int metadataRequests = 0;
+  Map<String, dynamic>? editedMetadata;
   @override
   Future<String> photoMetadata(String identifier, bool libraryAsset) async {
     metadataRequests++;
+    final debug = capturedDebug == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(jsonDecode(capturedDebug!) as Map);
     return jsonEncode({
       'make': 'Test camera',
       'iso': 100,
       'debug': capturedDebug,
+      'hiddenWatermark': debug['hiddenWatermark'],
+      'hiddenPixelWatermark':
+          debug['hiddenWatermarkPixels'] == true ||
+          effectsRecipe?['hiddenWatermarkPixels'] == true,
     });
+  }
+
+  @override
+  Future<PhotoHandle> editPhotoMetadata(
+    PhotoHandle original,
+    String metadata,
+  ) async {
+    editedMetadata = Map<String, dynamic>.from(jsonDecode(metadata) as Map);
+    return PhotoHandle(
+      path: '${original.path}.metadata.jpg',
+      id: '${original.id}-metadata',
+      unsaved: false,
+      mimeType: original.mimeType,
+    );
   }
 
   final List<(bool, bool)> locationRequests = [];

@@ -204,7 +204,13 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
             let capturedAt = self.capturedAt
             do {
                 if let error { throw error }
-                guard let bytes = photo.fileDataRepresentation() else { throw self.failure("No photo data") }
+                guard var bytes = photo.fileDataRepresentation() else { throw self.failure("No photo data") }
+                if let debug,
+                   let payload = (try? JSONSerialization.jsonObject(with: Data(debug.utf8))) as? [String: Any],
+                   payload["hiddenWatermarkPixels"] as? Bool == true,
+                   let marked = HiddenWatermark.embed(data: bytes) {
+                    bytes = marked
+                }
                 var handle = try self.newPhoto(); handle.unsaved = true
                 try bytes.write(to: URL(fileURLWithPath: handle.path), options: .atomic)
                 if let location { try PhotoLocation.tag(location, path: handle.path) }
@@ -396,7 +402,8 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
         let finish: (Data) -> Void = { data in
             self.importQueue.async {
                 do {
-                    let info = PhotoMetadata.read(try PhotoMetadata.properties(data: data))
+                    var info = PhotoMetadata.read(try PhotoMetadata.properties(data: data))
+                    info["hiddenPixelWatermark"] = HiddenWatermark.detect(data: data)
                     let json = try JSONSerialization.data(withJSONObject: info)
                     DispatchQueue.main.async { completion(.success(String(decoding: json, as: UTF8.self))) }
                 } catch { DispatchQueue.main.async { completion(.failure(error)) } }
@@ -420,6 +427,21 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                 DispatchQueue.main.async { completion(.failure(self.failure("Photo metadata unavailable; check iCloud connectivity"))) }; return
             }
             finish(data)
+        }
+    }
+    func editPhotoMetadata(original: PhotoHandle, metadata: String, completion: @escaping (Result<PhotoHandle, Error>) -> Void) {
+        importQueue.async {
+            do {
+                guard let updates = try JSONSerialization.jsonObject(with: Data(metadata.utf8)) as? [String: Any] else {
+                    throw self.failure("Invalid photo metadata")
+                }
+                try FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)
+                let id = UUID().uuidString
+                let path = self.directory.appendingPathComponent("metadata-\(id).jpg").path
+                try PhotoMetadata.edit(from: original.path, to: path, metadata: updates)
+                let photo = PhotoHandle(path: path, id: "metadata-\(id)", unsaved: false, mimeType: "image/jpeg")
+                DispatchQueue.main.async { completion(.success(photo)) }
+            } catch { DispatchQueue.main.async { completion(.failure(error)) } }
         }
     }
     func photoInfo(id: String, completion: @escaping (Result<String, Error>) -> Void) {
@@ -559,6 +581,9 @@ public final class DaliCameraPlatformPlugin: NSObject, FlutterPlugin, CameraHost
                             .applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0.86)])
                         guard let output = self.ci.createCGImage(positioned.composited(over: input), from: extent) else { throw self.failure("Cannot render watermark") }
                         image = UIImage(cgImage: output)
+                    }
+                    if request?["hiddenWatermarkPixels"] as? Bool == true {
+                        image = HiddenWatermark.embed(image)
                     }
                     guard let data = image.jpegData(compressionQuality: 0.95) else { throw self.failure("Cannot render effects") }
                     let handle = try self.newPhoto()

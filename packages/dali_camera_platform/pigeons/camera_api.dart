@@ -107,6 +107,8 @@ abstract class CameraHostApi {
   PhotoHandle capture(bool shutterSound, String? debugMetadata);
   @async
   String photoMetadata(String identifier, bool libraryAsset);
+  @async
+  PhotoHandle editPhotoMetadata(PhotoHandle original, String metadata);
   PhotoHandle? recover();
   @async
   void save(PhotoHandle photo);

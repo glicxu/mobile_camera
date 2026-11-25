@@ -3,6 +3,10 @@ import ImageIO
 import UniformTypeIdentifiers
 
 enum PhotoMetadata {
+    private static func isDaliWatermark(_ value: String) -> Bool {
+        value.hasPrefix("DALI1-") || value.hasPrefix("DALI2-")
+    }
+
     static var software: String {
         "Dali Camera \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"))"
     }
@@ -11,7 +15,8 @@ enum PhotoMetadata {
         "lensMake": "LensMake", "lensModel": "LensModel", "exposureSeconds": "ExposureTime", "aperture": "FNumber",
         "iso": "ISOSpeedRatings", "exposureBias": "ExposureBiasValue", "exposureProgram": "ExposureProgram",
         "exposureMode": "ExposureMode", "meteringMode": "MeteringMode", "flash": "Flash", "focalLength": "FocalLength",
-        "focalLength35mm": "FocalLenIn35mmFilm", "digitalZoom": "DigitalZoomRatio", "whiteBalance": "WhiteBalance", "debug": "UserComment"
+        "focalLength35mm": "FocalLenIn35mmFilm", "digitalZoom": "DigitalZoomRatio", "whiteBalance": "WhiteBalance", "colorSpace": "ColorSpace", "debug": "UserComment",
+        "hiddenWatermark": "ImageUniqueID"
     ]
     private static let tiffFields = ["make": "Make", "model": "Model", "software": "Software", "artist": "Artist", "copyright": "Copyright", "description": "ImageDescription"]
 
@@ -38,7 +43,20 @@ enum PhotoMetadata {
         exif["OffsetTimeDigitized"] = exif["OffsetTimeDigitized"] ?? exif["OffsetTimeOriginal"]
         format.dateFormat = "SSS"
         exif["SubsecTimeOriginal"] = exif["SubsecTimeOriginal"] ?? format.string(from: at)
-        exif["UserComment"] = debug
+        let payload: [String: Any]? = debug.flatMap { value in
+            (try? JSONSerialization.jsonObject(with: Data(value.utf8))) as? [String: Any]
+        }
+        let hiddenWatermark = (payload?["hiddenWatermark"] as? String).flatMap { isDaliWatermark($0) ? $0 : nil }
+        var debugPayload = payload
+        debugPayload?.removeValue(forKey: "hiddenWatermark")
+        debugPayload?.removeValue(forKey: "hiddenWatermarkPixels")
+        exif["ImageUniqueID"] = hiddenWatermark
+        if debugPayload?["schema"] as? String == "dali.capture-debug.v1",
+           let data = try? JSONSerialization.data(withJSONObject: debugPayload ?? [:], options: [.sortedKeys]) {
+            exif["UserComment"] = String(decoding: data, as: UTF8.self)
+        } else {
+            exif["UserComment"] = nil
+        }
         properties[kCGImagePropertyExifDictionary as String] = exif
         var tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
         tiff["Software"] = software
@@ -72,6 +90,83 @@ enum PhotoMetadata {
         output[kCGImagePropertyTIFFDictionary as String] = tiff
         output[kCGImagePropertyGPSDictionary as String] = original[kCGImagePropertyGPSDictionary as String]
         try write(output, path: destination)
+    }
+
+    static func edit(from source: String, to destination: String, metadata: [String: Any]) throws {
+        try FileManager.default.copyItem(atPath: source, toPath: destination)
+        var properties = try properties(path: destination)
+        var tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
+        for (name, tag) in [
+            "description": "ImageDescription", "artist": "Artist", "copyright": "Copyright",
+            "software": "Software", "make": "Make", "model": "Model"
+        ] {
+            guard let raw = metadata[name] as? String else { continue }
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            tiff[tag] = value.isEmpty ? nil : value
+        }
+        properties[kCGImagePropertyTIFFDictionary as String] = tiff
+        var exif = properties[kCGImagePropertyExifDictionary as String] as? [String: Any] ?? [:]
+        for (name, tag) in [
+            "dateOriginal": "DateTimeOriginal", "timeZone": "OffsetTimeOriginal", "subsecond": "SubsecTimeOriginal",
+            "lensMake": "LensMake", "lensModel": "LensModel"
+        ] {
+            guard let raw = metadata[name] as? String else { continue }
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            exif[tag] = value.isEmpty ? nil : value
+            if name == "dateOriginal" { exif["DateTimeDigitized"] = value.isEmpty ? nil : value }
+            if name == "timeZone" { exif["OffsetTimeDigitized"] = value.isEmpty ? nil : value }
+            if name == "subsecond" { exif["SubsecTimeDigitized"] = value.isEmpty ? nil : value }
+        }
+        for (name, tag) in [
+            "exposureSeconds": "ExposureTime", "aperture": "FNumber", "exposureBias": "ExposureBiasValue",
+            "focalLength": "FocalLength", "digitalZoom": "DigitalZoomRatio"
+        ] {
+            guard let raw = metadata[name] as? String else { continue }
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            exif[tag] = value.isEmpty ? nil : Double(value)
+        }
+        for (name, tag) in [
+            "exposureProgram": "ExposureProgram", "exposureMode": "ExposureMode", "meteringMode": "MeteringMode",
+            "flash": "Flash", "focalLength35mm": "FocalLenIn35mmFilm", "whiteBalance": "WhiteBalance", "colorSpace": "ColorSpace"
+        ] {
+            guard let raw = metadata[name] as? String else { continue }
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            exif[tag] = value.isEmpty ? nil : Int(value)
+        }
+        if let raw = metadata["iso"] as? String {
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            exif["ISOSpeedRatings"] = value.isEmpty ? nil : Int(value).map { [$0] }
+        }
+        if let raw = metadata["hiddenWatermark"] as? String {
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            exif["ImageUniqueID"] = isDaliWatermark(value) ? value : nil
+        }
+        properties[kCGImagePropertyExifDictionary as String] = exif
+        if metadata["latitude"] != nil || metadata["longitude"] != nil || metadata["altitude"] != nil {
+            var gps = properties[kCGImagePropertyGPSDictionary as String] as? [String: Any] ?? [:]
+            let latitude = (metadata["latitude"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let longitude = (metadata["longitude"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if latitude.isEmpty && longitude.isEmpty {
+                for tag in ["Latitude", "LatitudeRef", "Longitude", "LongitudeRef"] { gps[tag] = nil }
+            } else if let lat = Double(latitude), let lon = Double(longitude) {
+                gps["Latitude"] = abs(lat)
+                gps["LatitudeRef"] = lat < 0 ? "S" : "N"
+                gps["Longitude"] = abs(lon)
+                gps["LongitudeRef"] = lon < 0 ? "W" : "E"
+            }
+            if let raw = metadata["altitude"] as? String {
+                let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let altitude = Double(value) {
+                    gps["Altitude"] = abs(altitude)
+                    gps["AltitudeRef"] = altitude < 0 ? 1 : 0
+                } else if value.isEmpty {
+                    gps["Altitude"] = nil
+                    gps["AltitudeRef"] = nil
+                }
+            }
+            properties[kCGImagePropertyGPSDictionary as String] = gps.isEmpty ? nil : gps
+        }
+        try write(properties, path: destination)
     }
 
     static func read(_ properties: [String: Any]) -> [String: Any] {

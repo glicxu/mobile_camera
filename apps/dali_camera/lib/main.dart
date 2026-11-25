@@ -1251,13 +1251,20 @@ class _CameraScreenState extends State<CameraScreen>
         ? null
         : Map<String, dynamic>.from(camera.reviewInfo!);
     final metadata = camera.readReviewMetadata();
-    await showModalBottomSheet<void>(
+    final edited = await showModalBottomSheet<bool>(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      builder: (_) =>
-          PhotoMetadataSheet(title: title, basic: basic, metadata: metadata),
+      builder: (_) => PhotoMetadataSheet(
+        title: title,
+        basic: basic,
+        metadata: metadata,
+        onEdit: camera.editReviewMetadata,
+        localWatermarkOwnerId: camera.watermarkOwnerId,
+        watermarkCreationUnlocked: camera.watermarkUnlocked,
+      ),
     );
+    if (edited == true && mounted) await saveReviewPhoto();
   }
 
   Future<void> deletePhoto() async {
@@ -1689,6 +1696,337 @@ class _CameraScreenState extends State<CameraScreen>
     ),
   );
 
+  Future<void> editWatermarkProfile() async {
+    var publicId = camera.watermarkPublicId;
+    String? error;
+    var saving = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Offline watermark profile'),
+          scrollable: true,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Stored on this device. Dali does not require an account, upload photos, or contact a verification server.',
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                key: const Key('watermarkPublicId'),
+                initialValue: publicId,
+                enabled: !saving,
+                maxLength: 40,
+                onChanged: (value) => publicId = value,
+                decoration: const InputDecoration(
+                  labelText: 'Public watermark ID',
+                  hintText: 'Example: GLICX-PHOTO',
+                  helperText:
+                      'Optional. Public IDs are not globally reserved or identity-verified yet.',
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text('Generated owner ID'),
+              SelectableText(camera.watermarkOwnerId),
+              TextButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(
+                    ClipboardData(text: camera.watermarkOwnerId),
+                  );
+                  if (dialogContext.mounted) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      const SnackBar(content: Text('Owner ID copied')),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.copy),
+                label: const Text('Copy owner ID'),
+              ),
+              TextButton.icon(
+                key: const Key('copyWatermarkRecoveryCode'),
+                onPressed: saving
+                    ? null
+                    : () async {
+                        await Clipboard.setData(
+                          ClipboardData(
+                            text: camera.createWatermarkRecoveryCode(),
+                          ),
+                        );
+                        if (dialogContext.mounted) {
+                          ScaffoldMessenger.of(dialogContext).showSnackBar(
+                            const SnackBar(
+                              content: Text('Identity recovery code copied'),
+                            ),
+                          );
+                        }
+                      },
+                icon: const Icon(Icons.key_outlined),
+                label: const Text('Copy recovery code'),
+              ),
+              TextButton.icon(
+                key: const Key('restoreWatermarkProfile'),
+                onPressed: saving
+                    ? null
+                    : () async {
+                        var recoveryCode = '';
+                        String? restoreError;
+                        var restoring = false;
+                        final restored = await showDialog<bool>(
+                          context: dialogContext,
+                          builder: (restoreContext) => StatefulBuilder(
+                            builder: (restoreContext, setRestoreState) => AlertDialog(
+                              title: const Text('Restore identity'),
+                              scrollable: true,
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Paste a Dali identity recovery code. This replaces the current Owner ID and Public ID.',
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'On a different device or after reinstalling, Android creates a new protected signing key. The Owner ID is restored, but the signing-key fingerprint changes.',
+                                  ),
+                                  const SizedBox(height: 16),
+                                  TextField(
+                                    key: const Key('watermarkRecoveryCode'),
+                                    enabled: !restoring,
+                                    minLines: 3,
+                                    maxLines: 6,
+                                    autocorrect: false,
+                                    enableSuggestions: false,
+                                    onChanged: (value) => recoveryCode = value,
+                                    decoration: InputDecoration(
+                                      labelText: 'Recovery code',
+                                      errorText: restoreError,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: restoring
+                                      ? null
+                                      : () => Navigator.pop(
+                                          restoreContext,
+                                          false,
+                                        ),
+                                  child: const Text('Cancel'),
+                                ),
+                                FilledButton(
+                                  key: const Key(
+                                    'confirmRestoreWatermarkProfile',
+                                  ),
+                                  onPressed: restoring
+                                      ? null
+                                      : () async {
+                                          setRestoreState(() {
+                                            restoring = true;
+                                            restoreError = null;
+                                          });
+                                          final result = await camera
+                                              .restoreWatermarkProfile(
+                                                recoveryCode,
+                                              );
+                                          if (!restoreContext.mounted) {
+                                            return;
+                                          }
+                                          if (result == null) {
+                                            Navigator.pop(restoreContext, true);
+                                          } else {
+                                            setRestoreState(() {
+                                              restoring = false;
+                                              restoreError = result;
+                                            });
+                                          }
+                                        },
+                                  child: const Text('Restore'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                        if (restored == true &&
+                            dialogContext.mounted &&
+                            mounted) {
+                          Navigator.pop(dialogContext);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Offline identity restored'),
+                            ),
+                          );
+                        }
+                      },
+                icon: const Icon(Icons.settings_backup_restore),
+                label: const Text('Restore from recovery code'),
+              ),
+              const Divider(),
+              TextButton.icon(
+                key: const Key('resetWatermarkProfile'),
+                onPressed: saving
+                    ? null
+                    : () async {
+                        final confirmed = await showDialog<bool>(
+                          context: dialogContext,
+                          builder: (confirmationContext) => AlertDialog(
+                            title: const Text('Create a new identity?'),
+                            content: const Text(
+                              'This replaces the owner ID and clears the public watermark ID. Existing photos keep their old IDs and will no longer appear as yours on this device.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.pop(confirmationContext, false),
+                                child: const Text('Keep current identity'),
+                              ),
+                              FilledButton(
+                                key: const Key('confirmResetWatermarkProfile'),
+                                onPressed: () =>
+                                    Navigator.pop(confirmationContext, true),
+                                child: const Text('Create new identity'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true) return;
+                        final reset = await camera.resetWatermarkProfile();
+                        if (!dialogContext.mounted) return;
+                        if (reset) Navigator.pop(dialogContext);
+                      },
+                icon: const Icon(Icons.restart_alt),
+                label: const Text('Create new identity'),
+              ),
+              if (error != null)
+                Text(
+                  error!,
+                  style: TextStyle(
+                    color: Theme.of(dialogContext).colorScheme.error,
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const Key('saveWatermarkProfile'),
+              onPressed: saving
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        saving = true;
+                        error = null;
+                      });
+                      final result = await camera.setWatermarkPublicId(
+                        publicId,
+                      );
+                      if (!dialogContext.mounted) return;
+                      if (result == null) {
+                        Navigator.pop(dialogContext);
+                      } else {
+                        setDialogState(() {
+                          saving = false;
+                          error = result;
+                        });
+                      }
+                    },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> showWatermarkUnlock() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AnimatedBuilder(
+        animation: camera.watermarkEntitlement,
+        builder: (dialogContext, _) {
+          final entitlement = camera.watermarkEntitlement;
+          final unlocked = entitlement.unlocked;
+          final busy = entitlement.loading || entitlement.purchasing;
+          final price = entitlement.price;
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(unlocked ? Icons.lock_open : Icons.lock_outline),
+                const SizedBox(width: 12),
+                const Expanded(child: Text('Lifetime watermark unlock')),
+              ],
+            ),
+            scrollable: true,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  unlocked
+                      ? 'Watermark creation is unlocked on this store account.'
+                      : 'One purchase unlocks hidden watermark creation and your offline watermark profile.',
+                ),
+                const SizedBox(height: 16),
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.fingerprint),
+                  title: Text('Pixel and metadata watermarks'),
+                  subtitle: Text('Choose Both, Pixels, Metadata, or Off.'),
+                ),
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.badge_outlined),
+                  title: Text('Your photographer identity'),
+                  subtitle: Text(
+                    'Set a public ID and preserve an offline recovery code.',
+                  ),
+                ),
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.cloud_off_outlined),
+                  title: Text('Private and offline'),
+                  subtitle: Text(
+                    'Photos stay on your device; only the store handles payment.',
+                  ),
+                ),
+                if (entitlement.loading) const LinearProgressIndicator(),
+                if (entitlement.message case final message?) ...[
+                  const SizedBox(height: 12),
+                  Text(message),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : camera.restoreWatermarkUnlock,
+                child: const Text('Restore purchases'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(unlocked ? 'Done' : 'Not now'),
+              ),
+              if (!unlocked)
+                FilledButton.icon(
+                  key: const Key('purchaseWatermarkUnlock'),
+                  onPressed:
+                      busy || !entitlement.storeAvailable || price == null
+                      ? null
+                      : camera.purchaseWatermarkUnlock,
+                  icon: const Icon(Icons.lock_open),
+                  label: Text(price == null ? 'Unlock' : 'Unlock · $price'),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> settings() async {
     camera.cancelSequence();
     await camera.refreshPhotoLocation();
@@ -1737,6 +2075,76 @@ class _CameraScreenState extends State<CameraScreen>
                           key: const Key('photoSettingsGroup'),
                           title: const Text('Photos'),
                           children: [
+                            ListTile(
+                              key: const Key('watermarkProfile'),
+                              leading: Icon(
+                                camera.watermarkUnlocked
+                                    ? Icons.badge_outlined
+                                    : Icons.lock_outline,
+                              ),
+                              title: const Text('Offline watermark profile'),
+                              subtitle: Text(
+                                camera.watermarkUnlocked
+                                    ? camera.watermarkProfileDescription
+                                    : 'Lifetime unlock required',
+                              ),
+                              trailing: Icon(
+                                camera.watermarkUnlocked
+                                    ? Icons.chevron_right
+                                    : Icons.workspace_premium_outlined,
+                              ),
+                              onTap: camera.busy
+                                  ? null
+                                  : camera.watermarkUnlocked
+                                  ? editWatermarkProfile
+                                  : showWatermarkUnlock,
+                            ),
+                            ListTile(
+                              key: const Key('hiddenWatermarkSetting'),
+                              leading: const Icon(Icons.fingerprint),
+                              title: const Text('Hidden Dali watermark'),
+                              subtitle: Text(
+                                camera.watermarkUnlocked
+                                    ? 'Both embeds an invisible pixel signal and a metadata identifier. Photo Info detects each independently.'
+                                    : 'Locked · Purchase once to create hidden watermarks. Detection remains free.',
+                              ),
+                              onTap: camera.watermarkUnlocked
+                                  ? null
+                                  : showWatermarkUnlock,
+                              trailing: camera.watermarkUnlocked
+                                  ? DropdownButton<String>(
+                                      key: const Key('hiddenWatermarkMode'),
+                                      value: camera.hiddenWatermarkMode,
+                                      onChanged: camera.busy
+                                          ? null
+                                          : (value) {
+                                              if (value != null) {
+                                                camera.setHiddenWatermarkMode(
+                                                  value,
+                                                );
+                                              }
+                                            },
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'both',
+                                          child: Text('Both'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'pixels',
+                                          child: Text('Pixels'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'metadata',
+                                          child: Text('Metadata'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'off',
+                                          child: Text('Off'),
+                                        ),
+                                      ],
+                                    )
+                                  : const Icon(Icons.lock_outline),
+                            ),
                             SwitchListTile(
                               key: const Key('photoLocationToggle'),
                               secondary: const Icon(Icons.location_on_outlined),

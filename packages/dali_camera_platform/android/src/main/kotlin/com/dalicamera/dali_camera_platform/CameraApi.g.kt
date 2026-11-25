@@ -373,6 +373,7 @@ interface CameraHostApi {
   fun configurePhotoLocation(enabled: Boolean, requestPermission: Boolean): String
   fun capture(shutterSound: Boolean, debugMetadata: String?, callback: (Result<PhotoHandle>) -> Unit)
   fun photoMetadata(identifier: String, libraryAsset: Boolean, callback: (Result<String>) -> Unit)
+  fun editPhotoMetadata(original: PhotoHandle, metadata: String, callback: (Result<PhotoHandle>) -> Unit)
   fun recover(): PhotoHandle?
   fun save(photo: PhotoHandle, callback: (Result<Unit>) -> Unit)
   fun replacementTarget(original: PhotoHandle): String?
@@ -497,6 +498,27 @@ interface CameraHostApi {
             val identifierArg = args[0] as String
             val libraryAssetArg = args[1] as Boolean
             api.photoMetadata(identifierArg, libraryAssetArg) { result: Result<String> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(CameraApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(CameraApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.dali_camera_platform.CameraHostApi.editPhotoMetadata$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val originalArg = args[0] as PhotoHandle
+            val metadataArg = args[1] as String
+            api.editPhotoMetadata(originalArg, metadataArg) { result: Result<PhotoHandle> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(CameraApiPigeonUtils.wrapError(error))
